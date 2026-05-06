@@ -1,5 +1,19 @@
-<!-- BEGIN:nextjs-agent-rules -->
-# This is NOT the Next.js you know
+#FomoFilter App
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
-<!-- END:nextjs-agent-rules -->
+**AI-powered hot stock discovery & tracking platform** for finding market movers, filtering hype, and building a disciplined watchlist.
+
+## Context Files
+
+Read the following to get the full context of the project:
+
+- @Context/project-overview.md
+- @Content/coding-standards.md
+- @Content/ai-interaction.md
+- @Content/current-feature.md
+
+## Commands
+
+- **Dev server**: `npm run dev` (runs on http://localhost:3000)
+- **Build**: `npm run build`
+- **Production server**: `npm run start`
+- **Lint**: `npm run lint`
