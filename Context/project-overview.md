@@ -751,6 +751,19 @@ flowchart TD
 | AI Summary | `Sparkles` |
 | Risk | `TriangleAlert` |
 
+### Screenshots
+
+Refer to the screenshots below as a base for the dashboard UI. it does not have to be exact. Use it as a reference:
+
+- [Top Main screen](screenshots/Main-screen-Top.png)
+- [Bottom Main screen](screenshots/Main-screen-bottom.png)
+- [Bottom End Main screen](screenshots/Main-screen-bottom-2.png!)
+- [Hot stock table click - open right panel with information](screenshots/Hot-stocks-click-open-right-pannel.png)
+- [Hot stock table click - open right panel with information - bottom](screenshots/Hot-stocks-click-open-right-pannel-bottom.png)
+- [Hot stock table click - open right panel with information - bottom end](screenshots/Hot-stocks-click-open-right-pannel-bottom-2.png)
+- [Hot stock table click - open right panel with information - click on add to watchlist](screenshots/Hot-stocks-click-open-right-pannel-adding-to-watchlist.png)
+- [Hot stock table click - open right panel with information - click on add alert](screenshots/Hot-stocks-click-open-right-pannel-adding-alert.png)
+
 ---
 
 ## 13. Monetization Direction
