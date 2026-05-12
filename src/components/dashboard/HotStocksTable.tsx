@@ -1,5 +1,7 @@
+"use client";
+
 import { Star } from "lucide-react";
-import { mockHotStocks, type RiskLevel } from "@/src/lib/mock-data";
+import { mockHotStocks, type RiskLevel, type HotStock } from "@/src/lib/mock-data";
 import { formatCurrency, formatPercent } from "@/src/lib/formatters";
 
 const riskColors: Record<RiskLevel, string> = {
@@ -12,9 +14,18 @@ const riskColors: Record<RiskLevel, string> = {
 function ScorePill({ value, type }: { value: number; type: "hot" | "opp" }) {
   const isHigh = value >= 80;
   const isMid = value >= 60;
-  const color = type === "hot"
-    ? isHigh ? "text-orange-300 bg-orange-500/15" : isMid ? "text-amber-400 bg-amber-500/10" : "text-slate-400 bg-slate-700/40"
-    : isHigh ? "text-emerald-300 bg-emerald-500/15" : isMid ? "text-teal-400 bg-teal-500/10" : "text-slate-400 bg-slate-700/40";
+  const color =
+    type === "hot"
+      ? isHigh
+        ? "text-orange-300 bg-orange-500/15"
+        : isMid
+          ? "text-amber-400 bg-amber-500/10"
+          : "text-slate-400 bg-slate-700/40"
+      : isHigh
+        ? "text-emerald-300 bg-emerald-500/15"
+        : isMid
+          ? "text-teal-400 bg-teal-500/10"
+          : "text-slate-400 bg-slate-700/40";
   return (
     <span className={`inline-block text-xs font-semibold px-1.5 py-0.5 rounded ${color}`}>
       {value}
@@ -22,7 +33,12 @@ function ScorePill({ value, type }: { value: number; type: "hot" | "opp" }) {
   );
 }
 
-export default function HotStocksTable() {
+interface HotStocksTableProps {
+  selectedSymbol: string | null;
+  onSelectStock: (stock: HotStock) => void;
+}
+
+export default function HotStocksTable({ selectedSymbol, onSelectStock }: HotStocksTableProps) {
   return (
     <div className="bg-[#111318] border border-slate-800 rounded-xl overflow-hidden mb-5">
       <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
@@ -45,48 +61,64 @@ export default function HotStocksTable() {
             </tr>
           </thead>
           <tbody>
-            {mockHotStocks.map((stock) => (
-              <tr
-                key={stock.symbol}
-                className="border-b border-slate-800/60 hover:bg-slate-800/30 cursor-pointer transition-colors last:border-0"
-              >
-                <td className="px-4 py-3">
-                  <Star
-                    size={14}
-                    className={stock.inWatchlist ? "text-amber-400 fill-amber-400" : "text-slate-600"}
-                  />
-                </td>
-                <td className="px-4 py-3">
-                  <p className="text-white font-semibold">{stock.symbol}</p>
-                  <p className="text-slate-500 text-xs">{stock.name}</p>
-                </td>
-                <td className="px-4 py-3 text-right text-white font-medium">
-                  {formatCurrency(stock.price)}
-                </td>
-                <td className={`px-4 py-3 text-right font-medium ${stock.change >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                  {formatPercent(stock.change)}
-                </td>
-                <td className="px-4 py-3">
-                  <span className="text-xs bg-slate-700/60 text-slate-300 border border-slate-700 px-2 py-0.5 rounded-full">
-                    {stock.setup}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-center">
-                  <ScorePill value={stock.hot} type="hot" />
-                </td>
-                <td className="px-4 py-3 text-center">
-                  <ScorePill value={stock.opp} type="opp" />
-                </td>
-                <td className="px-4 py-3">
-                  <span className={`text-xs border px-1.5 py-0.5 rounded-full font-medium ${riskColors[stock.risk]}`}>
-                    {stock.risk}
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <p className="text-slate-300 text-xs">{stock.catalyst}</p>
-                </td>
-              </tr>
-            ))}
+            {mockHotStocks.map((stock) => {
+              const isSelected = stock.symbol === selectedSymbol;
+              return (
+                <tr
+                  key={stock.symbol}
+                  onClick={() => onSelectStock(stock)}
+                  className={`border-b border-slate-800/60 cursor-pointer transition-colors last:border-0 ${
+                    isSelected
+                      ? "bg-slate-800/60 border-l-2 border-l-orange-500"
+                      : "hover:bg-slate-800/30"
+                  }`}
+                >
+                  <td className="px-4 py-3">
+                    <Star
+                      size={14}
+                      className={stock.inWatchlist ? "text-amber-400 fill-amber-400" : "text-slate-600"}
+                    />
+                  </td>
+                  <td className="px-4 py-3">
+                    <p className={`font-semibold ${isSelected ? "text-orange-300" : "text-white"}`}>
+                      {stock.symbol}
+                    </p>
+                    <p className="text-slate-500 text-xs">{stock.name}</p>
+                  </td>
+                  <td className="px-4 py-3 text-right text-white font-medium">
+                    {formatCurrency(stock.price)}
+                  </td>
+                  <td
+                    className={`px-4 py-3 text-right font-medium ${
+                      stock.change >= 0 ? "text-emerald-400" : "text-red-400"
+                    }`}
+                  >
+                    {formatPercent(stock.change)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="text-xs bg-slate-700/60 text-slate-300 border border-slate-700 px-2 py-0.5 rounded-full">
+                      {stock.setup}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <ScorePill value={stock.hot} type="hot" />
+                  </td>
+                  <td className="px-4 py-3 text-center">
+                    <ScorePill value={stock.opp} type="opp" />
+                  </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`text-xs border px-1.5 py-0.5 rounded-full font-medium ${riskColors[stock.risk]}`}
+                    >
+                      {stock.risk}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <p className="text-slate-300 text-xs">{stock.catalyst}</p>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
