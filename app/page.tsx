@@ -4,12 +4,7 @@ import DashboardHeader from "@/src/components/dashboard/DashboardHeader";
 import TodaysSignalCard from "@/src/components/dashboard/TodaysSignalCard";
 import MarketStatsGrid from "@/src/components/dashboard/MarketStatsGrid";
 import SummaryCardsGrid from "@/src/components/dashboard/SummaryCardsGrid";
-import HotStocksTable from "@/src/components/dashboard/HotStocksTable";
-import TopScoreChanges from "@/src/components/dashboard/TopScoreChanges";
-import WatchlistWidget from "@/src/components/dashboard/WatchlistWidget";
-import DiscoverSetups from "@/src/components/dashboard/DiscoverSetups";
-import AiInsightsWidget from "@/src/components/dashboard/AiInsightsWidget";
-import RecentAlertsWidget from "@/src/components/dashboard/RecentAlertsWidget";
+import DashboardGrid from "@/src/components/dashboard/DashboardGrid";
 
 export default function Home() {
   return (
@@ -22,18 +17,7 @@ export default function Home() {
           <TodaysSignalCard />
           <MarketStatsGrid />
           <SummaryCardsGrid />
-          <div className="grid grid-cols-[1fr_340px] gap-5">
-            <div className="min-w-0 flex flex-col gap-5">
-              <HotStocksTable />
-              <DiscoverSetups />
-            </div>
-            <div className="flex flex-col gap-5">
-              <TopScoreChanges />
-              <WatchlistWidget />
-              <AiInsightsWidget />
-              <RecentAlertsWidget />
-            </div>
-          </div>
+          <DashboardGrid />
         </main>
       </div>
     </div>

@@ -385,3 +385,198 @@ export const mockRecentAlerts: RecentAlert[] = [
     icon: "trending-up",
   },
 ];
+
+export type StockDrawerDetail = {
+  suggestedAction: string;
+  fomoRisk: string;
+  entryContext: string;
+  hotDelta: number;
+  oppDelta: number;
+  hotScoreExplain: string;
+  oppScoreExplain: string;
+  hotBreakdown: { momentum: number; volumeHeat: number; catalyst: number; technicals: number };
+  oppBreakdown: { analystUpside: number; fundamentals: number; valuation: number; entryQuality: number };
+  aiWhatsHappening: string;
+  aiWhatItMeans: string;
+  aiWhatToWatch: string;
+  aiSentiment: "bullish" | "cautious" | "bearish";
+  aiGeneratedMinutes: number;
+  catalystType: string;
+  catalystExplanation: string;
+  catalystConfidence: "High" | "Medium" | "Low";
+  catalystSource: string;
+  catalystHoursAgo: number;
+  entryZoneLow: number;
+  entryZoneHigh: number;
+  target: number;
+  distanceToTarget: string;
+  priceEntryContext: string;
+  watchSince?: string;
+  hotScoreChangeSinceAdded?: number;
+  oppScoreChangeSinceAdded?: number;
+  latestPersonalSignal?: string;
+  stopLoss?: number;
+  signalQuality: string;
+  lastUpdatedMinutes: number;
+  suggestedTrackingReason?: string;
+};
+
+export const mockStockDrawerDetails: Record<string, StockDrawerDetail> = {
+  NVDA: {
+    suggestedAction: "Wait for pullback",
+    fomoRisk: "Medium — extended from entry",
+    entryContext: "Above ideal entry zone",
+    hotDelta: 6,
+    oppDelta: 2,
+    hotScoreExplain: "Driven by AI chip demand and strong volume confirmation",
+    oppScoreExplain: "Solid upside potential but entry is stretched",
+    hotBreakdown: { momentum: 92, volumeHeat: 88, catalyst: 95, technicals: 80 },
+    oppBreakdown: { analystUpside: 74, fundamentals: 90, valuation: 65, entryQuality: 55 },
+    aiWhatsHappening: "NVIDIA's data center revenue continues to exceed expectations, driven by massive AI infrastructure demand from hyperscalers.",
+    aiWhatItMeans: "Strong momentum, but price is above the ideal entry zone. Confirmation from a pullback would improve risk/reward significantly.",
+    aiWhatToWatch: "Look for a pullback toward $880–$920 support zone or confirmation of institutional buying on above-average volume.",
+    aiSentiment: "bullish",
+    aiGeneratedMinutes: 10,
+    catalystType: "AI demand surge",
+    catalystExplanation: "Data center revenue and chip demand remain exceptionally strong. Hyperscaler capex expanding significantly.",
+    catalystConfidence: "High",
+    catalystSource: "Latest market update",
+    catalystHoursAgo: 2,
+    entryZoneLow: 880,
+    entryZoneHigh: 920,
+    target: 1050,
+    distanceToTarget: "+13.6%",
+    priceEntryContext: "Above ideal entry zone",
+    watchSince: "Mar 2024",
+    hotScoreChangeSinceAdded: 12,
+    oppScoreChangeSinceAdded: 5,
+    latestPersonalSignal: "Track closely — near upper entry zone",
+    stopLoss: 840,
+    signalQuality: "Strong but Extended",
+    lastUpdatedMinutes: 2,
+  },
+  SMCI: {
+    suggestedAction: "Needs confirmation",
+    fomoRisk: "High — extended 45% in 2 weeks",
+    entryContext: "Extended — wait for consolidation",
+    hotDelta: 12,
+    oppDelta: -3,
+    hotScoreExplain: "Volume surge on earnings beat driving momentum score",
+    oppScoreExplain: "High upside but overextended technicals reduce opportunity score",
+    hotBreakdown: { momentum: 95, volumeHeat: 96, catalyst: 90, technicals: 72 },
+    oppBreakdown: { analystUpside: 80, fundamentals: 75, valuation: 55, entryQuality: 40 },
+    aiWhatsHappening: "Super Micro Computer rallied sharply on a strong earnings beat with AI server demand driving revenue well above guidance.",
+    aiWhatItMeans: "Momentum is very high, but the stock is technically overextended. RSI near 78 raises significant caution flags.",
+    aiWhatToWatch: "Monitor for a pullback to $720–$760 before considering entry. Volume normalization is a key signal to watch.",
+    aiSentiment: "cautious",
+    aiGeneratedMinutes: 25,
+    catalystType: "Earnings beat",
+    catalystExplanation: "Q2 earnings exceeded estimates by 18%. AI server shipments ahead of guidance with strong forward orders.",
+    catalystConfidence: "High",
+    catalystSource: "Earnings release",
+    catalystHoursAgo: 6,
+    entryZoneLow: 720,
+    entryZoneHigh: 760,
+    target: 950,
+    distanceToTarget: "+17.0%",
+    priceEntryContext: "Extended — well above entry zone",
+    signalQuality: "Hot but Overextended",
+    lastUpdatedMinutes: 5,
+    suggestedTrackingReason: "Earnings momentum stock — watch for pullback to entry zone",
+  },
+  PLTR: {
+    suggestedAction: "Track closely",
+    fomoRisk: "Low — within entry zone",
+    entryContext: "Near entry zone",
+    hotDelta: 9,
+    oppDelta: 5,
+    hotScoreExplain: "Government contract catalyst boosting momentum score",
+    oppScoreExplain: "Fair valuation with solid analyst upside and clean setup",
+    hotBreakdown: { momentum: 78, volumeHeat: 75, catalyst: 85, technicals: 82 },
+    oppBreakdown: { analystUpside: 72, fundamentals: 68, valuation: 70, entryQuality: 78 },
+    aiWhatsHappening: "Palantir secured a new government AI contract expanding its federal data platform footprint significantly.",
+    aiWhatItMeans: "The catalyst is real and recurring. Government contracts provide durable revenue visibility over multiple years.",
+    aiWhatToWatch: "Watch for commercial segment acceleration and whether the stock holds above $23 on any pullback.",
+    aiSentiment: "bullish",
+    aiGeneratedMinutes: 18,
+    catalystType: "Government contract",
+    catalystExplanation: "New multi-year federal AI data platform contract adds to recurring revenue backlog.",
+    catalystConfidence: "High",
+    catalystSource: "Company announcement",
+    catalystHoursAgo: 4,
+    entryZoneLow: 23,
+    entryZoneHigh: 25,
+    target: 32,
+    distanceToTarget: "+12.5%",
+    priceEntryContext: "Near entry zone",
+    signalQuality: "Worth Watching",
+    lastUpdatedMinutes: 3,
+    suggestedTrackingReason: "Government AI contract catalyst with clean technical setup",
+  },
+  TSLA: {
+    suggestedAction: "Wait for confirmation",
+    fomoRisk: "Medium — declining momentum",
+    entryContext: "Below support — caution zone",
+    hotDelta: -5,
+    oppDelta: -3,
+    hotScoreExplain: "Price cuts and margin pressure weighing on momentum score",
+    oppScoreExplain: "Analyst upside remains but fundamentals under increasing pressure",
+    hotBreakdown: { momentum: 45, volumeHeat: 72, catalyst: 60, technicals: 50 },
+    oppBreakdown: { analystUpside: 65, fundamentals: 50, valuation: 52, entryQuality: 48 },
+    aiWhatsHappening: "Tesla's aggressive price cutting strategy is weighing on margins and investor confidence across multiple global markets.",
+    aiWhatItMeans: "The setup is weak. Revenue growth is slowing while competition is intensifying from Chinese EV makers.",
+    aiWhatToWatch: "Watch Q3 delivery numbers and whether gross margins stabilize above 15%. A break above $185 would improve the setup.",
+    aiSentiment: "cautious",
+    aiGeneratedMinutes: 40,
+    catalystType: "Price cut impact",
+    catalystExplanation: "Multiple global price cuts in Q2 pressured margins. Market reacted negatively to margin guidance reduction.",
+    catalystConfidence: "Medium",
+    catalystSource: "Earnings call",
+    catalystHoursAgo: 12,
+    entryZoneLow: 165,
+    entryZoneHigh: 175,
+    target: 210,
+    distanceToTarget: "+17.1%",
+    priceEntryContext: "Near lower entry zone",
+    watchSince: "Jan 2024",
+    hotScoreChangeSinceAdded: -8,
+    oppScoreChangeSinceAdded: -5,
+    latestPersonalSignal: "Avoid for now — setup is weak",
+    stopLoss: 155,
+    signalQuality: "Weak Setup",
+    lastUpdatedMinutes: 8,
+  },
+  AMD: {
+    suggestedAction: "Near entry zone",
+    fomoRisk: "Low — consolidating near support",
+    entryContext: "Near ideal entry zone",
+    hotDelta: 8,
+    oppDelta: 7,
+    hotScoreExplain: "MI300X demand catalyst with strong volume confirmation",
+    oppScoreExplain: "Best opportunity score today — strong risk/reward at current price",
+    hotBreakdown: { momentum: 85, volumeHeat: 82, catalyst: 88, technicals: 86 },
+    oppBreakdown: { analystUpside: 88, fundamentals: 82, valuation: 78, entryQuality: 84 },
+    aiWhatsHappening: "AMD is consolidating near key support after strong MI300X AI chip demand data from major cloud customers.",
+    aiWhatItMeans: "Best setup of the day. The stock is near an attractive entry zone with strong fundamental and technical support.",
+    aiWhatToWatch: "Watch for continuation above $162 as confirmation of breakout. Volume should be above average on the move.",
+    aiSentiment: "bullish",
+    aiGeneratedMinutes: 45,
+    catalystType: "AI chip demand",
+    catalystExplanation: "MI300X AI accelerator orders exceeding expectations. Data center customers increasing orders significantly.",
+    catalystConfidence: "High",
+    catalystSource: "Industry data + analyst updates",
+    catalystHoursAgo: 3,
+    entryZoneLow: 150,
+    entryZoneHigh: 160,
+    target: 195,
+    distanceToTarget: "+23.1%",
+    priceEntryContext: "Near entry zone",
+    watchSince: "Feb 2024",
+    hotScoreChangeSinceAdded: 15,
+    oppScoreChangeSinceAdded: 10,
+    latestPersonalSignal: "Track closely — near ideal entry",
+    stopLoss: 140,
+    signalQuality: "Strong Signal",
+    lastUpdatedMinutes: 1,
+  },
+};
