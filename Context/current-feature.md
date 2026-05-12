@@ -2,27 +2,26 @@
 
 ## Feature Name
 
-Dashboard Phase 1 — Static Layout with Mock Data
+Dashboard Phase 2 — Stock Preview Drawer
 
 ## Status
 
-Completed
+Not Started
 
 ---
 
 ## Context
 
-This feature builds the first implementation phase of the FomoFilter dashboard.
+Phase 1 completed the static FomoFilter dashboard using mock data. Phase 2 adds the first interactive dashboard behavior: clicking a stock row in the Hot Stocks Today table opens a right-side stock preview drawer.
 
-FomoFilter is an AI-powered hot stock discovery and tracking platform. The dashboard should help users quickly understand:
+The drawer should help the user quickly understand:
 
-- What is hot today
-- Which stocks are gaining momentum
-- Which stocks are worth tracking
-- Which alerts and AI insights need attention
-- Which setups are available for deeper scanning
-
-This phase should focus only on the main dashboard static layout using existing mock data.
+- What stock was selected
+- Why the stock is interesting
+- Whether the move looks like a signal or FOMO
+- What the current setup, risk, catalyst and score context are
+- Whether the stock is already in the watchlist
+- What actions are available next
 
 Use the project context files before implementation:
 
@@ -34,462 +33,230 @@ Use the project context files before implementation:
 
 ---
 
-## Important Implementation Scope
+## Primary Goal
 
-### Build in this phase
+Add a right-side stock preview drawer to the existing dashboard.
 
-Build the dashboard UI using mock data from:
+When the user clicks a stock row in `HotStocksTable`, the selected stock should be highlighted and a drawer should slide in from the right side of the screen.
+
+This phase should use mock data only.
+
+---
+
+## Data Source
+
+Use existing mock data from:
 
 ```txt
 src/lib/mock-data.ts
 ```
 
-The dashboard should use the existing mock data exports:
+Primary data source:
 
-- `mockUser`
-- `mockTodaysSignal`
-- `mockMarketStats`
-- `mockSummaryCards`
 - `mockHotStocks`
-- `mockTopScoreChanges`
 - `mockWatchlist`
-- `mockDiscoverSetups`
 - `mockAiInsights`
 - `mockRecentAlerts`
 
-### Do not build in this phase
+If additional mock fields are needed for the drawer, update `src/lib/mock-data.ts` carefully and keep the data simple.
 
-Do not build these yet:
-
-- Stock preview drawer
-- Create Alert flow
-- Add to Watchlist flow
-- Edit Watchlist flow
-- Real database integration
-- Prisma schema implementation
-- Authentication
-- API routes
-- Server Actions
-- Real market data provider integration
-- AI API calls
-- Stripe / monetization
-- Full Scanner page
-- Full Stock Details page
-- Full Watchlist page
-- Full Alerts page
-
-Those will be handled in later phases.
+Do not add API calls, database calls, Prisma, server actions, or real market data integration in this phase.
 
 ---
 
-## Phase Plan
+## Relevant Screenshot References for Phase 2
 
-The dashboard should be built incrementally across multiple phases.
+Use these screenshots as visual references. The implementation does not need to be pixel-perfect, but it should closely match the structure, visual hierarchy and dark dashboard feel.
 
-### Phase 1 — Dashboard Static Layout with Mock Data
-
-Current task.
-
-Build the main dashboard layout with mock data only.
-
-### Phase 2 — Stock Preview Drawer
-
-Later task.
-
-Clicking a stock row opens the right-side stock preview drawer.
-
-Reference screenshots for later:
-
-- `Context/screenshots/Hot-stocks-click-open-right-pannel.png`
-- `Context/screenshots/Hot-stocks-click-open-right-pannel-bottom.png`
-- `Context/screenshots/Hot-stocks-click-open-right-pannel-bottom-2.png`
-
-### Phase 3 — Drawer Actions
-
-Later task.
-
-Add interaction states for:
-
-- Create Alert
-- Add to Watchlist
-- After Add to Watchlist success state
-
-Reference screenshots for later:
-
-- `Context/screenshots/Hot-stocks-click-open-right-pannel-adding-alert.png`
-- `Context/screenshots/Hot-stocks-click-open-right-pannel-adding-to-watchlist.png`
-
-### Phase 4 — Responsive / Mobile Polish
-
-Later task.
-
-Improve mobile-specific dashboard and stock card layouts.
-
-### Phase 5 — Real Data Integration
-
-Later task.
-
-Replace mock data with database/API-backed data.
-
----
-
-## Primary Goal
-
-Replace the current placeholder home page with a polished desktop-first dashboard for FomoFilter.
-
-The current app page only shows:
-
-```tsx
-<h1>To get started, edit the page.tsx file.</h1>
-```
-
-Replace it with the Phase 1 dashboard.
-
----
-
-## Relevant Screenshot References for Phase 1
-
-Use these screenshots as visual references. The implementation does not need to be pixel-perfect, but it should closely match the product structure, visual hierarchy, and dark dashboard feel.
-
-### Main dashboard top
+### Stock row clicked — drawer open
 
 ```txt
-Context/screenshots/Main-screen-Top.png
+Context/screenshots/Hot-stocks-click-open-right-pannel.png
 ```
 
 Use this for:
 
-- Sidebar
-- Top navigation bar
-- Dashboard title
-- Data freshness text
-- Universe selector
-- Today’s Signal
-- Market index cards
-- Summary KPI cards
-- Top of Hot Stocks table
-- Top Score Changes placement
+- Drawer placement
+- Selected row state
+- Drawer header
+- Price and score summary
+- Decision Snapshot
+- AI Insight
+- Price Context
 
-### Main dashboard lower area
+### Drawer lower section
 
 ```txt
-Context/screenshots/Main-screen-bottom.png
+Context/screenshots/Hot-stocks-click-open-right-pannel-bottom.png
 ```
 
 Use this for:
 
-- Hot Stocks table
-- Discover Setups grid
-- Top Score Changes
-- My Watchlist widget
+- Score Breakdown
+- Main Catalyst
+- Watch Context
+- Drawer spacing and scroll behavior
 
-### Main dashboard bottom/right widgets
+### Drawer bottom / sticky CTA area
 
 ```txt
-Context/screenshots/Main-screen-bottom-2.png
+Context/screenshots/Hot-stocks-click-open-right-pannel-bottom-2.png
 ```
 
 Use this for:
 
-- AI Insights widget
-- Recent Alerts widget
-- Lower right column spacing
-- Bottom page continuation
+- Bottom section layout
+- Sticky footer behavior
+- CTA hierarchy
+- Full Details / Edit / Alert actions
 
 ---
 
-## Layout Requirements
+## Build in This Phase
 
-### Overall layout
+### 1. Clickable Hot Stocks rows
 
-Use a desktop-first dashboard shell:
+Update `HotStocksTable` so each stock row can be selected.
 
-- Fixed left sidebar
-- Top bar across the main content area
-- Main content area with dashboard sections
-- Dark mode first
-- Clean financial SaaS look
-- Subtle borders
-- Rounded cards
-- Compact but readable spacing
+Requirements:
 
-Suggested page structure:
+- Clicking a row sets the selected stock
+- Selected row gets a subtle highlight
+- Rows keep the existing hover state and `cursor-pointer`
+- No route navigation is needed
+- The selected row should remain visible behind the drawer
+
+---
+
+### 2. Stock Preview Drawer
+
+Create a new drawer component, suggested file:
 
 ```txt
-DashboardShell
-├── Sidebar
-├── MainArea
-│   ├── TopBar
-│   └── DashboardContent
-│       ├── DashboardHeader
-│       ├── TodaysSignalCard
-│       ├── MarketStatsGrid
-│       ├── SummaryCardsGrid
-│       ├── MainDashboardGrid
-│       │   ├── LeftColumn
-│       │   │   ├── HotStocksTable
-│       │   │   └── DiscoverSetups
-│       │   └── RightColumn
-│       │       ├── TopScoreChanges
-│       │       ├── WatchlistWidget
-│       │       ├── AiInsightsWidget
-│       │       └── RecentAlertsWidget
+src/components/dashboard/StockPreviewDrawer.tsx
+```
+
+The drawer should:
+
+- Slide in from the right
+- Use a premium dark SaaS style
+- Avoid heavy modal behavior
+- Keep the dashboard visible behind it
+- Use no overlay, or only a very subtle overlay if necessary
+- Have a clear left border and shadow
+- Be scrollable internally if content is long
+- Have a sticky header and sticky CTA footer if practical
+
+Suggested desktop width:
+
+```txt
+500px–560px
 ```
 
 ---
 
-## Sidebar Requirements
+## Drawer Content Requirements
 
-The sidebar should include:
-
-- FomoFilter logo / initials block
-- App name: `FomoFilter`
-- Navigation items:
-  - Dashboard
-  - Scanner
-  - Watchlist
-  - Alerts
-  - Stocks
-  - AI Insights
-- Alerts badge showing `3`
-- Bottom section:
-  - Settings
-  - User profile block using `mockUser`
-
-Use Lucide icons where appropriate.
-
-Suggested icons:
-
-- Dashboard: `LayoutDashboard`
-- Scanner: `Radar`
-- Watchlist: `Star`
-- Alerts: `Bell`
-- Stocks: `LineChart`
-- AI Insights: `Sparkles`
-- Settings: `Settings`
-
----
-
-## Top Bar Requirements
-
-The top bar should include:
-
-- Sidebar collapse icon placeholder/button
-- Global search input with placeholder:
-
-```txt
-Search ticker or company...
-```
-
-- Data freshness text:
-
-```txt
-US Stocks | Updated 2 min ago | Delayed data
-```
-
-- Universe selector:
-
-```txt
-Universe: US Stocks
-```
-
-- Notification icon with badge `3`
-
-In Phase 1, these controls do not need real functionality.
-
----
-
-## Dashboard Content Requirements
-
-### 1. Dashboard Header
+### 1. Sticky Header
 
 Show:
 
-```txt
-Dashboard
-Market overview and your tracked stocks
-```
-
----
-
-### 2. Today’s Signal
-
-Use `mockTodaysSignal`.
-
-This card should feel like an AI brief, not a generic notification.
-
-Required elements:
-
-- AI/spark icon
-- Title: `Today's Signal`
-- Small badge: `AI Brief`
-- Summary from `mockTodaysSignal.summary`
-- Tag pills from `mockTodaysSignal.tags`
-
-Style notes:
-
-- Slight purple/AI accent
-- Dark card
-- Clear but not overly bright
-
----
-
-### 3. Market Stats
-
-Use `mockMarketStats`.
-
-Display 4 cards:
-
-- S&P 500
-- NASDAQ
-- DOW
-- VIX
-
-Each card should show:
-
-- Label
-- Value
-- Change percentage
-- Green/red directional styling based on `up`
-
----
-
-### 4. Summary KPI Cards
-
-Use `mockSummaryCards`.
-
-Display 3 cards:
-
-- Hot Stocks Today
-- Top Opportunities
-- Active Alerts
-
-Each card should show:
-
-- Icon
-- Value
-- Label
-- Optional short subtext, for example:
-  - `Score > 80`
-  - `Score > 75`
-  - `3 triggered today`
-
----
-
-### 5. Hot Stocks Today Table
-
-Use `mockHotStocks`.
-
-The dashboard table should be compact and decision-oriented.
-
-Columns for Phase 1:
-
-- Favorite star
-- Symbol + company name
-- Price
-- Daily change
-- Setup
-- Hot score
-- Opportunity score
-- Risk
-- Catalyst
-
-For each row:
-
-- Symbol should be prominent
-- Company name should be muted below symbol
-- Price should be formatted as currency
-- Change should be green/red
-- Setup should be shown as a small badge
-- Hot and Opportunity scores should be small score pills
-- Risk should be a colored badge
-- Catalyst should include title and a small muted line if space allows
-- Show a subtle row hover state
-
-Important:
-
-- Do not implement row click drawer yet.
-- It is okay to make rows look clickable visually, but no drawer behavior in Phase 1.
-- Keep the horizontal table manageable. If needed, allow horizontal overflow only inside the table container.
-
----
-
-### 6. Top Score Changes Widget
-
-Use `mockTopScoreChanges`.
-
-Show a compact card list with:
-
-- Symbol
-- Hot score + delta
-- Opportunity score + delta
-- Optional reason if space allows
-
-Positive deltas should be green. Negative deltas should be red.
-
-This widget should help answer:
-
-> Which stocks are heating up now?
-
----
-
-### 7. My Watchlist Widget
-
-Use `mockWatchlist`.
-
-Show a compact card/list view with:
-
 - Symbol
 - Company name
-- Price
+- Setup badge
+- Close button
+- Current price
 - Daily change
-- Status badge
-- Entry zone
-- Target
-- Notes
-- Hot/Opp score if space allows
+- Last updated text, for example: `Updated 2m ago`
+- Signal Quality badge
+- Risk badge
+- Universe badge or text: `US Stocks`
 
-The watchlist should feel personal and decision-oriented, not just a list of tickers.
-
----
-
-### 8. Discover Setups
-
-Use `mockDiscoverSetups`.
-
-Show a grid of setup cards.
-
-Each setup card should include:
-
-- Icon
-- Setup name
-- Number of stocks or ticker count
-- Top tickers
-- Description
-
-Suggested section title:
+Example content:
 
 ```txt
-Discover Setups
+NVDA
+NVIDIA Corporation
+$924.32  +5.42%
+Signal: Strong but Extended | Risk: Medium | Updated 2m ago
 ```
-
-Include a small `All Views` link/button.
 
 ---
 
-### 9. AI Insights Widget
+### 2. Decision Snapshot
 
-Use `mockAiInsights`.
+This is the most important product section.
 
-Each insight card should show:
+Show a compact card with:
 
-- Symbol
+- Setup
+- Suggested action
+- Main catalyst
+- FOMO risk
+- Entry context
+
+Use decision-support language only. Do not use direct financial advice language.
+
+Good examples:
+
+- `Track closely`
+- `Wait for pullback`
+- `Near entry zone`
+- `Extended`
+- `Needs confirmation`
+- `High-risk setup`
+- `Worth watching`
+
+Avoid:
+
+- `Buy now`
+- `Sell now`
+- `Guaranteed upside`
+
+---
+
+### 3. Score Cards
+
+Show two score cards side by side where possible:
+
+#### Hot Score
+
+- Score value
+- Delta value
+- Label
+- Short explanation
+
+#### Opportunity Score
+
+- Score value
+- Delta value
+- Label
+- Short explanation
+
+Use subtle semantic color:
+
+- Warm/orange accent for Hot Score
+- Emerald/green accent for Opportunity Score
+- Green delta for positive
+- Red delta for negative
+
+---
+
+### 4. AI Insight
+
+Create a structured AI Insight card using mock content.
+
+Suggested rows:
+
+- `What’s happening`
+- `What it means`
+- `What to watch`
+
+Also show:
+
 - Sentiment badge
-- Title
-- Summary
-- Time generated, e.g. `10 min ago`
-
-Include subtle disclaimer text near the bottom:
+- Generated time
+- Small disclaimer:
 
 ```txt
 Research support only. Not financial advice.
@@ -497,102 +264,159 @@ Research support only. Not financial advice.
 
 ---
 
-### 10. Recent Alerts Widget
+### 5. Price Context
 
-Use `mockRecentAlerts`.
+Add a compact chart-like card.
+
+Since this phase uses mock data only, the chart can be a styled placeholder or simple mock line/area visualization.
 
 Show:
 
-- Section title: `Recent Alerts`
-- Badge for new alerts count
-- Alert cards with:
-  - Symbol
-  - Message
-  - Note
-  - Time ago
-  - Icon based on alert type/icon
+- Title: `Price Context`
+- Timeframe pills: `1D`, `1W`, `1M`, `6M`
+- Current price marker/label
+- Entry zone
+- Target
+- Distance to target
+- Entry context, for example: `Above ideal entry zone`
 
-Alerts should feel like insight alerts, not dry system logs.
+Do not add a real charting library unless it is already available and simple to use.
+
+---
+
+### 6. Score Breakdown
+
+Add a section titled:
+
+```txt
+Why these scores?
+```
+
+Show compact rows or progress bars for:
+
+Hot Score breakdown:
+
+- Momentum
+- Volume Heat
+- Catalyst
+- Technicals
+
+Opportunity Score breakdown:
+
+- Analyst Upside
+- Fundamentals
+- Valuation
+- Entry Quality
+
+Mock values are acceptable.
+
+---
+
+### 7. Main Catalyst
+
+Show a compact catalyst card with:
+
+- Catalyst type
+- Short explanation
+- Confidence
+- Source/time text
+
+Example:
+
+```txt
+AI demand surge
+Data center revenue and chip demand remain strong.
+Confidence: High
+Latest market update · 2h ago
+```
+
+---
+
+### 8. Watch Context
+
+If the stock is already in the watchlist, show:
+
+- In Watchlist: Yes
+- Entry zone
+- Target
+- Stop loss if available
+- Since added mock value
+- Hot Score change mock value
+- Opportunity Score change mock value
+- Latest personal signal
+
+If the stock is not in the watchlist, show:
+
+- Not in watchlist yet
+- Suggested tracking reason
+- Primary CTA should be `Add to Watchlist`
+
+---
+
+### 9. Sticky CTA Footer
+
+Add bottom CTA area.
+
+If stock is already in watchlist:
+
+- Primary: `View Full Details`
+- Secondary: `Edit Watchlist`
+- Secondary: `Create Alert`
+
+If stock is not in watchlist:
+
+- Primary: `Add to Watchlist`
+- Secondary: `Create Alert`
+- Tertiary: `View Full Details`
+
+In this phase, buttons do not need to open forms yet.
+
+They can be non-functional placeholders or simple buttons with no action.
 
 ---
 
 ## Component Suggestions
 
-Follow the file organization rules in `Context/coding-standards.md`.
-
-Suggested components:
+Suggested new or updated files:
 
 ```txt
-src/components/layout/AppSidebar.tsx
-src/components/layout/TopBar.tsx
-src/components/dashboard/DashboardHeader.tsx
-src/components/dashboard/TodaysSignalCard.tsx
-src/components/dashboard/MarketStatsGrid.tsx
-src/components/dashboard/SummaryCardsGrid.tsx
+src/components/dashboard/StockPreviewDrawer.tsx
 src/components/dashboard/HotStocksTable.tsx
-src/components/dashboard/TopScoreChanges.tsx
-src/components/dashboard/WatchlistWidget.tsx
-src/components/dashboard/DiscoverSetups.tsx
-src/components/dashboard/AiInsightsWidget.tsx
-src/components/dashboard/RecentAlertsWidget.tsx
+src/app/page.tsx
 ```
 
-Suggested utilities:
+Optional helper component files if useful:
 
 ```txt
-src/lib/formatters.ts
+src/components/dashboard/DrawerScoreCard.tsx
+src/components/dashboard/DrawerSection.tsx
 ```
 
-Potential formatter helpers:
-
-- `formatCurrency(value: number): string`
-- `formatPercent(value: number): string`
-- `formatSignedNumber(value: number): string`
-
-Keep components focused and avoid overly large files.
+Keep the implementation simple. Do not over-componentize unless it improves readability.
 
 ---
 
-## Styling Requirements
+## Out of Scope for This Feature
 
-Use Tailwind CSS v4.
+Do not build these in Phase 2:
 
-Important:
+- Create Alert form
+- Add to Watchlist form
+- Edit Watchlist form
+- Success state after adding to watchlist
+- Full Scanner page
+- Full Stock Details page
+- Full Watchlist page
+- Full Alerts page
+- Mobile-specific drawer redesign
+- Real chart integration
+- Real AI API calls
+- Real market data API calls
+- Prisma/database work
+- Auth work
+- Stripe/monetization work
 
-- Do not create `tailwind.config.ts`
-- Do not create `tailwind.config.js`
-- Use Tailwind utility classes directly
-- Keep the app dark-mode-first
-- Use the existing `src/app/globals.css` Tailwind import
-
-Visual direction:
-
-- Background: near-black
-- Cards: very dark gray
-- Borders: subtle slate/neutral borders
-- Positive values: green
-- Negative values: red
-- Warning/risk: amber/red
-- AI accent: purple
-- Text hierarchy:
-  - White / near-white for primary text
-  - Muted gray for secondary text
-
----
-
-## Current App State
-
-The current app is almost empty:
-
-- `src/app/page.tsx` only renders a placeholder H1
-- `src/app/layout.tsx` has the basic root layout and fonts
-- `src/app/globals.css` only imports Tailwind
-
-In this phase, update the page and add the necessary components to render the dashboard.
-
-Do not change the app into a multi-route structure yet unless necessary.
-
-It is acceptable for `/` to render the dashboard for now.
+The drawer CTA buttons can exist visually, but their full behavior belongs to a later phase.
 
 ---
 
@@ -600,13 +424,24 @@ It is acceptable for `/` to render the dashboard for now.
 
 The feature is complete when:
 
-- The home page renders the Phase 1 dashboard instead of the placeholder H1
-- The dashboard uses data from `src/lib/mock-data.ts`
-- The visual structure matches the referenced screenshots closely enough for Phase 1
-- Sidebar, top bar, dashboard widgets, tables and cards are present
-- No real API/database/auth integration is added
-- No drawer interactions are implemented yet
-- The project builds successfully with:
+- Clicking a row in `HotStocksTable` opens a right-side stock preview drawer
+- The selected row is visually highlighted
+- The drawer can be closed
+- The dashboard remains visible behind the drawer
+- The drawer does not use a heavy dark overlay
+- Drawer content uses mock data only
+- The drawer includes:
+  - Header
+  - Decision Snapshot
+  - Hot and Opportunity score cards
+  - AI Insight
+  - Price Context
+  - Score Breakdown
+  - Main Catalyst
+  - Watch Context
+  - CTA footer
+- Watchlist and non-watchlist stocks show different CTA/context states
+- Build passes successfully with:
 
 ```txt
 npm run build
@@ -617,35 +452,16 @@ npm run build
 
 ---
 
-## Out of Scope for This Feature
-
-Keep these explicitly out of scope:
-
-- Right-side stock preview drawer
-- Clicking stock rows to open drawer
-- Create alert form
-- Add to watchlist form
-- Edit watchlist state
-- Mobile stock cards polish
-- Scanner page
-- Watchlist page
-- Alerts page
-- Stock details page
-- Prisma/database work
-- Auth work
-- Real market data work
-
----
-
 ## Implementation Notes for AI Agent
 
 - Build incrementally.
-- Start by creating the layout shell.
-- Then add dashboard widgets one by one.
-- Use mock data only.
-- Keep the code readable and componentized.
-- Do not over-engineer.
-- Do not add features outside Phase 1.
+- Start by adding selected stock state in the dashboard page.
+- Then update `HotStocksTable` to accept selection props.
+- Then add the drawer component.
+- Use existing mock data first.
+- Add small mock-only derived values where needed.
+- Keep the design close to the screenshots.
+- Do not start Phase 3 action forms.
 - Ask before large refactors.
 - Do not commit unless explicitly asked.
 
