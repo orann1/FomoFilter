@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   X,
   Star,
@@ -95,6 +95,7 @@ export default function StockPreviewDrawer({
   const [activeAction, setActiveAction] = useState<DrawerAction>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setActiveAction(null);
@@ -105,6 +106,12 @@ export default function StockPreviewDrawer({
     const id = requestAnimationFrame(() => setMounted(true));
     return () => cancelAnimationFrame(id);
   }, []);
+
+  useEffect(() => {
+    if (activeAction) {
+      scrollContainerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [activeAction]);
 
   if (!detail) return null;
 
@@ -165,9 +172,10 @@ export default function StockPreviewDrawer({
 
   return (
     <div
-      className={`fixed right-0 top-0 h-screen w-[520px] bg-[#0f1015] border-l border-slate-700/80 shadow-2xl z-50 flex flex-col ${
-        isClosing || !mounted ? "translate-x-full opacity-0" : "translate-x-0 opacity-100"
-      }`}
+      className={`fixed bg-[#0f1015] shadow-2xl z-50 flex flex-col
+        inset-0 md:inset-auto md:right-0 md:top-0 md:h-screen md:w-[520px] md:border-l md:border-slate-700/80
+        ${isClosing || !mounted ? "translate-x-full opacity-0" : "translate-x-0 opacity-100"}
+      `}
       style={{ transition: "transform 260ms cubic-bezier(0.16, 1, 0.3, 1), opacity 260ms cubic-bezier(0.16, 1, 0.3, 1)" }}
     >
       {/* ── Sticky Header ── */}
@@ -221,7 +229,7 @@ export default function StockPreviewDrawer({
       </div>
 
       {/* ── Scrollable Content ── */}
-      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
 
         {/* Success message */}
         {successMessage && (
@@ -555,16 +563,16 @@ export default function StockPreviewDrawer({
       </div>
 
       {/* ── Sticky CTA Footer ── */}
-      <div className="flex-none border-t border-slate-800 px-5 py-4 bg-[#0f1015]">
+      <div className="flex-none border-t border-slate-800 px-4 md:px-5 py-3 md:py-4 bg-[#0f1015]">
         {isInWatchlist ? (
-          <div className="flex items-center gap-2">
-            <button className="flex-1 bg-slate-100 hover:bg-white text-slate-900 text-sm font-semibold px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button className="flex-1 min-w-0 bg-slate-100 hover:bg-white text-slate-900 text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors flex items-center justify-center gap-1.5">
               <TrendingUp size={14} />
               View Full Details
             </button>
             <button
               onClick={() => openAction("edit-watchlist")}
-              className={`px-3 py-2 text-sm font-medium rounded-lg border transition-colors flex items-center gap-1.5 ${
+              className={`px-3 py-2.5 text-sm font-medium rounded-lg border transition-colors flex items-center gap-1.5 ${
                 activeAction === "edit-watchlist"
                   ? "bg-slate-600 border-slate-500 text-white"
                   : "bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700"
@@ -575,7 +583,7 @@ export default function StockPreviewDrawer({
             </button>
             <button
               onClick={() => openAction("create-alert")}
-              className={`px-3 py-2 text-sm font-medium rounded-lg border transition-colors flex items-center gap-1.5 ${
+              className={`px-3 py-2.5 text-sm font-medium rounded-lg border transition-colors flex items-center gap-1.5 ${
                 activeAction === "create-alert"
                   ? "bg-amber-700/50 border-amber-600/50 text-amber-300"
                   : "bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700"
@@ -586,10 +594,10 @@ export default function StockPreviewDrawer({
             </button>
           </div>
         ) : (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={() => openAction("add-watchlist")}
-              className={`flex-1 text-sm font-semibold px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5 ${
+              className={`flex-1 min-w-0 text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors flex items-center justify-center gap-1.5 ${
                 activeAction === "add-watchlist"
                   ? "bg-emerald-700 text-white"
                   : "bg-emerald-600 hover:bg-emerald-500 text-white"
@@ -600,7 +608,7 @@ export default function StockPreviewDrawer({
             </button>
             <button
               onClick={() => openAction("create-alert")}
-              className={`px-3 py-2 text-sm font-medium rounded-lg border transition-colors flex items-center gap-1.5 ${
+              className={`px-3 py-2.5 text-sm font-medium rounded-lg border transition-colors flex items-center gap-1.5 ${
                 activeAction === "create-alert"
                   ? "bg-amber-700/50 border-amber-600/50 text-amber-300"
                   : "bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700"
@@ -609,7 +617,7 @@ export default function StockPreviewDrawer({
               <Bell size={13} />
               Alert
             </button>
-            <button className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-lg border border-slate-700 transition-colors">
+            <button className="px-3 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-lg border border-slate-700 transition-colors">
               Details
             </button>
           </div>

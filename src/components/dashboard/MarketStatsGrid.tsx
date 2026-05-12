@@ -2,7 +2,7 @@ import { mockMarketStats } from "@/src/lib/mock-data";
 
 export default function MarketStatsGrid() {
   return (
-    <div className="grid grid-cols-4 gap-3 mb-5">
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-5">
       {mockMarketStats.map((stat) => (
         <div key={stat.label} className="bg-[#111318] border border-slate-800 rounded-xl p-4">
           <p className="text-slate-500 text-xs mb-1">{stat.label}</p>
