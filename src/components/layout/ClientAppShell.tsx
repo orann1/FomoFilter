@@ -6,6 +6,7 @@ import TopBar from "./TopBar";
 
 export default function ClientAppShell({ children }: { children: React.ReactNode }) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
   return (
     <div className="flex h-screen bg-[#0a0b0f] overflow-hidden">
@@ -17,10 +18,18 @@ export default function ClientAppShell({ children }: { children: React.ReactNode
         />
       )}
 
-      <AppSidebar isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
+      <AppSidebar
+        isOpen={isSidebarOpen}
+        isCollapsed={isSidebarCollapsed}
+        onClose={() => setIsSidebarOpen(false)}
+      />
 
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        <TopBar onMenuToggle={() => setIsSidebarOpen((v) => !v)} />
+        <TopBar
+          onMenuToggle={() => setIsSidebarOpen((v) => !v)}
+          isSidebarCollapsed={isSidebarCollapsed}
+          onToggleCollapse={() => setIsSidebarCollapsed((v) => !v)}
+        />
         <main className="flex-1 overflow-y-auto px-4 md:px-6 py-4 md:py-6 pb-10">
           {children}
         </main>

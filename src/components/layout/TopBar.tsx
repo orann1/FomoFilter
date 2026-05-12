@@ -1,14 +1,25 @@
-import { Menu, Search, Bell } from "lucide-react";
+import { Menu, Search, Bell, PanelLeft, PanelLeftClose } from "lucide-react";
 
 interface TopBarProps {
   onMenuToggle?: () => void;
+  isSidebarCollapsed?: boolean;
+  onToggleCollapse?: () => void;
 }
 
-export default function TopBar({ onMenuToggle }: TopBarProps) {
+export default function TopBar({ onMenuToggle, isSidebarCollapsed, onToggleCollapse }: TopBarProps) {
   return (
     <header className="border-b border-slate-800 bg-[#0d0f14] shrink-0">
       {/* Main row */}
       <div className="h-14 flex items-center px-4 md:px-5 gap-3">
+        {/* Sidebar collapse toggle — desktop only */}
+        <button
+          className="hidden md:flex items-center justify-center text-slate-400 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-slate-800 shrink-0"
+          onClick={onToggleCollapse}
+          aria-label={isSidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {isSidebarCollapsed ? <PanelLeft size={18} /> : <PanelLeftClose size={18} />}
+        </button>
+
         {/* Hamburger — mobile only */}
         <button
           className="md:hidden text-slate-400 hover:text-white transition-colors p-1 rounded-lg hover:bg-slate-800"

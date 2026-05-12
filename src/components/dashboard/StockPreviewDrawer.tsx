@@ -94,18 +94,12 @@ export default function StockPreviewDrawer({
 
   const [activeAction, setActiveAction] = useState<DrawerAction>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const [mounted, setMounted] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setActiveAction(null);
     setSuccessMessage(null);
   }, [stock.symbol]);
-
-  useEffect(() => {
-    const id = requestAnimationFrame(() => setMounted(true));
-    return () => cancelAnimationFrame(id);
-  }, []);
 
   useEffect(() => {
     if (activeAction) {
@@ -174,9 +168,8 @@ export default function StockPreviewDrawer({
     <div
       className={`fixed bg-[#0f1015] shadow-2xl z-50 flex flex-col
         inset-0 md:inset-auto md:right-0 md:top-0 md:h-screen md:w-[520px] md:border-l md:border-slate-700/80
-        ${isClosing || !mounted ? "translate-x-full opacity-0" : "translate-x-0 opacity-100"}
+        ${isClosing ? "animate-drawer-slide-out" : "animate-drawer-slide-in"}
       `}
-      style={{ transition: "transform 260ms cubic-bezier(0.16, 1, 0.3, 1), opacity 260ms cubic-bezier(0.16, 1, 0.3, 1)" }}
     >
       {/* ── Sticky Header ── */}
       <div className="flex-none border-b border-slate-800 px-5 pt-4 pb-4">
