@@ -36,9 +36,10 @@ function ScorePill({ value, type }: { value: number; type: "hot" | "opp" }) {
 interface HotStocksTableProps {
   selectedSymbol: string | null;
   onSelectStock: (stock: HotStock) => void;
+  watchlistSymbols: Set<string>;
 }
 
-export default function HotStocksTable({ selectedSymbol, onSelectStock }: HotStocksTableProps) {
+export default function HotStocksTable({ selectedSymbol, onSelectStock, watchlistSymbols }: HotStocksTableProps) {
   return (
     <div className="bg-[#111318] border border-slate-800 rounded-xl overflow-hidden mb-5">
       <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
@@ -76,7 +77,7 @@ export default function HotStocksTable({ selectedSymbol, onSelectStock }: HotSto
                   <td className="px-4 py-3">
                     <Star
                       size={14}
-                      className={stock.inWatchlist ? "text-amber-400 fill-amber-400" : "text-slate-600"}
+                      className={watchlistSymbols.has(stock.symbol) ? "text-amber-400 fill-amber-400" : "text-slate-600"}
                     />
                   </td>
                   <td className="px-4 py-3">

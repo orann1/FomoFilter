@@ -1,12 +1,30 @@
 "use client";
 
-import { X, Star, Sparkles, TrendingUp, Clock, TriangleAlert, Flame, Target } from "lucide-react";
+import { useEffect, useState } from "react";
+import {
+  X,
+  Star,
+  Sparkles,
+  TrendingUp,
+  Clock,
+  TriangleAlert,
+  Flame,
+  Target,
+  Bell,
+  Pencil,
+} from "lucide-react";
 import {
   mockStockDrawerDetails,
   mockWatchlist,
   type HotStock,
+  type WatchStatus,
 } from "@/src/lib/mock-data";
 import { formatCurrency, formatPercent, formatSignedNumber } from "@/src/lib/formatters";
+import { type DrawerAction, type LocalWatchlistEntry, type WatchStatusLocal } from "@/src/types/drawer";
+import AddToWatchlistPanel from "./drawer/AddToWatchlistPanel";
+import EditWatchlistPanel, { type EditWatchlistInitialValues } from "./drawer/EditWatchlistPanel";
+import CreateAlertPanel from "./drawer/CreateAlertPanel";
+import DrawerSuccessMessage from "./drawer/DrawerSuccessMessage";
 
 const sentimentColors = {
   bullish: "text-emerald-400 bg-emerald-500/10 border border-emerald-800/50",
@@ -23,43 +41,134 @@ function SectionCard({ children, className = "" }: { children: React.ReactNode; 
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
-  return <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">{children}</p>;
+  return (
+    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">{children}</p>
+  );
 }
 
 function BreakdownBar({ label, value }: { label: string; value: number }) {
-  const isHigh = value >= 80;
-  const isMid = value >= 60;
-  const barColor = isHigh ? "bg-emerald-500" : isMid ? "bg-amber-500" : "bg-slate-600";
+  const barColor = value >= 80 ? "bg-emerald-500" : value >= 60 ? "bg-amber-500" : "bg-slate-600";
   return (
     <div className="flex items-center gap-2">
       <span className="text-xs text-slate-400 w-28 shrink-0">{label}</span>
       <div className="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-        <div
-          className={`h-full rounded-full ${barColor} transition-all`}
-          style={{ width: `${value}%` }}
-        />
+        <div className={`h-full rounded-full ${barColor} transition-all`} style={{ width: `${value}%` }} />
       </div>
       <span className="text-xs text-slate-300 w-7 text-right">{value}</span>
     </div>
   );
 }
 
+function mapWatchStatus(status: WatchStatus): WatchStatusLocal {
+  switch (status) {
+    case "READY_TO_BUY":
+      return "Ready to Buy";
+    case "WAITING_FOR_PULLBACK":
+      return "Waiting";
+    default:
+      return "Watching";
+  }
+}
+
 interface StockPreviewDrawerProps {
   stock: HotStock;
   isClosing: boolean;
   onClose: () => void;
+  localWatchlistEntry?: LocalWatchlistEntry;
+  onAddToWatchlist: (entry: LocalWatchlistEntry) => void;
+  onEditWatchlist: (entry: LocalWatchlistEntry) => void;
 }
 
-export default function StockPreviewDrawer({ stock, isClosing, onClose }: StockPreviewDrawerProps) {
+export default function StockPreviewDrawer({
+  stock,
+  isClosing,
+  onClose,
+  localWatchlistEntry,
+  onAddToWatchlist,
+  onEditWatchlist,
+}: StockPreviewDrawerProps) {
   const detail = mockStockDrawerDetails[stock.symbol];
-  const watchlistItem = mockWatchlist.find((w) => w.symbol === stock.symbol);
-  const inWatchlist = stock.inWatchlist;
+  const originalWatchlistItem = mockWatchlist.find((w) => w.symbol === stock.symbol);
+
+  const isInWatchlist = stock.inWatchlist || !!localWatchlistEntry;
+
+  const [activeAction, setActiveAction] = useState<DrawerAction>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setActiveAction(null);
+    setSuccessMessage(null);
+  }, [stock.symbol]);
+
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
 
   if (!detail) return null;
 
+  function openAction(action: DrawerAction) {
+    setSuccessMessage(null);
+    setActiveAction(action);
+  }
+
+  function handleAddToWatchlist(entry: LocalWatchlistEntry) {
+    onAddToWatchlist(entry);
+    setActiveAction(null);
+    setSuccessMessage(`${stock.symbol} added to your watchlist`);
+  }
+
+  function handleEditWatchlist(entry: LocalWatchlistEntry) {
+    onEditWatchlist(entry);
+    setActiveAction(null);
+    setSuccessMessage("Watchlist updated");
+  }
+
+  function handleCreateAlert() {
+    setActiveAction(null);
+    setSuccessMessage(`Alert created for ${stock.symbol}`);
+  }
+
+  const editInitialValues: EditWatchlistInitialValues = localWatchlistEntry
+    ? {
+        status: localWatchlistEntry.status,
+        reason: localWatchlistEntry.reason,
+        entryZoneLow: localWatchlistEntry.entryZoneLow,
+        entryZoneHigh: localWatchlistEntry.entryZoneHigh,
+        target: localWatchlistEntry.target,
+        stopLoss: localWatchlistEntry.stopLoss,
+      }
+    : originalWatchlistItem
+    ? {
+        status: mapWatchStatus(originalWatchlistItem.status),
+        reason: originalWatchlistItem.notes,
+        entryZoneLow: String(originalWatchlistItem.entryZoneLow),
+        entryZoneHigh: String(originalWatchlistItem.entryZoneHigh),
+        target: String(originalWatchlistItem.target),
+        stopLoss: String(originalWatchlistItem.stopLoss),
+      }
+    : { status: "Watching", reason: "", entryZoneLow: "", entryZoneHigh: "", target: "", stopLoss: "" };
+
+  // Merged watchlist display data
+  const watchEntry = localWatchlistEntry ?? (originalWatchlistItem
+    ? {
+        watchlist: "Main Watchlist",
+        reason: originalWatchlistItem.notes,
+        status: mapWatchStatus(originalWatchlistItem.status),
+        entryZoneLow: String(originalWatchlistItem.entryZoneLow),
+        entryZoneHigh: String(originalWatchlistItem.entryZoneHigh),
+        target: String(originalWatchlistItem.target),
+        stopLoss: String(originalWatchlistItem.stopLoss),
+      }
+    : null);
+
   return (
     <div
-      className={`fixed right-0 top-0 h-screen w-[520px] bg-[#0f1015] border-l border-slate-700/80 shadow-2xl z-50 flex flex-col ${isClosing ? "animate-drawer-slide-out" : "animate-drawer-slide-in"}`}
+      className={`fixed right-0 top-0 h-screen w-[520px] bg-[#0f1015] border-l border-slate-700/80 shadow-2xl z-50 flex flex-col ${
+        isClosing || !mounted ? "translate-x-full opacity-0" : "translate-x-0 opacity-100"
+      }`}
+      style={{ transition: "transform 260ms cubic-bezier(0.16, 1, 0.3, 1), opacity 260ms cubic-bezier(0.16, 1, 0.3, 1)" }}
     >
       {/* ── Sticky Header ── */}
       <div className="flex-none border-b border-slate-800 px-5 pt-4 pb-4">
@@ -67,7 +176,7 @@ export default function StockPreviewDrawer({ stock, isClosing, onClose }: StockP
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <span className="text-white text-xl font-bold">{stock.symbol}</span>
-              {inWatchlist && (
+              {isInWatchlist && (
                 <Star size={14} className="text-amber-400 fill-amber-400 shrink-0" />
               )}
               <span className="text-xs bg-slate-700/70 text-slate-300 border border-slate-700 px-2 py-0.5 rounded-full shrink-0">
@@ -114,6 +223,43 @@ export default function StockPreviewDrawer({ stock, isClosing, onClose }: StockP
       {/* ── Scrollable Content ── */}
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
 
+        {/* Success message */}
+        {successMessage && (
+          <DrawerSuccessMessage
+            message={successMessage}
+            onDismiss={() => setSuccessMessage(null)}
+          />
+        )}
+
+        {/* Action panels — only one at a time */}
+        {activeAction === "add-watchlist" && (
+          <AddToWatchlistPanel
+            symbol={stock.symbol}
+            suggestedReason={detail.suggestedTrackingReason}
+            onSubmit={handleAddToWatchlist}
+            onCancel={() => setActiveAction(null)}
+          />
+        )}
+        {activeAction === "edit-watchlist" && (
+          <EditWatchlistPanel
+            symbol={stock.symbol}
+            initialValues={editInitialValues}
+            onSubmit={handleEditWatchlist}
+            onCancel={() => setActiveAction(null)}
+          />
+        )}
+        {activeAction === "create-alert" && (
+          <CreateAlertPanel
+            symbol={stock.symbol}
+            currentPrice={stock.price}
+            hotScore={stock.hot}
+            oppScore={stock.opp}
+            relativeVolume={stock.relativeVolume}
+            onSubmit={handleCreateAlert}
+            onCancel={() => setActiveAction(null)}
+          />
+        )}
+
         {/* 1. Decision Snapshot */}
         <SectionCard>
           <SectionTitle>Decision Snapshot</SectionTitle>
@@ -143,7 +289,6 @@ export default function StockPreviewDrawer({ stock, isClosing, onClose }: StockP
 
         {/* 2. Score Cards */}
         <div className="grid grid-cols-2 gap-3">
-          {/* Hot Score */}
           <SectionCard>
             <div className="flex items-center gap-1.5 mb-2">
               <Flame size={13} className="text-orange-400" />
@@ -160,7 +305,6 @@ export default function StockPreviewDrawer({ stock, isClosing, onClose }: StockP
             <p className="text-xs text-slate-500 leading-snug">{detail.hotScoreExplain}</p>
           </SectionCard>
 
-          {/* Opportunity Score */}
           <SectionCard>
             <div className="flex items-center gap-1.5 mb-2">
               <Target size={13} className="text-emerald-400" />
@@ -185,7 +329,9 @@ export default function StockPreviewDrawer({ stock, isClosing, onClose }: StockP
               <Sparkles size={13} className="text-purple-400" />
               <SectionTitle>AI Insight</SectionTitle>
             </div>
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${sentimentColors[detail.aiSentiment]}`}>
+            <span
+              className={`text-xs px-2 py-0.5 rounded-full font-medium ${sentimentColors[detail.aiSentiment]}`}
+            >
               {detail.aiSentiment}
             </span>
           </div>
@@ -217,7 +363,9 @@ export default function StockPreviewDrawer({ stock, isClosing, onClose }: StockP
               {["1D", "1W", "1M", "6M"].map((tf) => (
                 <button
                   key={tf}
-                  className={`text-xs px-2 py-0.5 rounded ${tf === "1M" ? "bg-slate-700 text-white" : "text-slate-500 hover:text-slate-300"}`}
+                  className={`text-xs px-2 py-0.5 rounded ${
+                    tf === "1M" ? "bg-slate-700 text-white" : "text-slate-500 hover:text-slate-300"
+                  }`}
                 >
                   {tf}
                 </button>
@@ -225,13 +373,20 @@ export default function StockPreviewDrawer({ stock, isClosing, onClose }: StockP
             </div>
           </div>
 
-          {/* Simple mock price visualization */}
           <div className="relative h-16 mb-4">
             <svg viewBox="0 0 400 60" className="w-full h-full" preserveAspectRatio="none">
               <defs>
                 <linearGradient id={`grad-${stock.symbol}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor={stock.change >= 0 ? "#10b981" : "#ef4444"} stopOpacity="0.3" />
-                  <stop offset="100%" stopColor={stock.change >= 0 ? "#10b981" : "#ef4444"} stopOpacity="0" />
+                  <stop
+                    offset="0%"
+                    stopColor={stock.change >= 0 ? "#10b981" : "#ef4444"}
+                    stopOpacity="0.3"
+                  />
+                  <stop
+                    offset="100%"
+                    stopColor={stock.change >= 0 ? "#10b981" : "#ef4444"}
+                    stopOpacity="0"
+                  />
                 </linearGradient>
               </defs>
               <path
@@ -311,8 +466,8 @@ export default function StockPreviewDrawer({ stock, isClosing, onClose }: StockP
                 detail.catalystConfidence === "High"
                   ? "text-emerald-400 bg-emerald-500/10 border border-emerald-800/50"
                   : detail.catalystConfidence === "Medium"
-                    ? "text-amber-400 bg-amber-500/10 border border-amber-800/50"
-                    : "text-slate-400 bg-slate-700/40"
+                  ? "text-amber-400 bg-amber-500/10 border border-amber-800/50"
+                  : "text-slate-400 bg-slate-700/40"
               }`}
             >
               Confidence: {detail.catalystConfidence}
@@ -326,62 +481,55 @@ export default function StockPreviewDrawer({ stock, isClosing, onClose }: StockP
         {/* 7. Watch Context */}
         <SectionCard>
           <SectionTitle>Watch Context</SectionTitle>
-          {inWatchlist && watchlistItem ? (
+          {isInWatchlist && watchEntry ? (
             <div>
               <div className="flex items-center gap-1.5 mb-3">
                 <Star size={12} className="text-amber-400 fill-amber-400" />
                 <span className="text-xs text-amber-400 font-medium">In your watchlist</span>
-                {watchlistItem.status && (
-                  <span className="text-xs text-slate-500 bg-slate-800 border border-slate-700 px-1.5 py-0.5 rounded-full ml-1">
-                    {watchlistItem.status.replace(/_/g, " ")}
-                  </span>
+                <span className="text-xs text-slate-500 bg-slate-800 border border-slate-700 px-1.5 py-0.5 rounded-full ml-1">
+                  {watchEntry.status}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                {watchEntry.entryZoneLow && watchEntry.entryZoneHigh && (
+                  <div>
+                    <p className="text-xs text-slate-500 mb-0.5">Entry zone</p>
+                    <p className="text-xs text-slate-300 font-medium">
+                      {formatCurrency(parseFloat(watchEntry.entryZoneLow))} –{" "}
+                      {formatCurrency(parseFloat(watchEntry.entryZoneHigh))}
+                    </p>
+                  </div>
+                )}
+                {watchEntry.target && (
+                  <div>
+                    <p className="text-xs text-slate-500 mb-0.5">Target</p>
+                    <p className="text-xs text-emerald-400 font-medium">
+                      {formatCurrency(parseFloat(watchEntry.target))}
+                    </p>
+                  </div>
+                )}
+                {watchEntry.stopLoss && (
+                  <div>
+                    <p className="text-xs text-slate-500 mb-0.5">Stop loss</p>
+                    <p className="text-xs text-red-400 font-medium">
+                      {formatCurrency(parseFloat(watchEntry.stopLoss))}
+                    </p>
+                  </div>
+                )}
+                {detail.watchSince && (
+                  <div>
+                    <p className="text-xs text-slate-500 mb-0.5">Since added</p>
+                    <p className="text-xs text-slate-300 font-medium">{detail.watchSince}</p>
+                  </div>
                 )}
               </div>
-              <div className="grid grid-cols-2 gap-2 mb-3">
-                <div>
-                  <p className="text-xs text-slate-500 mb-0.5">Entry zone</p>
-                  <p className="text-xs text-slate-300 font-medium">
-                    {formatCurrency(watchlistItem.entryZoneLow)} – {formatCurrency(watchlistItem.entryZoneHigh)}
-                  </p>
+              {watchEntry.reason && (
+                <div className="bg-slate-800/60 border border-slate-700/60 rounded-lg px-3 py-2">
+                  <p className="text-xs text-slate-500 mb-0.5">Tracking reason</p>
+                  <p className="text-xs text-slate-300">{watchEntry.reason}</p>
                 </div>
-                <div>
-                  <p className="text-xs text-slate-500 mb-0.5">Target</p>
-                  <p className="text-xs text-emerald-400 font-medium">{formatCurrency(watchlistItem.target)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500 mb-0.5">Stop loss</p>
-                  <p className="text-xs text-red-400 font-medium">
-                    {detail.stopLoss ? formatCurrency(detail.stopLoss) : "—"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500 mb-0.5">Since added</p>
-                  <p className="text-xs text-slate-300 font-medium">{detail.watchSince ?? "—"}</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2 mb-3">
-                <div>
-                  <p className="text-xs text-slate-500 mb-0.5">Hot Score change</p>
-                  <p
-                    className={`text-xs font-semibold ${(detail.hotScoreChangeSinceAdded ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"}`}
-                  >
-                    {detail.hotScoreChangeSinceAdded !== undefined
-                      ? formatSignedNumber(detail.hotScoreChangeSinceAdded)
-                      : "—"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-slate-500 mb-0.5">Opp Score change</p>
-                  <p
-                    className={`text-xs font-semibold ${(detail.oppScoreChangeSinceAdded ?? 0) >= 0 ? "text-emerald-400" : "text-red-400"}`}
-                  >
-                    {detail.oppScoreChangeSinceAdded !== undefined
-                      ? formatSignedNumber(detail.oppScoreChangeSinceAdded)
-                      : "—"}
-                  </p>
-                </div>
-              </div>
-              {detail.latestPersonalSignal && (
+              )}
+              {!watchEntry.reason && detail.latestPersonalSignal && (
                 <div className="bg-slate-800/60 border border-slate-700/60 rounded-lg px-3 py-2">
                   <p className="text-xs text-slate-500 mb-0.5">Latest signal</p>
                   <p className="text-xs text-slate-300">{detail.latestPersonalSignal}</p>
@@ -408,30 +556,61 @@ export default function StockPreviewDrawer({ stock, isClosing, onClose }: StockP
 
       {/* ── Sticky CTA Footer ── */}
       <div className="flex-none border-t border-slate-800 px-5 py-4 bg-[#0f1015]">
-        {inWatchlist ? (
+        {isInWatchlist ? (
           <div className="flex items-center gap-2">
             <button className="flex-1 bg-slate-100 hover:bg-white text-slate-900 text-sm font-semibold px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5">
               <TrendingUp size={14} />
               View Full Details
             </button>
-            <button className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-lg border border-slate-700 transition-colors">
-              Edit Watchlist
+            <button
+              onClick={() => openAction("edit-watchlist")}
+              className={`px-3 py-2 text-sm font-medium rounded-lg border transition-colors flex items-center gap-1.5 ${
+                activeAction === "edit-watchlist"
+                  ? "bg-slate-600 border-slate-500 text-white"
+                  : "bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700"
+              }`}
+            >
+              <Pencil size={13} />
+              Edit
             </button>
-            <button className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-lg border border-slate-700 transition-colors">
-              Create Alert
+            <button
+              onClick={() => openAction("create-alert")}
+              className={`px-3 py-2 text-sm font-medium rounded-lg border transition-colors flex items-center gap-1.5 ${
+                activeAction === "create-alert"
+                  ? "bg-amber-700/50 border-amber-600/50 text-amber-300"
+                  : "bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700"
+              }`}
+            >
+              <Bell size={13} />
+              Alert
             </button>
           </div>
         ) : (
           <div className="flex items-center gap-2">
-            <button className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5">
+            <button
+              onClick={() => openAction("add-watchlist")}
+              className={`flex-1 text-sm font-semibold px-4 py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5 ${
+                activeAction === "add-watchlist"
+                  ? "bg-emerald-700 text-white"
+                  : "bg-emerald-600 hover:bg-emerald-500 text-white"
+              }`}
+            >
               <Star size={14} />
               Add to Watchlist
             </button>
-            <button className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-lg border border-slate-700 transition-colors">
-              Create Alert
+            <button
+              onClick={() => openAction("create-alert")}
+              className={`px-3 py-2 text-sm font-medium rounded-lg border transition-colors flex items-center gap-1.5 ${
+                activeAction === "create-alert"
+                  ? "bg-amber-700/50 border-amber-600/50 text-amber-300"
+                  : "bg-slate-800 hover:bg-slate-700 text-slate-300 border-slate-700"
+              }`}
+            >
+              <Bell size={13} />
+              Alert
             </button>
-            <button className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-lg border border-slate-700 transition-colors">
-              Full Details
+            <button className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 text-sm font-medium rounded-lg border border-slate-700 transition-colors">
+              Details
             </button>
           </div>
         )}
