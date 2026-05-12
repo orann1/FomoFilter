@@ -59,7 +59,9 @@ export default function DashboardGrid() {
 
   return (
     <>
-      <div className="grid grid-cols-[1fr_340px] gap-5">
+      {/* On desktop: two-column grid. On mobile: single column, right widgets stack below. */}
+      <div className="flex flex-col md:grid md:grid-cols-[1fr_340px] gap-5">
+        {/* Left column */}
         <div className="min-w-0 flex flex-col gap-5">
           <HotStocksTable
             selectedSymbol={isDrawerClosing ? null : (selectedStock?.symbol ?? null)}
@@ -68,6 +70,8 @@ export default function DashboardGrid() {
           />
           <DiscoverSetups />
         </div>
+
+        {/* Right column — stacks below on mobile */}
         <div className="flex flex-col gap-5">
           <TopScoreChanges />
           <WatchlistWidget />

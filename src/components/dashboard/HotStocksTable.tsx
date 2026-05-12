@@ -3,6 +3,7 @@
 import { Star } from "lucide-react";
 import { mockHotStocks, type RiskLevel, type HotStock } from "@/src/lib/mock-data";
 import { formatCurrency, formatPercent } from "@/src/lib/formatters";
+import MobileHotStockCard from "./MobileHotStockCard";
 
 const riskColors: Record<RiskLevel, string> = {
   LOW: "text-emerald-400 bg-emerald-500/10 border-emerald-800/50",
@@ -46,7 +47,9 @@ export default function HotStocksTable({ selectedSymbol, onSelectStock, watchlis
         <h2 className="text-white font-semibold text-sm">Hot Stocks Today</h2>
         <span className="text-xs text-slate-500">{mockHotStocks.length} stocks</span>
       </div>
-      <div className="overflow-x-auto">
+
+      {/* Desktop table */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-800">
@@ -122,6 +125,19 @@ export default function HotStocksTable({ selectedSymbol, onSelectStock, watchlis
             })}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile cards */}
+      <div className="md:hidden flex flex-col gap-3 p-4">
+        {mockHotStocks.map((stock) => (
+          <MobileHotStockCard
+            key={stock.symbol}
+            stock={stock}
+            isSelected={stock.symbol === selectedSymbol}
+            isInWatchlist={watchlistSymbols.has(stock.symbol)}
+            onSelect={onSelectStock}
+          />
+        ))}
       </div>
     </div>
   );

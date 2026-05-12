@@ -6,6 +6,7 @@ import {
   LineChart,
   Sparkles,
   Settings,
+  X,
 } from "lucide-react";
 import { mockUser } from "@/src/lib/mock-data";
 
@@ -18,16 +19,36 @@ const navItems = [
   { label: "AI Insights", icon: Sparkles, active: false },
 ];
 
-export default function AppSidebar() {
+interface AppSidebarProps {
+  isOpen?: boolean;
+  onClose?: () => void;
+}
+
+export default function AppSidebar({ isOpen = false, onClose }: AppSidebarProps) {
   return (
-    <aside className="w-60 shrink-0 bg-[#0d0f14] border-r border-slate-800 flex flex-col h-full">
-      <div className="px-5 py-5 border-b border-slate-800">
+    <aside
+      className={`
+        w-60 shrink-0 bg-[#0d0f14] border-r border-slate-800 flex flex-col h-full
+        fixed md:relative inset-y-0 left-0 z-50
+        transition-transform duration-300 ease-in-out
+        ${isOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"}
+      `}
+    >
+      <div className="px-5 py-5 border-b border-slate-800 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center text-white text-xs font-bold shrink-0">
             FF
           </div>
           <span className="text-white font-semibold text-sm tracking-wide">FomoFilter</span>
         </div>
+        {/* Close button — mobile only */}
+        <button
+          className="md:hidden text-slate-400 hover:text-white transition-colors p-1 rounded-lg hover:bg-slate-800"
+          onClick={onClose}
+          aria-label="Close menu"
+        >
+          <X size={18} />
+        </button>
       </div>
 
       <nav className="flex-1 px-3 py-4 flex flex-col gap-0.5">
@@ -36,6 +57,7 @@ export default function AppSidebar() {
           return (
             <button
               key={item.label}
+              onClick={onClose}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm w-full text-left transition-colors ${
                 item.active
                   ? "bg-slate-800 text-white"

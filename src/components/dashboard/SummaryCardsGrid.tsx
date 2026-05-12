@@ -21,7 +21,7 @@ const subtextMap: Record<string, string> = {
 
 export default function SummaryCardsGrid() {
   return (
-    <div className="grid grid-cols-3 gap-3 mb-6">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
       {mockSummaryCards.map((card) => {
         const Icon = iconMap[card.icon];
         const colors = colorMap[card.color];
