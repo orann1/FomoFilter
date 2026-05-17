@@ -1,0 +1,251 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id             String          @id @default(cuid())
+  email          String          @unique
+  name           String?
+  initials       String?
+  plan           Plan            @default(FREE)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  watchlistItems WatchlistItem[]
+  alertRules     AlertRule[]
+}
+
+enum Plan {
+  FREE
+  PRO
+}
+
+model Stock {
+  id             String             @id @default(cuid())
+  symbol         String             @unique
+  name           String
+  sector         String?
+  marketCap      String?
+  isActive       Boolean            @default(true)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  quote          StockQuote?
+  score          StockScore?
+  drawerDetail   StockDrawerDetail?
+  watchlistItems WatchlistItem[]
+  alertRules     AlertRule[]
+}
+
+model StockQuote {
+  id             String   @id @default(cuid())
+  stockId        String   @unique
+  stock          Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
+
+  price          Decimal
+  changePercent  Decimal
+  weekChange     Decimal  @default(0)
+  monthChange    Decimal  @default(0)
+  volume         String?
+  relativeVolume Decimal?
+  analystTarget  Decimal?
+  analystUpside  Decimal?
+  analystRating  String?
+  updatedLabel   String   @default("Updated 2 min ago")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model StockScore {
+  id                String    @id @default(cuid())
+  stockId           String    @unique
+  stock             Stock     @relation(fields: [stockId], references: [id], onDelete: Cascade)
+
+  hotScore          Int
+  hotScoreChange    Int       @default(0)
+  opportunityScore  Int
+  opportunityChange Int       @default(0)
+  riskLevel         RiskLevel
+  setupStatus       String
+  catalyst          String
+  signalLabel       String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+}
+
+enum RiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  EXTREME
+}
+
+model StockDrawerDetail {
+  id                      String   @id @default(cuid())
+  stockId                 String   @unique
+  stock                   Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
+
+  suggestedAction         String
+  fomoRisk                String
+  entryContext            String
+  signalQuality           String
+  lastUpdatedMinutes      Int      @default(0)
+
+  aiSentiment             String
+  aiWhatHappening         String
+  aiWhatItMeans           String
+  aiWhatToWatch           String
+  aiGeneratedMinutes      Int      @default(0)
+
+  entryZoneLow            Decimal?
+  entryZoneHigh           Decimal?
+  target                  Decimal?
+  distanceToTarget        String?
+
+  catalystType            String?
+  catalystExplanation     String?
+  catalystConfidence      String?
+  catalystSource          String?
+  catalystHoursAgo        Int?
+
+  hotDelta                Int      @default(0)
+  oppDelta                Int      @default(0)
+  hotScoreExplain         String?
+  oppScoreExplain         String?
+
+  hotMomentum             Int?
+  hotVolumeHeat           Int?
+  hotCatalyst             Int?
+  hotTechnicals           Int?
+  oppAnalystUpside        Int?
+  oppFundamentals         Int?
+  oppValuation            Int?
+  oppEntryQuality         Int?
+
+  watchSince              String?
+  latestPersonalSignal    String?
+  suggestedTrackingReason String?
+
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+}
+
+model WatchlistItem {
+  id                String      @id @default(cuid())
+  userId            String
+  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stockId           String
+  stock             Stock       @relation(fields: [stockId], references: [id], onDelete: Cascade)
+
+  status            WatchStatus @default(WATCHING)
+  reason            String?
+  entryZoneLow      Decimal?
+  entryZoneHigh     Decimal?
+  target            Decimal?
+  stopLoss          Decimal?
+  hotScoreChange    Int         @default(0)
+  opportunityChange Int         @default(0)
+  latestSignal      String?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+
+  @@unique([userId, stockId])
+  @@index([userId])
+  @@index([stockId])
+}
+
+enum WatchStatus {
+  WATCHING
+  WAITING
+  READY_TO_BUY
+  HOLDING
+  AVOIDING
+  ARCHIVED
+}
+
+model AlertRule {
+  id        String         @id @default(cuid())
+  userId    String
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stockId   String
+  stock     Stock          @relation(fields: [stockId], references: [id], onDelete: Cascade)
+
+  type      AlertType
+  threshold Decimal?
+  frequency AlertFrequency @default(ONCE)
+  notifyVia String         @default("in-app")
+  isActive  Boolean        @default(true)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([userId])
+  @@index([stockId])
+}
+
+enum AlertType {
+  PRICE_ABOVE
+  PRICE_BELOW
+  HOT_SCORE_ABOVE
+  OPPORTUNITY_SCORE_ABOVE
+  RELATIVE_VOLUME_ABOVE
+}
+
+enum AlertFrequency {
+  ONCE
+  DAILY
+  ALWAYS
+}
+
+model MarketStat {
+  id        String  @id @default(cuid())
+  label     String  @unique
+  value     String
+  change    String
+  up        Boolean
+  sortOrder Int     @default(0)
+}
+
+model DashboardSummaryCard {
+  id        String @id @default(cuid())
+  label     String
+  value     Int
+  icon      String
+  color     String
+  sortOrder Int    @default(0)
+}
+
+model DiscoverSetup {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  icon        String
+  description String
+  tickers     String[]
+  sortOrder   Int      @default(0)
+}
+
+model AiInsight {
+  id         String   @id @default(cuid())
+  symbol     String
+  sentiment  String
+  title      String
+  summary    String
+  minutesAgo Int
+  createdAt  DateTime @default(now())
+}
+
+model RecentAlert {
+  id         String   @id @default(cuid())
+  symbol     String
+  type       String
+  message    String
+  note       String
+  minutesAgo Int
+  isNew      Boolean  @default(false)
+  icon       String
+  createdAt  DateTime @default(now())
+}

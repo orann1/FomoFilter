@@ -1,7 +1,7 @@
 "use client";
 
 import { Star } from "lucide-react";
-import { mockHotStocks, type RiskLevel, type HotStock } from "@/src/lib/mock-data";
+import { type RiskLevel, type HotStock } from "@/src/lib/mock-data";
 import { formatCurrency, formatPercent } from "@/src/lib/formatters";
 import MobileHotStockCard from "./MobileHotStockCard";
 
@@ -35,17 +35,18 @@ function ScorePill({ value, type }: { value: number; type: "hot" | "opp" }) {
 }
 
 interface HotStocksTableProps {
+  hotStocks: HotStock[];
   selectedSymbol: string | null;
   onSelectStock: (stock: HotStock) => void;
   watchlistSymbols: Set<string>;
 }
 
-export default function HotStocksTable({ selectedSymbol, onSelectStock, watchlistSymbols }: HotStocksTableProps) {
+export default function HotStocksTable({ hotStocks, selectedSymbol, onSelectStock, watchlistSymbols }: HotStocksTableProps) {
   return (
     <div className="bg-[#111318] border border-slate-800 rounded-xl overflow-hidden mb-5">
       <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
         <h2 className="text-white font-semibold text-sm">Hot Stocks Today</h2>
-        <span className="text-xs text-slate-500">{mockHotStocks.length} stocks</span>
+        <span className="text-xs text-slate-500">{hotStocks.length} stocks</span>
       </div>
 
       {/* Desktop table */}
@@ -65,7 +66,7 @@ export default function HotStocksTable({ selectedSymbol, onSelectStock, watchlis
             </tr>
           </thead>
           <tbody>
-            {mockHotStocks.map((stock) => {
+            {hotStocks.map((stock) => {
               const isSelected = stock.symbol === selectedSymbol;
               return (
                 <tr
@@ -129,7 +130,7 @@ export default function HotStocksTable({ selectedSymbol, onSelectStock, watchlis
 
       {/* Mobile cards */}
       <div className="md:hidden flex flex-col gap-3 p-4">
-        {mockHotStocks.map((stock) => (
+        {hotStocks.map((stock) => (
           <MobileHotStockCard
             key={stock.symbol}
             stock={stock}

@@ -1,9 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { type HotStock } from "@/src/lib/mock-data";
+import { type HotStock, type WatchlistItem, type StockDrawerDetail, type ScannerSetup, type ScoreChange, type AiInsight, type RecentAlert } from "@/src/lib/mock-data";
 import { type LocalWatchlistEntry } from "@/src/types/drawer";
-import { mockWatchlist } from "@/src/lib/mock-data";
 import HotStocksTable from "./HotStocksTable";
 import DiscoverSetups from "./DiscoverSetups";
 import TopScoreChanges from "./TopScoreChanges";
@@ -14,7 +13,25 @@ import StockPreviewDrawer from "./StockPreviewDrawer";
 
 const CLOSE_ANIMATION_MS = 300;
 
-export default function DashboardGrid() {
+interface DashboardGridProps {
+  hotStocks: HotStock[];
+  watchlistItems: WatchlistItem[];
+  stockDrawerDetails: Record<string, StockDrawerDetail>;
+  discoverSetups: ScannerSetup[];
+  topScoreChanges: ScoreChange[];
+  aiInsights: AiInsight[];
+  recentAlerts: RecentAlert[];
+}
+
+export default function DashboardGrid({
+  hotStocks,
+  watchlistItems,
+  stockDrawerDetails,
+  discoverSetups,
+  topScoreChanges,
+  aiInsights,
+  recentAlerts,
+}: DashboardGridProps) {
   const [selectedStock, setSelectedStock] = useState<HotStock | null>(null);
   const [isDrawerClosing, setIsDrawerClosing] = useState(false);
   const [localWatchlistEntries, setLocalWatchlistEntries] = useState<
@@ -53,7 +70,7 @@ export default function DashboardGrid() {
     : undefined;
 
   const watchlistSymbols = new Set([
-    ...mockWatchlist.map((item) => item.symbol),
+    ...watchlistItems.map((item) => item.symbol),
     ...Object.keys(localWatchlistEntries),
   ]);
 
@@ -64,19 +81,20 @@ export default function DashboardGrid() {
         {/* Left column */}
         <div className="min-w-0 flex flex-col gap-5">
           <HotStocksTable
+            hotStocks={hotStocks}
             selectedSymbol={isDrawerClosing ? null : (selectedStock?.symbol ?? null)}
             onSelectStock={handleSelectStock}
             watchlistSymbols={watchlistSymbols}
           />
-          <DiscoverSetups />
+          <DiscoverSetups setups={discoverSetups} />
         </div>
 
         {/* Right column — stacks below on mobile */}
         <div className="flex flex-col gap-5">
-          <TopScoreChanges />
-          <WatchlistWidget />
-          <AiInsightsWidget />
-          <RecentAlertsWidget />
+          <TopScoreChanges scoreChanges={topScoreChanges} />
+          <WatchlistWidget watchlistItems={watchlistItems} />
+          <AiInsightsWidget insights={aiInsights} />
+          <RecentAlertsWidget alerts={recentAlerts} />
         </div>
       </div>
 
@@ -88,6 +106,8 @@ export default function DashboardGrid() {
           localWatchlistEntry={localEntryForSelected}
           onAddToWatchlist={handleAddToWatchlist}
           onEditWatchlist={handleEditWatchlist}
+          stockDrawerDetails={stockDrawerDetails}
+          dbWatchlistItems={watchlistItems}
         />
       )}
     </>

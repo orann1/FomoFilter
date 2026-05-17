@@ -1,7 +1,11 @@
 import { TrendingUp } from "lucide-react";
-import { mockTopScoreChanges } from "@/src/lib/mock-data";
+import { type ScoreChange } from "@/src/lib/mock-data";
 
-export default function TopScoreChanges() {
+interface TopScoreChangesProps {
+  scoreChanges: ScoreChange[];
+}
+
+export default function TopScoreChanges({ scoreChanges }: TopScoreChangesProps) {
   return (
     <div className="bg-[#111318] border border-slate-800 rounded-xl overflow-hidden">
       <div className="flex items-center gap-2 px-4 py-4 border-b border-slate-800">
@@ -9,7 +13,7 @@ export default function TopScoreChanges() {
         <h2 className="text-white font-semibold text-sm">Top Score Changes</h2>
       </div>
       <div className="divide-y divide-slate-800/60">
-        {mockTopScoreChanges.map((item) => (
+        {scoreChanges.map((item) => (
           <div key={item.symbol} className="px-4 py-3 hover:bg-slate-800/20 transition-colors">
             <div className="flex items-center justify-between mb-1">
               <span className="text-white font-semibold text-sm">{item.symbol}</span>

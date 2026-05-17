@@ -14,9 +14,9 @@ import {
   Pencil,
 } from "lucide-react";
 import {
-  mockStockDrawerDetails,
-  mockWatchlist,
   type HotStock,
+  type WatchlistItem,
+  type StockDrawerDetail,
   type WatchStatus,
 } from "@/src/lib/mock-data";
 import { formatCurrency, formatPercent, formatSignedNumber } from "@/src/lib/formatters";
@@ -77,6 +77,8 @@ interface StockPreviewDrawerProps {
   localWatchlistEntry?: LocalWatchlistEntry;
   onAddToWatchlist: (entry: LocalWatchlistEntry) => void;
   onEditWatchlist: (entry: LocalWatchlistEntry) => void;
+  stockDrawerDetails: Record<string, StockDrawerDetail>;
+  dbWatchlistItems: WatchlistItem[];
 }
 
 export default function StockPreviewDrawer({
@@ -86,9 +88,11 @@ export default function StockPreviewDrawer({
   localWatchlistEntry,
   onAddToWatchlist,
   onEditWatchlist,
+  stockDrawerDetails,
+  dbWatchlistItems,
 }: StockPreviewDrawerProps) {
-  const detail = mockStockDrawerDetails[stock.symbol];
-  const originalWatchlistItem = mockWatchlist.find((w) => w.symbol === stock.symbol);
+  const detail = stockDrawerDetails[stock.symbol];
+  const originalWatchlistItem = dbWatchlistItems.find((w) => w.symbol === stock.symbol);
 
   const isInWatchlist = stock.inWatchlist || !!localWatchlistEntry;
 
