@@ -3,8 +3,14 @@
 import { useState } from "react";
 import AppSidebar from "./AppSidebar";
 import TopBar from "./TopBar";
+import type { DashboardUser } from "@/src/lib/data/dashboard";
 
-export default function ClientAppShell({ children }: { children: React.ReactNode }) {
+interface ClientAppShellProps {
+  user: DashboardUser;
+  children: React.ReactNode;
+}
+
+export default function ClientAppShell({ user, children }: ClientAppShellProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
@@ -19,6 +25,7 @@ export default function ClientAppShell({ children }: { children: React.ReactNode
       )}
 
       <AppSidebar
+        user={user}
         isOpen={isSidebarOpen}
         isCollapsed={isSidebarCollapsed}
         onClose={() => setIsSidebarOpen(false)}

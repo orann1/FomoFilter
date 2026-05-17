@@ -10,7 +10,7 @@ import {
   Settings,
   X,
 } from "lucide-react";
-import { mockUser } from "@/src/lib/mock-data";
+import type { DashboardUser } from "@/src/lib/data/dashboard";
 
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, active: true },
@@ -22,12 +22,14 @@ const navItems = [
 ];
 
 interface AppSidebarProps {
+  user: DashboardUser;
   isOpen?: boolean;
   isCollapsed?: boolean;
   onClose?: () => void;
 }
 
 export default function AppSidebar({
+  user,
   isOpen = false,
   isCollapsed = false,
   onClose,
@@ -128,7 +130,7 @@ export default function AppSidebar({
           }`}
         >
           <div className="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-white text-xs font-semibold shrink-0">
-            {mockUser.initials}
+            {user.initials}
           </div>
           <div
             className={`flex items-center gap-2 overflow-hidden transition-[opacity,max-width] duration-300 ${
@@ -136,11 +138,11 @@ export default function AppSidebar({
             }`}
           >
             <div className="flex-1 min-w-0">
-              <p className="text-white text-xs font-medium truncate">{mockUser.name}</p>
-              <p className="text-slate-500 text-xs truncate">{mockUser.email}</p>
+              <p className="text-white text-xs font-medium truncate">{user.name}</p>
+              <p className="text-slate-500 text-xs truncate">{user.email}</p>
             </div>
             <span className="text-xs font-medium text-purple-400 border border-purple-800 px-1.5 py-0.5 rounded-full shrink-0">
-              PRO
+              {user.plan}
             </span>
           </div>
         </div>

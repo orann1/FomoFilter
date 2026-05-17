@@ -2,6 +2,7 @@ import { Sparkles } from "lucide-react";
 import { mockTodaysSignal } from "@/src/lib/mock-data";
 
 export default function TodaysSignalCard() {
+  const signal = mockTodaysSignal;
   return (
     <div className="bg-[#13111f] border border-purple-900/50 rounded-xl p-4 mb-5">
       <div className="flex items-start gap-3">
@@ -15,9 +16,9 @@ export default function TodaysSignalCard() {
               AI Brief
             </span>
           </div>
-          <p className="text-slate-300 text-sm leading-relaxed">{mockTodaysSignal.summary}</p>
+          <p className="text-slate-300 text-sm leading-relaxed">{signal.summary}</p>
           <div className="flex flex-wrap gap-2 mt-3">
-            {mockTodaysSignal.tags.map((tag) => (
+            {signal.tags.map((tag) => (
               <span
                 key={tag}
                 className="text-xs text-purple-300 bg-purple-900/30 border border-purple-800/50 px-2 py-0.5 rounded-full"

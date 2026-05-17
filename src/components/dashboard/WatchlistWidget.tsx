@@ -1,5 +1,5 @@
 import { Star } from "lucide-react";
-import { mockWatchlist, type WatchStatus } from "@/src/lib/mock-data";
+import { type WatchlistItem, type WatchStatus } from "@/src/lib/mock-data";
 import { formatCurrency, formatPercent } from "@/src/lib/formatters";
 
 const statusColors: Record<WatchStatus, string> = {
@@ -20,7 +20,11 @@ const statusLabel: Record<WatchStatus, string> = {
   ARCHIVED: "Archived",
 };
 
-export default function WatchlistWidget() {
+interface WatchlistWidgetProps {
+  watchlistItems: WatchlistItem[];
+}
+
+export default function WatchlistWidget({ watchlistItems }: WatchlistWidgetProps) {
   return (
     <div className="bg-[#111318] border border-slate-800 rounded-xl overflow-hidden">
       <div className="flex items-center justify-between px-4 py-4 border-b border-slate-800">
@@ -28,10 +32,10 @@ export default function WatchlistWidget() {
           <Star size={14} className="text-amber-400" />
           <h2 className="text-white font-semibold text-sm">My Watchlist</h2>
         </div>
-        <span className="text-xs text-slate-500">{mockWatchlist.length} stocks</span>
+        <span className="text-xs text-slate-500">{watchlistItems.length} stocks</span>
       </div>
       <div className="divide-y divide-slate-800/60">
-        {mockWatchlist.map((item) => (
+        {watchlistItems.map((item) => (
           <div key={item.symbol} className="px-4 py-3 hover:bg-slate-800/20 transition-colors">
             <div className="flex items-start justify-between mb-1.5">
               <div>

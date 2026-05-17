@@ -1,5 +1,4 @@
 import { Flame, Target, Bell } from "lucide-react";
-import { mockSummaryCards } from "@/src/lib/mock-data";
 
 const iconMap: Record<string, React.ComponentType<{ size?: number; className?: string }>> = {
   Flame,
@@ -19,10 +18,21 @@ const subtextMap: Record<string, string> = {
   "Active Alerts": "3 triggered today",
 };
 
-export default function SummaryCardsGrid() {
+interface SummaryCard {
+  label: string;
+  value: number;
+  icon: string;
+  color: string;
+}
+
+interface SummaryCardsGridProps {
+  cards: SummaryCard[];
+}
+
+export default function SummaryCardsGrid({ cards }: SummaryCardsGridProps) {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-      {mockSummaryCards.map((card) => {
+      {cards.map((card) => {
         const Icon = iconMap[card.icon];
         const colors = colorMap[card.color];
         return (

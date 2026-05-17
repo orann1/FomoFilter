@@ -1,5 +1,5 @@
 import { Sparkles } from "lucide-react";
-import { mockAiInsights, type AiInsight } from "@/src/lib/mock-data";
+import { type AiInsight } from "@/src/lib/mock-data";
 
 const sentimentColors: Record<AiInsight["sentiment"], string> = {
   bullish: "text-emerald-400 bg-emerald-500/10 border-emerald-800/50",
@@ -7,7 +7,11 @@ const sentimentColors: Record<AiInsight["sentiment"], string> = {
   bearish: "text-red-400 bg-red-500/10 border-red-800/50",
 };
 
-export default function AiInsightsWidget() {
+interface AiInsightsWidgetProps {
+  insights: AiInsight[];
+}
+
+export default function AiInsightsWidget({ insights }: AiInsightsWidgetProps) {
   return (
     <div className="bg-[#111318] border border-slate-800 rounded-xl overflow-hidden">
       <div className="flex items-center gap-2 px-4 py-4 border-b border-slate-800">
@@ -15,7 +19,7 @@ export default function AiInsightsWidget() {
         <h2 className="text-white font-semibold text-sm">AI Insights</h2>
       </div>
       <div className="divide-y divide-slate-800/60">
-        {mockAiInsights.map((insight) => (
+        {insights.map((insight) => (
           <div key={`${insight.symbol}-${insight.minutesAgo}`} className="px-4 py-3">
             <div className="flex items-center justify-between mb-1.5">
               <div className="flex items-center gap-2">

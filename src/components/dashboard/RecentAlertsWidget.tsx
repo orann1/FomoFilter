@@ -1,14 +1,17 @@
 import { Bell, TrendingUp, Flame } from "lucide-react";
-import { mockRecentAlerts, type RecentAlert } from "@/src/lib/mock-data";
+import { type RecentAlert } from "@/src/lib/mock-data";
 
 const iconMap: Record<RecentAlert["icon"], React.ComponentType<{ size?: number; className?: string }>> = {
   "trending-up": TrendingUp,
   flame: Flame,
 };
 
-const newAlertCount = mockRecentAlerts.filter((a) => a.isNew).length;
+interface RecentAlertsWidgetProps {
+  alerts: RecentAlert[];
+}
 
-export default function RecentAlertsWidget() {
+export default function RecentAlertsWidget({ alerts }: RecentAlertsWidgetProps) {
+  const newAlertCount = alerts.filter((a) => a.isNew).length;
   return (
     <div className="bg-[#111318] border border-slate-800 rounded-xl overflow-hidden">
       <div className="flex items-center gap-2 px-4 py-4 border-b border-slate-800">
@@ -21,7 +24,7 @@ export default function RecentAlertsWidget() {
         )}
       </div>
       <div className="divide-y divide-slate-800/60">
-        {mockRecentAlerts.map((alert, i) => {
+        {alerts.map((alert, i) => {
           const Icon = iconMap[alert.icon];
           return (
             <div key={i} className={`px-4 py-3 ${alert.isNew ? "bg-amber-500/5" : ""}`}>

@@ -1,6 +1,10 @@
-import { mockDiscoverSetups } from "@/src/lib/mock-data";
+import { type ScannerSetup } from "@/src/lib/mock-data";
 
-export default function DiscoverSetups() {
+interface DiscoverSetupsProps {
+  setups: ScannerSetup[];
+}
+
+export default function DiscoverSetups({ setups }: DiscoverSetupsProps) {
   return (
     <div className="bg-[#111318] border border-slate-800 rounded-xl overflow-hidden">
       <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800">
@@ -8,7 +12,7 @@ export default function DiscoverSetups() {
         <button className="text-xs text-purple-400 hover:text-purple-300 transition-colors" suppressHydrationWarning>All Views</button>
       </div>
       <div className="p-4 grid grid-cols-2 gap-3">
-        {mockDiscoverSetups.map((setup) => (
+        {setups.map((setup) => (
           <div
             key={setup.slug}
             className="bg-slate-800/30 border border-slate-700/50 rounded-lg p-3 hover:border-slate-600 hover:bg-slate-800/50 transition-colors cursor-pointer"
