@@ -683,7 +683,7 @@ flowchart TD
 | Icons | Lucide React |
 | Charts | Recharts for MVP; lightweight-charts later |
 | Database | PostgreSQL / Neon |
-| ORM | Prisma |
+| ORM | Prisma 7|
 | Auth | Better Auth or NextAuth |
 | AI | OpenAI API |
 | Market Data | Twelve Data / FMP / Polygon / Finnhub |
