@@ -4,9 +4,10 @@ interface TopBarProps {
   onMenuToggle?: () => void;
   isSidebarCollapsed?: boolean;
   onToggleCollapse?: () => void;
+  showSearch?: boolean;
 }
 
-export default function TopBar({ onMenuToggle, isSidebarCollapsed, onToggleCollapse }: TopBarProps) {
+export default function TopBar({ onMenuToggle, isSidebarCollapsed, onToggleCollapse, showSearch = true }: TopBarProps) {
   return (
     <header className="border-b border-slate-800 bg-[#0d0f14] shrink-0">
       {/* Main row */}
@@ -30,7 +31,7 @@ export default function TopBar({ onMenuToggle, isSidebarCollapsed, onToggleColla
         </button>
 
         {/* Search — hidden on mobile (shown in second row below) */}
-        <div className="hidden md:block flex-1 max-w-sm relative">
+        <div className={`${showSearch ? "hidden md:block" : "hidden"} flex-1 max-w-sm relative`}>
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
             type="text"
@@ -58,7 +59,7 @@ export default function TopBar({ onMenuToggle, isSidebarCollapsed, onToggleColla
       </div>
 
       {/* Mobile search row */}
-      <div className="md:hidden px-4 pb-3">
+      {showSearch && <div className="md:hidden px-4 pb-3">
         <div className="relative">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
@@ -70,7 +71,7 @@ export default function TopBar({ onMenuToggle, isSidebarCollapsed, onToggleColla
         <p className="text-xs text-slate-600 mt-2">
           US Stocks&nbsp;·&nbsp;Updated 2 min ago&nbsp;·&nbsp;Delayed data
         </p>
-      </div>
+      </div>}
     </header>
   );
 }
