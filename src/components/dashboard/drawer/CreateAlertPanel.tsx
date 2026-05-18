@@ -1,8 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { X, Bell } from "lucide-react";
 import { type AlertTypeLocal, type AlertFrequencyLocal } from "@/src/types/drawer";
+import { type ActiveAlertRule } from "@/src/lib/data/dashboard";
+import { createAlertRule } from "@/src/actions/drawer-actions";
 
 interface CreateAlertPanelProps {
   symbol: string;
@@ -10,7 +12,8 @@ interface CreateAlertPanelProps {
   hotScore: number;
   oppScore: number;
   relativeVolume: number;
-  onSubmit: () => void;
+  existingAlerts: ActiveAlertRule[];
+  onSuccess: () => void;
   onCancel: () => void;
 }
 
@@ -68,13 +71,34 @@ function buildSummary(
   }
 }
 
+function formatAlertType(type: string): string {
+  switch (type) {
+    case "PRICE_ABOVE": return "Price Above";
+    case "PRICE_BELOW": return "Price Below";
+    case "HOT_SCORE_ABOVE": return "Hot Score Above";
+    case "OPPORTUNITY_SCORE_ABOVE": return "Opp Score Above";
+    case "RELATIVE_VOLUME_ABOVE": return "Rel Vol Above";
+    default: return type;
+  }
+}
+
+function formatFrequency(freq: string): string {
+  switch (freq) {
+    case "ONCE": return "Once";
+    case "DAILY": return "Daily";
+    case "ALWAYS": return "Always";
+    default: return freq;
+  }
+}
+
 export default function CreateAlertPanel({
   symbol,
   currentPrice,
   hotScore,
   oppScore,
   relativeVolume,
-  onSubmit,
+  existingAlerts,
+  onSuccess,
   onCancel,
 }: CreateAlertPanelProps) {
   const [alertType, setAlertType] = useState<AlertTypeLocal>("Price Above");
@@ -83,6 +107,7 @@ export default function CreateAlertPanel({
   );
   const [frequency, setFrequency] = useState<AlertFrequencyLocal>("Once");
   const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
 
   function handleAlertTypeChange(type: AlertTypeLocal) {
     setAlertType(type);
@@ -103,7 +128,14 @@ export default function CreateAlertPanel({
       setError(err);
       return;
     }
-    onSubmit();
+    startTransition(async () => {
+      const result = await createAlertRule({ symbol, type: alertType, threshold, frequency });
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      onSuccess();
+    });
   }
 
   const summary = buildSummary(symbol, alertType, threshold, frequency);
@@ -117,24 +149,49 @@ export default function CreateAlertPanel({
         </div>
         <button
           onClick={onCancel}
-          className="text-slate-500 hover:text-white transition-colors p-1 rounded"
+          disabled={isPending}
+          className="text-slate-500 hover:text-white transition-colors p-1 rounded disabled:opacity-50"
         >
           <X size={14} />
         </button>
       </div>
 
       <div className="px-4 py-3 space-y-3">
+
+        {/* Existing alerts */}
+        {existingAlerts.length > 0 && (
+          <div className="bg-amber-500/5 border border-amber-800/30 rounded-lg px-3 py-2.5">
+            <p className="text-xs text-amber-400/80 font-medium mb-1.5 flex items-center gap-1">
+              <Bell size={10} />
+              Active alerts for {symbol}
+            </p>
+            <div className="space-y-1">
+              {existingAlerts.map((alert, i) => (
+                <p key={i} className="text-xs text-slate-400">
+                  {formatAlertType(alert.type)}
+                  {alert.threshold !== null && (
+                    <span className="text-slate-300"> ${alert.threshold}</span>
+                  )}
+                  {" · "}
+                  {formatFrequency(alert.frequency)}
+                  {" · "}
+                  {alert.notifyVia}
+                </p>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div>
           <label className="text-xs text-slate-500 mb-1 block">Alert Type</label>
           <select
             value={alertType}
             onChange={(e) => handleAlertTypeChange(e.target.value as AlertTypeLocal)}
-            className="w-full bg-slate-800/60 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-amber-600 transition-colors"
+            disabled={isPending}
+            className="w-full bg-slate-800/60 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-amber-600 transition-colors disabled:opacity-60"
           >
             {ALERT_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
+              <option key={t} value={t}>{t}</option>
             ))}
           </select>
         </div>
@@ -145,7 +202,8 @@ export default function CreateAlertPanel({
             type="number"
             value={threshold}
             onChange={(e) => { setThreshold(e.target.value); setError(null); }}
-            className="w-full bg-slate-800/60 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-amber-600 transition-colors"
+            disabled={isPending}
+            className="w-full bg-slate-800/60 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-amber-600 transition-colors disabled:opacity-60"
           />
         </div>
 
@@ -156,7 +214,8 @@ export default function CreateAlertPanel({
               <button
                 key={f}
                 onClick={() => setFrequency(f)}
-                className={`flex-1 text-xs py-1.5 rounded-lg border transition-colors font-medium ${
+                disabled={isPending}
+                className={`flex-1 text-xs py-1.5 rounded-lg border transition-colors font-medium disabled:opacity-60 ${
                   frequency === f
                     ? "bg-amber-500/15 border-amber-600/50 text-amber-400"
                     : "bg-slate-800/60 border-slate-700 text-slate-400 hover:text-slate-300"
@@ -192,10 +251,11 @@ export default function CreateAlertPanel({
 
         <button
           onClick={handleSubmit}
-          className="w-full bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors flex items-center justify-center gap-1.5"
+          disabled={isPending}
+          className="w-full bg-amber-600 hover:bg-amber-500 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors flex items-center justify-center gap-1.5 disabled:opacity-60 disabled:cursor-not-allowed"
         >
           <Bell size={13} />
-          Create Alert
+          {isPending ? "Saving..." : "Create Alert"}
         </button>
       </div>
     </div>

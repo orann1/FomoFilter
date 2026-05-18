@@ -17,6 +17,13 @@ export type DashboardUser = {
   plan: string;
 };
 
+export type ActiveAlertRule = {
+  type: string;
+  threshold: number | null;
+  frequency: string;
+  notifyVia: string;
+};
+
 export type DashboardData = {
   user: DashboardUser;
   marketStats: Array<{ label: string; value: string; change: string; up: boolean }>;
@@ -28,6 +35,7 @@ export type DashboardData = {
   topScoreChanges: ScoreChange[];
   aiInsights: AiInsight[];
   recentAlerts: RecentAlert[];
+  alertRulesBySymbol: Record<string, ActiveAlertRule[]>;
 };
 
 export async function getDashboardData(): Promise<DashboardData> {
@@ -63,6 +71,12 @@ export async function getDashboardData(): Promise<DashboardData> {
     prisma.aiInsight.findMany({ orderBy: { minutesAgo: "asc" }, take: 10 }),
     prisma.recentAlert.findMany({ orderBy: { minutesAgo: "asc" }, take: 10 }),
   ]);
+
+  const dbAlertRules = await prisma.alertRule.findMany({
+    where: { isActive: true },
+    include: { stock: { select: { symbol: true } } },
+    orderBy: { createdAt: "desc" },
+  });
 
   // ── User ─────────────────────────────────────────────────────────────────────
   const user: DashboardUser = {
@@ -222,6 +236,19 @@ export async function getDashboardData(): Promise<DashboardData> {
     icon: a.icon as "trending-up" | "flame",
   }));
 
+  // ── Alert Rules by Symbol ─────────────────────────────────────────────────────
+  const alertRulesBySymbol: Record<string, ActiveAlertRule[]> = {};
+  for (const rule of dbAlertRules) {
+    const sym = rule.stock.symbol;
+    if (!alertRulesBySymbol[sym]) alertRulesBySymbol[sym] = [];
+    alertRulesBySymbol[sym].push({
+      type: rule.type,
+      threshold: rule.threshold ? Number(rule.threshold) : null,
+      frequency: rule.frequency,
+      notifyVia: rule.notifyVia,
+    });
+  }
+
   return {
     user,
     marketStats,
@@ -233,6 +260,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     topScoreChanges,
     aiInsights,
     recentAlerts,
+    alertRulesBySymbol,
   };
 }
 

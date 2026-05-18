@@ -25,6 +25,7 @@ export default async function Home() {
         topScoreChanges={data.topScoreChanges}
         aiInsights={data.aiInsights}
         recentAlerts={data.recentAlerts}
+        alertRulesBySymbol={data.alertRulesBySymbol}
       />
     </ClientAppShell>
   );

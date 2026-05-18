@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { X, Pencil } from "lucide-react";
+import { useState, useTransition } from "react";
+import { X, Pencil, Trash2 } from "lucide-react";
 import { type LocalWatchlistEntry, type WatchStatusLocal } from "@/src/types/drawer";
+import { updateWatchlistItem, removeStockFromWatchlist } from "@/src/actions/drawer-actions";
 
 export type EditWatchlistInitialValues = {
   status: WatchStatusLocal;
@@ -16,7 +17,8 @@ export type EditWatchlistInitialValues = {
 interface EditWatchlistPanelProps {
   symbol: string;
   initialValues: EditWatchlistInitialValues;
-  onSubmit: (entry: LocalWatchlistEntry) => void;
+  onSuccess: (entry: LocalWatchlistEntry) => void;
+  onRemove: () => void;
   onCancel: () => void;
 }
 
@@ -25,7 +27,8 @@ const STATUS_OPTIONS: WatchStatusLocal[] = ["Watching", "Waiting", "Ready to Buy
 export default function EditWatchlistPanel({
   symbol,
   initialValues,
-  onSubmit,
+  onSuccess,
+  onRemove,
   onCancel,
 }: EditWatchlistPanelProps) {
   const [status, setStatus] = useState<WatchStatusLocal>(initialValues.status);
@@ -35,6 +38,10 @@ export default function EditWatchlistPanel({
   const [target, setTarget] = useState(initialValues.target);
   const [stopLoss, setStopLoss] = useState(initialValues.stopLoss);
   const [error, setError] = useState<string | null>(null);
+  const [isSaving, startSaveTransition] = useTransition();
+  const [isRemoving, startRemoveTransition] = useTransition();
+
+  const isPending = isSaving || isRemoving;
 
   function validate(): string | null {
     const low = parseFloat(entryZoneLow);
@@ -53,7 +60,7 @@ export default function EditWatchlistPanel({
       setError(err);
       return;
     }
-    onSubmit({
+    const entry: LocalWatchlistEntry = {
       watchlist: "Main Watchlist",
       reason: reason.trim(),
       status,
@@ -61,6 +68,33 @@ export default function EditWatchlistPanel({
       entryZoneHigh,
       target,
       stopLoss,
+    };
+    startSaveTransition(async () => {
+      const result = await updateWatchlistItem({
+        symbol,
+        status,
+        reason: reason.trim(),
+        entryZoneLow,
+        entryZoneHigh,
+        target,
+        stopLoss,
+      });
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      onSuccess(entry);
+    });
+  }
+
+  function handleRemove() {
+    startRemoveTransition(async () => {
+      const result = await removeStockFromWatchlist({ symbol });
+      if (!result.success) {
+        setError(result.error);
+        return;
+      }
+      onRemove();
     });
   }
 
@@ -73,7 +107,8 @@ export default function EditWatchlistPanel({
         </div>
         <button
           onClick={onCancel}
-          className="text-slate-500 hover:text-white transition-colors p-1 rounded"
+          disabled={isPending}
+          className="text-slate-500 hover:text-white transition-colors p-1 rounded disabled:opacity-50"
         >
           <X size={14} />
         </button>
@@ -87,7 +122,8 @@ export default function EditWatchlistPanel({
               <button
                 key={opt}
                 onClick={() => setStatus(opt)}
-                className={`flex-1 text-xs py-1.5 rounded-lg border transition-colors font-medium ${
+                disabled={isPending}
+                className={`flex-1 text-xs py-1.5 rounded-lg border transition-colors font-medium disabled:opacity-60 ${
                   status === opt
                     ? "bg-slate-300/15 border-slate-400/50 text-slate-200"
                     : "bg-slate-800/60 border-slate-700 text-slate-400 hover:text-slate-300"
@@ -106,7 +142,8 @@ export default function EditWatchlistPanel({
             value={reason}
             onChange={(e) => { setReason(e.target.value); setError(null); }}
             placeholder="e.g. Watching for pullback entry"
-            className="w-full bg-slate-800/60 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-slate-500 transition-colors"
+            disabled={isPending}
+            className="w-full bg-slate-800/60 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-slate-500 transition-colors disabled:opacity-60"
           />
         </div>
 
@@ -118,14 +155,16 @@ export default function EditWatchlistPanel({
               value={entryZoneLow}
               onChange={(e) => { setEntryZoneLow(e.target.value); setError(null); }}
               placeholder="Low"
-              className="bg-slate-800/60 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-slate-600 transition-colors"
+              disabled={isPending}
+              className="bg-slate-800/60 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-slate-600 transition-colors disabled:opacity-60"
             />
             <input
               type="number"
               value={entryZoneHigh}
               onChange={(e) => { setEntryZoneHigh(e.target.value); setError(null); }}
               placeholder="High"
-              className="bg-slate-800/60 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-slate-600 transition-colors"
+              disabled={isPending}
+              className="bg-slate-800/60 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-slate-600 transition-colors disabled:opacity-60"
             />
           </div>
         </div>
@@ -138,7 +177,8 @@ export default function EditWatchlistPanel({
               value={target}
               onChange={(e) => { setTarget(e.target.value); setError(null); }}
               placeholder="e.g. 1050"
-              className="w-full bg-slate-800/60 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-slate-600 transition-colors"
+              disabled={isPending}
+              className="w-full bg-slate-800/60 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-slate-600 transition-colors disabled:opacity-60"
             />
           </div>
           <div>
@@ -148,7 +188,8 @@ export default function EditWatchlistPanel({
               value={stopLoss}
               onChange={(e) => { setStopLoss(e.target.value); setError(null); }}
               placeholder="e.g. 840"
-              className="w-full bg-slate-800/60 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-slate-600 transition-colors"
+              disabled={isPending}
+              className="w-full bg-slate-800/60 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:outline-none focus:border-slate-600 transition-colors disabled:opacity-60"
             />
           </div>
         </div>
@@ -157,9 +198,19 @@ export default function EditWatchlistPanel({
 
         <button
           onClick={handleSubmit}
-          className="w-full bg-slate-700 hover:bg-slate-600 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors"
+          disabled={isPending}
+          className="w-full bg-slate-700 hover:bg-slate-600 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          Save Changes
+          {isSaving ? "Saving..." : "Save Changes"}
+        </button>
+
+        <button
+          onClick={handleRemove}
+          disabled={isPending}
+          className="w-full flex items-center justify-center gap-1.5 text-xs text-red-400/70 hover:text-red-400 transition-colors py-1.5 disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          <Trash2 size={11} />
+          {isRemoving ? "Removing..." : "Remove from Watchlist"}
         </button>
       </div>
     </div>
