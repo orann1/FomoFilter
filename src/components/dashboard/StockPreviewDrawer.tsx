@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   X,
   Star,
@@ -21,6 +22,7 @@ import {
 } from "@/src/lib/mock-data";
 import { formatCurrency, formatPercent, formatSignedNumber } from "@/src/lib/formatters";
 import { type DrawerAction, type LocalWatchlistEntry, type WatchStatusLocal } from "@/src/types/drawer";
+import { type ActiveAlertRule } from "@/src/lib/data/dashboard";
 import AddToWatchlistPanel from "./drawer/AddToWatchlistPanel";
 import EditWatchlistPanel, { type EditWatchlistInitialValues } from "./drawer/EditWatchlistPanel";
 import CreateAlertPanel from "./drawer/CreateAlertPanel";
@@ -77,8 +79,10 @@ interface StockPreviewDrawerProps {
   localWatchlistEntry?: LocalWatchlistEntry;
   onAddToWatchlist: (entry: LocalWatchlistEntry) => void;
   onEditWatchlist: (entry: LocalWatchlistEntry) => void;
+  onRemoveFromWatchlist: () => void;
   stockDrawerDetails: Record<string, StockDrawerDetail>;
   dbWatchlistItems: WatchlistItem[];
+  alertRulesBySymbol: Record<string, ActiveAlertRule[]>;
 }
 
 export default function StockPreviewDrawer({
@@ -88,13 +92,18 @@ export default function StockPreviewDrawer({
   localWatchlistEntry,
   onAddToWatchlist,
   onEditWatchlist,
+  onRemoveFromWatchlist,
   stockDrawerDetails,
   dbWatchlistItems,
+  alertRulesBySymbol,
 }: StockPreviewDrawerProps) {
+  const router = useRouter();
   const detail = stockDrawerDetails[stock.symbol];
   const originalWatchlistItem = dbWatchlistItems.find((w) => w.symbol === stock.symbol);
+  const existingAlerts = alertRulesBySymbol[stock.symbol] ?? [];
+  const hasActiveAlerts = existingAlerts.length > 0;
 
-  const isInWatchlist = stock.inWatchlist || !!localWatchlistEntry;
+  const isInWatchlist = stock.inWatchlist || !!localWatchlistEntry || !!originalWatchlistItem;
 
   const [activeAction, setActiveAction] = useState<DrawerAction>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -122,17 +131,27 @@ export default function StockPreviewDrawer({
     onAddToWatchlist(entry);
     setActiveAction(null);
     setSuccessMessage(`${stock.symbol} added to your watchlist`);
+    router.refresh();
   }
 
   function handleEditWatchlist(entry: LocalWatchlistEntry) {
     onEditWatchlist(entry);
     setActiveAction(null);
     setSuccessMessage("Watchlist updated");
+    router.refresh();
+  }
+
+  function handleRemoveFromWatchlist() {
+    onRemoveFromWatchlist();
+    setActiveAction(null);
+    setSuccessMessage(`${stock.symbol} removed from Watchlist`);
+    router.refresh();
   }
 
   function handleCreateAlert() {
     setActiveAction(null);
     setSuccessMessage(`Alert created for ${stock.symbol}`);
+    router.refresh();
   }
 
   const editInitialValues: EditWatchlistInitialValues = localWatchlistEntry
@@ -148,23 +167,22 @@ export default function StockPreviewDrawer({
     ? {
         status: mapWatchStatus(originalWatchlistItem.status),
         reason: originalWatchlistItem.notes,
-        entryZoneLow: String(originalWatchlistItem.entryZoneLow),
-        entryZoneHigh: String(originalWatchlistItem.entryZoneHigh),
-        target: String(originalWatchlistItem.target),
-        stopLoss: String(originalWatchlistItem.stopLoss),
+        entryZoneLow: String(originalWatchlistItem.entryZoneLow || ""),
+        entryZoneHigh: String(originalWatchlistItem.entryZoneHigh || ""),
+        target: String(originalWatchlistItem.target || ""),
+        stopLoss: String(originalWatchlistItem.stopLoss || ""),
       }
     : { status: "Watching", reason: "", entryZoneLow: "", entryZoneHigh: "", target: "", stopLoss: "" };
 
-  // Merged watchlist display data
   const watchEntry = localWatchlistEntry ?? (originalWatchlistItem
     ? {
         watchlist: "Main Watchlist",
         reason: originalWatchlistItem.notes,
         status: mapWatchStatus(originalWatchlistItem.status),
-        entryZoneLow: String(originalWatchlistItem.entryZoneLow),
-        entryZoneHigh: String(originalWatchlistItem.entryZoneHigh),
-        target: String(originalWatchlistItem.target),
-        stopLoss: String(originalWatchlistItem.stopLoss),
+        entryZoneLow: String(originalWatchlistItem.entryZoneLow || ""),
+        entryZoneHigh: String(originalWatchlistItem.entryZoneHigh || ""),
+        target: String(originalWatchlistItem.target || ""),
+        stopLoss: String(originalWatchlistItem.stopLoss || ""),
       }
     : null);
 
@@ -214,6 +232,12 @@ export default function StockPreviewDrawer({
           <span className="text-amber-400 bg-amber-500/10 border border-amber-800/40 px-2.5 py-1 rounded-full leading-none">
             Risk: {stock.risk}
           </span>
+          {hasActiveAlerts && (
+            <span className="flex items-center gap-1 text-amber-400 bg-amber-500/10 border border-amber-800/40 px-2.5 py-1 rounded-full leading-none">
+              <Bell size={9} />
+              Alert Active
+            </span>
+          )}
           <span className="text-slate-400 bg-slate-800/60 border border-slate-700/60 px-2.5 py-1 rounded-full leading-none">
             US Stocks
           </span>
@@ -228,7 +252,6 @@ export default function StockPreviewDrawer({
       {/* ── Scrollable Content ── */}
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-5 py-4 space-y-4">
 
-        {/* Success message */}
         {successMessage && (
           <DrawerSuccessMessage
             message={successMessage}
@@ -236,12 +259,11 @@ export default function StockPreviewDrawer({
           />
         )}
 
-        {/* Action panels — only one at a time */}
         {activeAction === "add-watchlist" && (
           <AddToWatchlistPanel
             symbol={stock.symbol}
             suggestedReason={detail.suggestedTrackingReason}
-            onSubmit={handleAddToWatchlist}
+            onSuccess={handleAddToWatchlist}
             onCancel={() => setActiveAction(null)}
           />
         )}
@@ -249,7 +271,8 @@ export default function StockPreviewDrawer({
           <EditWatchlistPanel
             symbol={stock.symbol}
             initialValues={editInitialValues}
-            onSubmit={handleEditWatchlist}
+            onSuccess={handleEditWatchlist}
+            onRemove={handleRemoveFromWatchlist}
             onCancel={() => setActiveAction(null)}
           />
         )}
@@ -260,7 +283,8 @@ export default function StockPreviewDrawer({
             hotScore={stock.hot}
             oppScore={stock.opp}
             relativeVolume={stock.relativeVolume}
-            onSubmit={handleCreateAlert}
+            existingAlerts={existingAlerts}
+            onSuccess={handleCreateAlert}
             onCancel={() => setActiveAction(null)}
           />
         )}
@@ -382,16 +406,8 @@ export default function StockPreviewDrawer({
             <svg viewBox="0 0 400 60" className="w-full h-full" preserveAspectRatio="none">
               <defs>
                 <linearGradient id={`grad-${stock.symbol}`} x1="0" y1="0" x2="0" y2="1">
-                  <stop
-                    offset="0%"
-                    stopColor={stock.change >= 0 ? "#10b981" : "#ef4444"}
-                    stopOpacity="0.3"
-                  />
-                  <stop
-                    offset="100%"
-                    stopColor={stock.change >= 0 ? "#10b981" : "#ef4444"}
-                    stopOpacity="0"
-                  />
+                  <stop offset="0%" stopColor={stock.change >= 0 ? "#10b981" : "#ef4444"} stopOpacity="0.3" />
+                  <stop offset="100%" stopColor={stock.change >= 0 ? "#10b981" : "#ef4444"} stopOpacity="0" />
                 </linearGradient>
               </defs>
               <path

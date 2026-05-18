@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { type HotStock, type WatchlistItem, type StockDrawerDetail, type ScannerSetup, type ScoreChange, type AiInsight, type RecentAlert } from "@/src/lib/mock-data";
 import { type LocalWatchlistEntry } from "@/src/types/drawer";
+import { type ActiveAlertRule } from "@/src/lib/data/dashboard";
 import HotStocksTable from "./HotStocksTable";
 import DiscoverSetups from "./DiscoverSetups";
 import TopScoreChanges from "./TopScoreChanges";
@@ -21,6 +22,7 @@ interface DashboardGridProps {
   topScoreChanges: ScoreChange[];
   aiInsights: AiInsight[];
   recentAlerts: RecentAlert[];
+  alertRulesBySymbol: Record<string, ActiveAlertRule[]>;
 }
 
 export default function DashboardGrid({
@@ -31,12 +33,21 @@ export default function DashboardGrid({
   topScoreChanges,
   aiInsights,
   recentAlerts,
+  alertRulesBySymbol,
 }: DashboardGridProps) {
   const [selectedStock, setSelectedStock] = useState<HotStock | null>(null);
   const [isDrawerClosing, setIsDrawerClosing] = useState(false);
   const [localWatchlistEntries, setLocalWatchlistEntries] = useState<
     Record<string, LocalWatchlistEntry>
   >({});
+
+  // Sync selectedStock with refreshed hotStocks prop so drawer reflects DB state
+  useEffect(() => {
+    if (selectedStock) {
+      const updated = hotStocks.find((s) => s.symbol === selectedStock.symbol);
+      if (updated) setSelectedStock(updated);
+    }
+  }, [hotStocks]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function closeDrawer() {
     setIsDrawerClosing(true);
@@ -63,6 +74,15 @@ export default function DashboardGrid({
   function handleEditWatchlist(entry: LocalWatchlistEntry) {
     if (!selectedStock) return;
     setLocalWatchlistEntries((prev) => ({ ...prev, [selectedStock.symbol]: entry }));
+  }
+
+  function handleRemoveFromWatchlist() {
+    if (!selectedStock) return;
+    setLocalWatchlistEntries((prev) => {
+      const next = { ...prev };
+      delete next[selectedStock.symbol];
+      return next;
+    });
   }
 
   const localEntryForSelected = selectedStock
@@ -106,8 +126,10 @@ export default function DashboardGrid({
           localWatchlistEntry={localEntryForSelected}
           onAddToWatchlist={handleAddToWatchlist}
           onEditWatchlist={handleEditWatchlist}
+          onRemoveFromWatchlist={handleRemoveFromWatchlist}
           stockDrawerDetails={stockDrawerDetails}
           dbWatchlistItems={watchlistItems}
+          alertRulesBySymbol={alertRulesBySymbol}
         />
       )}
     </>
