@@ -2,7 +2,7 @@
 
 ## Feature Name
 
-Dashboard Phase 6 — Persist Drawer Actions with Server Actions and Prisma
+Scanner Phase 7 — Scanner Page Foundation
 
 ## Status
 
@@ -10,409 +10,498 @@ Completed
 
 ---
 
+## Feature Spec Reference
+
+Before implementing this feature, read the full Scanner feature specification:
+
+```txt
+Context/Fetures/scanner-feature-spec.md
+```
+
+This `current-feature.md` is the active implementation plan for the first Scanner development phase only.  
+The full feature spec contains the broader Scanner vision, future phases, filters, scoring ideas, DB context, and long-term roadmap.
+
+> Important: Use the path exactly as written above if the project folder is named `Fetures`. If this is a typo and the real folder is `Features`, use the real project path.
+
+---
+
 ## Context
 
-Phase 5 moved the dashboard from mock runtime data to Prisma-backed database data while keeping the UI visually identical to the previous phase.
+FomoFilter already has:
 
-Phase 6 should now make the main drawer actions persistent instead of local-only.
-
-The app already has:
-
-- Dashboard data loaded from Prisma through `src/lib/data/dashboard.ts`
-- Prisma schema and seed data
+- A DB-backed dashboard using Prisma and Neon
+- A responsive app shell with sidebar and top bar
+- Hot Stocks table and mobile stock cards
 - Stock Preview Drawer
-- Add to Watchlist panel
-- Edit Watchlist panel
-- Create Alert panel
-- Local-only state updates from Phase 3
-- Responsive/mobile drawer polish from Phase 4
+- Add/Edit/Remove Watchlist actions persisted with Prisma
+- Create Alert action persisted with Prisma
+- Alert Active indicator
+- Existing reusable dashboard components and drawer actions
 
-The goal of this phase is to persist the user actions from the stock drawer into the database using Server Actions, while keeping the current UI and UX mostly unchanged.
+This phase adds the first version of the dedicated Scanner page.
+
+The Scanner is the main discovery workspace for FomoFilter.  
+It should help users search, filter, sort, and inspect stocks using the existing seeded/DB-backed data.
+
+The goal is to create the foundation of the Scanner page without building live market API integration, scoring engine recalculation, advanced saved views, or new database models.
 
 ---
 
 ## Primary Goal
 
-Replace the current local-only drawer action behavior with database-backed mutations.
+Build a new `/scanner` page that displays a full-page stock discovery workspace using the existing Prisma-backed stock data.
 
-The user should be able to:
+The page should allow users to:
 
-1. Add a stock to the watchlist and have it saved in the database.
-2. Edit an existing watchlist item and have the changes saved in the database.
-3. Create an alert rule and have it saved in the database.
-4. See the dashboard refresh/update after each mutation.
+- Browse scanner stocks
+- Search by ticker or company
+- Filter by basic fields
+- Sort by important metrics
+- Switch between predefined scanner views
+- Open the existing Stock Preview Drawer from any stock row/card
+- Use existing drawer actions: Add/Edit/Remove Watchlist and Create Alert
 
-This phase should not introduce live market data, AI API calls, authentication, cron jobs, or notification delivery.
+This phase should make the Scanner feel like a real workspace, not just a copied dashboard widget.
 
 ---
 
-## Relevant Screenshot References
+## Important Scope Decision
 
-Use these screenshots as UX references for the existing drawer actions. Do not redesign from scratch.
+This phase is **Scanner Page Foundation** only.
 
-### Add to Watchlist panel
+Use existing scores and existing seeded/DB data.
 
-```txt
-Context/screenshots/Hot-stocks-click-open-right-pannel-adding-to-watchlist.png
-```
+Do not build:
 
-Use this for:
-
-- Add-to-watchlist panel layout
-- Watchlist selector
-- Reason field
-- Status selector
-- Optional entry zone and target fields
-- Green primary CTA
-
-### Create Alert panel
-
-```txt
-Context/screenshots/Hot-stocks-click-open-right-pannel-adding-alert.png
-```
-
-Use this for:
-
-- Alert panel layout
-- Alert type selector
-- Threshold input
-- Frequency selector
-- Notify method selector
-- Live alert summary
-- Orange alert CTA
-
-### Drawer base state
-
-```txt
-Context/screenshots/Hot-stocks-click-open-right-pannel.png
-Context/screenshots/Hot-stocks-click-open-right-pannel-bottom.png
-Context/screenshots/Hot-stocks-click-open-right-pannel-bottom-2.png
-```
-
-Use these for:
-
-- Drawer layout
-- Watch Context
-- Sticky footer
-- Existing CTA logic
-- Desktop drawer behavior
+- A new scoring engine
+- External market data API integration
+- Live price sync
+- AI-generated scanner results
+- Saved custom views
+- Complex pagination
+- Auth
+- New Prisma models unless absolutely required
 
 ---
 
 ## Build in This Phase
 
-### 1. Server Actions for Drawer Mutations
+### 1. New Scanner Route
 
-Create server actions for:
-
-- Add to Watchlist
-- Edit Watchlist item
-- Create Alert rule
-
-Suggested file:
+Create a new route:
 
 ```txt
-src/actions/drawer-actions.ts
+/scanner
 ```
 
-The actions should use Prisma server-side only.
+The page should render inside the existing app shell style.
 
-Expected actions:
+Recommended page title:
+
+```txt
+Scanner
+Discover hot stocks, filter FOMO, and find setups worth tracking.
+```
+
+---
+
+### 2. Scanner Data Loader
+
+Create a dedicated server-side data loader if needed, for example:
+
+```txt
+src/lib/data/scanner.ts
+```
+
+The loader should use Prisma and return a clean scanner data shape.
+
+It may reuse existing logic from:
+
+```txt
+src/lib/data/dashboard.ts
+```
+
+but avoid duplicating large blocks of logic if a shared helper would be cleaner.
+
+The loader should return enough data for:
+
+- Scanner table/cards
+- Watchlist state
+- Active alert state
+- Existing Stock Preview Drawer props
+
+Do not read directly from `src/lib/mock-data.ts` at runtime for scanner data.
+
+---
+
+### 3. Scanner Data Contract
+
+Define or use a clear data shape for scanner rows.
+
+Suggested shape:
 
 ```ts
-addStockToWatchlist(input)
-updateWatchlistItem(input)
-createAlertRule(input)
+export type ScannerStock = {
+  symbol: string;
+  name: string;
+  sector: string | null;
+  industry?: string | null;
+  price: number;
+  changePercent: number;
+  weekChangePercent?: number | null;
+  monthChangePercent?: number | null;
+  relativeVolume: number | null;
+  marketCap: string | null;
+  analystTarget?: number | null;
+  analystUpside: number | null;
+  analystRating?: string | null;
+  hotScore: number;
+  opportunityScore: number;
+  riskLevel: "LOW" | "MEDIUM" | "HIGH" | "EXTREME";
+  setupStatus: string;
+  catalyst: string | null;
+  inWatchlist: boolean;
+  hasActiveAlerts: boolean;
+};
 ```
 
-Use proper TypeScript types and validation.
+Use the actual DB fields and existing types where appropriate.  
+Do not create duplicate types if an equivalent shared type already exists.
 
 ---
 
-### 2. Input Validation
+### 4. Scanner Page Layout
 
-Use Zod for action input validation.
+The scanner page should include:
 
-Suggested schemas:
+1. Header
+2. Top controls
+3. Predefined scanner view pills
+4. Filter controls
+5. Sort control
+6. Result count
+7. Desktop stock table
+8. Mobile stock cards
+9. Existing Stock Preview Drawer integration
+10. Empty state when no results match filters
+
+Suggested layout:
 
 ```txt
-src/lib/validation/drawer-actions.ts
+ScannerPage
+├── AppShell / existing layout
+├── ScannerHeader
+├── ScannerControls
+│   ├── Search input
+│   ├── Sort dropdown
+│   └── Optional compact filters
+├── ScannerViewPills
+├── ScannerResults
+│   ├── DesktopScannerTable
+│   └── MobileScannerCards
+└── StockPreviewDrawer
 ```
 
-Validate:
+---
 
-#### Add to Watchlist
+## Scanner Views
 
-- `userId`
-- `stockId` or `symbol`
-- `watchlistId` or default watchlist fallback
-- `reason`
-- `status`
-- `entryZoneLow`
-- `entryZoneHigh`
-- `personalTarget`
-- `stopLoss` if included later
+Add predefined view pills/tabs.
 
-#### Edit Watchlist
+Initial views:
 
-- `watchlistItemId`
-- `status`
-- `reason`
-- `entryZoneLow`
-- `entryZoneHigh`
-- `personalTarget`
-- `stopLoss`
+| View | Purpose |
+| --- | --- |
+| Hot Today | Highest Hot Score / strongest movers |
+| Strong Momentum | Stocks with strong short-term movement |
+| Best Opportunities | High Opportunity Score |
+| Unusual Volume | Stocks with high relative volume |
+| FOMO Risk | Hot stocks with higher risk or stretched setup |
+| In Watchlist | Stocks already tracked by the user |
+| Alert Active | Stocks with active alert rules |
 
-#### Create Alert
+For Phase 7, these can be implemented as client-side filters/sorts over the loaded data.
 
-- `userId`
-- `stockId` or `symbol`
-- `type`
-- `threshold`
-- `frequency`
-- `notify method` if supported by current schema
-
-Keep validation simple and aligned with the current Prisma schema.
+Do not build saved custom views yet.
 
 ---
 
-### 3. Persist Add to Watchlist
+## Filters
 
-When the user submits Add to Watchlist:
+Implement basic filters only.
 
-- Create or update the correct `WatchlistItem` in the database.
-- Use the existing seeded/default user for now.
-- Use the existing default watchlist, or create/find one if needed.
-- Avoid duplicates by using unique constraints/upsert logic.
-- Return the updated watchlist item.
+Recommended Phase 7 filters:
 
-Expected UI after success:
+| Filter | Behavior |
+| --- | --- |
+| Search | Match ticker or company name |
+| Sector | All + available sectors from data |
+| Risk | All / Low / Medium / High / Extreme |
+| Setup | All + available setup statuses |
+| Watchlist only | Show only stocks in user watchlist |
+| Alert active only | Show only stocks with active alerts |
 
-- Show success banner.
-- Close the Add to Watchlist panel.
-- Keep the drawer open.
-- Drawer switches to watchlist mode.
-- Table star becomes filled/yellow.
-- My Watchlist widget updates after refresh.
+Keep filters simple and reliable.
 
-Implementation can use `router.refresh()` after successful server action to reload dashboard data.
+Do not implement advanced filter builder yet.
 
 ---
 
-### 4. Persist Edit Watchlist
+## Sorting
 
-When the user submits Edit Watchlist:
+Implement a simple sort dropdown.
 
-- Update the existing `WatchlistItem` in the database.
-- Return the updated item.
+Recommended sort options:
 
-Expected UI after success:
+| Sort | Default Direction |
+| --- | --- |
+| Best Signal | Desc |
+| Hot Score | Desc |
+| Opportunity Score | Desc |
+| Daily Change | Desc |
+| Relative Volume | Desc |
+| Analyst Upside | Desc |
+| Market Cap | Desc |
+| Symbol | Asc |
 
-- Show success banner.
-- Close the Edit panel.
-- Keep the drawer open.
-- Watch Context reflects the updated DB data.
-- My Watchlist widget reflects the updated DB data after refresh.
+### Best Signal
 
-Use `router.refresh()` if that is the simplest reliable approach.
+For Phase 7, `Best Signal` can be a simple client-side calculated sort.
 
----
-
-### 5. Persist Create Alert
-
-When the user submits Create Alert:
-
-- Create an `AlertRule` in the database.
-- Associate it with the current user and selected stock.
-- Store alert type, threshold, frequency, active state and timestamps.
-
-Expected UI after success:
-
-- Show success banner.
-- Close the Create Alert panel.
-- Keep the drawer open.
-- No notification delivery yet.
-- No cron evaluation yet.
-
-Optional, only if simple:
-
-- Add a small local indication that an alert exists for this stock.
-
-Do not build the full Alerts page in this phase.
-
----
-
-### 6. Replace Local-Only State Where Needed
-
-The drawer may still use local UI state for:
-
-- Which panel is open
-- Form input state
-- Success message state
-- Selected stock state
-
-But persistent business state should come from Prisma after mutation and refresh.
-
-Do not keep separate long-lived local state that conflicts with DB state.
-
-Important consistency after mutation:
-
-- Drawer header star
-- Hot Stocks table star
-- Watch Context
-- CTA footer
-- My Watchlist widget
-
-These should all reflect DB-backed state after refresh.
-
----
-
-### 7. Keep Existing UX
-
-Do not redesign the drawer or dashboard.
-
-Keep:
-
-- Existing dark UI
-- Existing drawer layout
-- Existing forms
-- Existing sticky footer
-- Existing success banner pattern
-- Existing responsive/mobile behavior
-- Existing auto-scroll-to-panel behavior from Phase 4
-
-Only change the implementation from local-only behavior to persistent DB-backed behavior.
-
----
-
-## Do Not Build in This Phase
-
-Do not build these yet:
-
-- Authentication / real logged-in users
-- Multiple user accounts
-- Live market data API
-- AI API calls
-- Alert evaluation cron jobs
-- Email/push notification delivery
-- Full Alerts page
-- Full Watchlist page
-- Full Scanner page
-- Stock Details page
-- Stripe / monetization
-- Complex optimistic cache framework
-- Real-time updates
-
----
-
-## Implementation Notes
-
-### Current User
-
-Until authentication is implemented, use the seeded mock/default user from the database.
-
-Expected seeded user:
-
-```txt
-orann1@gmail.com
-```
-
-Do not hardcode this in many places. Prefer a small helper if needed.
-
-Suggested helper:
-
-```txt
-src/lib/data/current-user.ts
-```
-
-Possible function:
+Suggested formula:
 
 ```ts
-getCurrentUserForDemo()
+bestSignal =
+  hotScore * 0.4 +
+  opportunityScore * 0.4 +
+  analystUpsideScore * 0.1 -
+  riskPenalty * 0.1
 ```
 
-Keep this simple and easy to replace later when auth is added.
+Keep it simple.  
+Do not build the final scoring engine in this phase.
+
+If this formula is too much for Phase 7, sort by a weighted combination of existing Hot Score and Opportunity Score only.
 
 ---
 
-### Server Action Return Shape
+## Desktop Table Requirements
 
-Use a consistent return pattern:
+The desktop scanner table should be richer than the dashboard Hot Stocks preview table.
 
-```ts
-{
-  success: boolean;
-  data?: T;
-  error?: string;
-}
+Recommended columns:
+
+- Star / watchlist state
+- Symbol + company name
+- Sector
+- Price
+- Daily change %
+- Hot Score
+- Opportunity Score
+- Risk
+- Setup
+- Relative Volume
+- Analyst Upside
+- Catalyst
+- Alert indicator
+
+Behavior:
+
+- Row hover state
+- Selected row state when drawer is open
+- Clicking row opens existing StockPreviewDrawer
+- Star should reflect current DB-backed watchlist state
+- Alert indicator should reflect current DB-backed active alerts
+- Table should remain readable with horizontal overflow if needed
+
+Do not build inline editing inside the table.
+
+---
+
+## Mobile Requirements
+
+On mobile, do not use a wide table.
+
+Use stock cards.
+
+Each card should show:
+
+- Symbol
+- Company name
+- Price
+- Daily change %
+- Hot Score
+- Opportunity Score
+- Risk
+- Setup
+- Catalyst
+- Watchlist star
+- Alert Active indicator if applicable
+
+Clicking a mobile card should open the existing full-screen mobile drawer.
+
+---
+
+## Drawer Reuse Requirements
+
+Do not build a new drawer.
+
+Reuse the existing:
+
+```txt
+src/components/dashboard/StockPreviewDrawer.tsx
 ```
 
-Client components should show user-friendly errors and success messages.
+or extract it to a more generic shared location if needed.
+
+Important:
+
+- Avoid large refactors unless necessary.
+- If moving the drawer component, preserve all existing dashboard behavior.
+- Drawer actions must still work:
+  - Add to Watchlist
+  - Edit Watchlist
+  - Remove from Watchlist
+  - Create Alert
+  - Alert Active indicator
+  - Existing alerts list
+
+The scanner should pass the same kind of data needed by the drawer.
 
 ---
 
-### Refresh Strategy
+## Suggested Components
 
-Preferred simple approach for this phase:
+Create scanner-specific components under:
 
-- Submit server action
-- On success, show success banner
-- Close panel
-- Call `router.refresh()` to reload server data
+```txt
+src/components/scanner/
+```
 
-This avoids complex local reconciliation bugs.
+Suggested components:
 
-If optimistic updates are kept, ensure they do not conflict with refreshed DB data.
+```txt
+src/components/scanner/ScannerHeader.tsx
+src/components/scanner/ScannerControls.tsx
+src/components/scanner/ScannerViewPills.tsx
+src/components/scanner/ScannerFilters.tsx
+src/components/scanner/ScannerTable.tsx
+src/components/scanner/MobileScannerCard.tsx
+src/components/scanner/ScannerResults.tsx
+```
 
----
-
-### Error Handling
-
-Handle common errors:
-
-- Missing stock
-- Missing user
-- Missing default watchlist
-- Invalid threshold
-- Invalid form input
-- Prisma errors
-
-User-facing messages should be simple:
-
-- `Could not add stock to watchlist.`
-- `Could not update watchlist item.`
-- `Could not create alert.`
-
-Do not expose raw Prisma errors in the UI.
+If some existing dashboard components can be reused cleanly, reuse them.  
+Do not duplicate large components unnecessarily.
 
 ---
 
 ## Suggested Files
 
-New files:
+Potential new files:
 
 ```txt
-src/actions/drawer-actions.ts
-src/lib/validation/drawer-actions.ts
-src/lib/data/current-user.ts
+src/app/scanner/page.tsx
+src/lib/data/scanner.ts
+src/components/scanner/ScannerPageClient.tsx
+src/components/scanner/ScannerHeader.tsx
+src/components/scanner/ScannerControls.tsx
+src/components/scanner/ScannerViewPills.tsx
+src/components/scanner/ScannerFilters.tsx
+src/components/scanner/ScannerTable.tsx
+src/components/scanner/MobileScannerCard.tsx
 ```
 
-Potentially updated files:
+Use client components only where interactive state is needed:
+
+- search
+- filters
+- sorting
+- selected stock drawer state
+
+Keep Prisma and DB loading server-side only.
+
+---
+
+## UI / UX Direction
+
+The Scanner should feel like a professional stock discovery workspace.
+
+Visual direction:
+
+- Same dark theme as dashboard
+- Same card/table language
+- Same score pills and risk badges
+- Same watchlist star style
+- Same alert badge style
+- Compact but readable
+- Data-dense, but not overwhelming
+
+The page should feel more focused than the dashboard.
+
+Dashboard = overview  
+Scanner = discovery workspace
+
+---
+
+## Empty States
+
+Add a simple empty state when filters return no results.
+
+Example:
 
 ```txt
-src/components/dashboard/StockPreviewDrawer.tsx
-src/components/dashboard/drawer/AddToWatchlistPanel.tsx
-src/components/dashboard/drawer/EditWatchlistPanel.tsx
-src/components/dashboard/drawer/CreateAlertPanel.tsx
-src/components/dashboard/DashboardGrid.tsx
-src/lib/data/dashboard.ts
-prisma/schema.prisma
-prisma/seed.ts
+No stocks match your filters.
+Try clearing search or changing the selected view.
 ```
 
-Only update Prisma schema/seed if the current schema is missing fields needed for this phase.
+Add a clear reset filters action if simple.
 
-If schema changes are needed, use Prisma migrations only.
+---
+
+## Out of Scope
+
+Do not build these in this phase:
+
+- External market data API
+- Live quote refresh
+- Scoring engine calculation
+- Saved custom scanner views
+- User-created scanner filters
+- URL query parameter sync
+- Pagination
+- CSV export
+- AI search
+- Full Stock Details page
+- Full Watchlist page
+- Full Alerts page
+- Auth
+- New Prisma models
+- Prisma migration unless absolutely required
+- Alert evaluation engine
+- Notification delivery
+
+---
+
+## Implementation Notes for AI Agent
+
+Follow project files:
+
+- `Context/CLAUDE.md`
+- `Context/project-overview.md`
+- `Context/coding-standards.md`
+- `Context/ai-interaction.md`
+- `Context/current-feature.md`
+- `Context/Fetures/scanner-feature-spec.md`
+
+Important rules:
+
+- Investigate existing components before creating new duplicates.
+- Reuse existing drawer/actions where possible.
+- Keep DB access server-side only.
+- Keep client-side filtering/sorting simple for this phase.
+- Do not change existing dashboard behavior.
+- Do not alter Prisma schema unless truly necessary.
+- If schema changes appear necessary, stop and explain before implementing.
 
 ---
 
@@ -420,38 +509,31 @@ If schema changes are needed, use Prisma migrations only.
 
 The feature is complete when:
 
-- Add to Watchlist saves to the database.
-- Edit Watchlist saves to the database.
-- Create Alert saves to the database.
-- The dashboard reloads/refreshes from DB-backed data after each mutation.
-- The table star updates after adding to watchlist.
-- The drawer header star updates after adding to watchlist.
-- The drawer CTA footer changes correctly after adding to watchlist.
-- The Watch Context reflects persisted DB data.
-- My Watchlist widget reflects persisted DB data after refresh.
-- Success banners appear after successful actions.
-- Panels close after successful submit.
-- Drawer stays open after successful submit.
-- Validation errors are handled gracefully.
-- No API routes are added unless clearly necessary.
-- No live market data integration is added.
-- No auth implementation is added.
-- No OpenAI calls are added.
-- The project builds successfully with:
+- `/scanner` route exists and renders correctly
+- Scanner page uses DB-backed data from Prisma
+- Search works by ticker/company
+- View pills filter/sort results
+- Basic filters work
+- Sort dropdown works
+- Result count updates
+- Desktop table renders scanner stocks
+- Mobile cards render scanner stocks
+- Clicking a row/card opens the existing Stock Preview Drawer
+- Drawer actions still work from the scanner page
+- Watchlist state is correct
+- Alert Active state is correct
+- Empty state appears when no results match filters
+- Dashboard behavior remains unchanged
+- No external API integration is added
+- No scoring engine is added
+- No Prisma migration is added unless explicitly approved
+- Build passes with no TypeScript errors
+
+Run:
 
 ```txt
 npm run build
-```
-
-- Prisma validates successfully with:
-
-```txt
 npx prisma validate
-```
-
-- If a migration is added, migration status is clean with:
-
-```txt
 npx prisma migrate status
 ```
 
@@ -459,88 +541,25 @@ npx prisma migrate status
 
 ## Manual Test Checklist
 
-Test with a stock already in watchlist:
-
-- Open NVDA drawer.
-- Click Edit.
-- Change notes/reason or target.
-- Save.
-- Confirm success banner.
-- Confirm panel closes.
-- Confirm Watch Context updates.
-- Refresh browser.
-- Confirm changes persist.
-
-Test with a stock not in watchlist:
-
-- Open SMCI or PLTR drawer.
-- Click Add to Watchlist.
-- Fill/confirm form.
-- Submit.
-- Confirm success banner.
-- Confirm panel closes.
-- Confirm drawer switches to watchlist mode.
-- Confirm table star becomes yellow.
-- Confirm My Watchlist updates.
-- Refresh browser.
-- Confirm stock remains in watchlist.
-
-Test alert creation:
-
-- Open any stock drawer.
-- Click Alert.
-- Confirm default threshold is based on current stock price.
-- Submit.
-- Confirm success banner.
-- Confirm panel closes.
-- Confirm alert rule exists in DB.
-- Refresh browser.
-- Confirm no UI crash.
-
-Mobile sanity check:
-
-- Open drawer on mobile width.
-- Scroll down.
-- Tap Edit or Alert from sticky footer.
-- Confirm drawer auto-scrolls to the opened panel.
-- Submit action.
-- Confirm success banner is visible.
-
----
-
-## Out of Scope
-
-Keep these explicitly out of scope:
-
-- Sending alerts
-- Evaluating alert conditions
-- Alert history/event generation
-- Email notifications
-- Push notifications
-- Auth sessions
-- User registration/login
-- Real-time market data
-- AI-generated Today's Signal
-- AI-generated stock summaries
-- Payment/Pro restrictions
-- Full page navigation beyond the current dashboard
-
----
-
-## Implementation Notes for AI Agent
-
-- Keep changes focused on Phase 6 only.
-- Use Server Actions for mutations unless there is a strong reason not to.
-- Keep Prisma access server-side only.
-- Do not import Prisma into client components.
-- Do not add API routes unless necessary.
-- Use Zod validation.
-- Use existing UI components and styling.
-- Do not redesign.
-- Prefer `router.refresh()` after mutation for consistency.
-- Avoid over-engineering optimistic state.
-- Ask before schema changes if they are large.
-- Do not commit unless explicitly asked.
+1. Open `/scanner`
+2. Confirm scanner table/cards load from DB
+3. Search for `NVDA`
+4. Search for a company name like `Palantir`
+5. Select `Best Opportunities`
+6. Select `FOMO Risk`
+7. Filter by risk
+8. Filter by sector
+9. Toggle Watchlist only
+10. Toggle Alert active only
+11. Sort by Hot Score
+12. Sort by Opportunity Score
+13. Open a stock drawer from the table
+14. Add to Watchlist from scanner drawer
+15. Remove from Watchlist from scanner drawer
+16. Create Alert from scanner drawer
+17. Confirm Alert Active appears
+18. Confirm dashboard still works
+19. Test mobile layout briefly
 
 ---
 
@@ -555,3 +574,4 @@ Keep these explicitly out of scope:
 - Phase 4 completed (2026-05-12): Made the existing dashboard and stock preview drawer responsive across desktop, tablet, and mobile. Created `ClientAppShell.tsx` to manage mobile sidebar state and backdrop. Updated `AppSidebar.tsx` to slide in from the left on mobile with a close button, always visible on `md+`. Updated `TopBar.tsx` with a hamburger menu button on mobile and a second-row search input. Updated `app/page.tsx` to use `ClientAppShell`. Made `MarketStatsGrid` 2-column on mobile and `SummaryCardsGrid` single-column on mobile. Updated `DashboardGrid.tsx` to stack to a single column on mobile. Created `MobileHotStockCard.tsx` for mobile Hot Stocks display. Updated `HotStocksTable.tsx` to hide the wide table on mobile and show mobile cards instead. Updated `StockPreviewDrawer.tsx` to be full-screen on mobile (`fixed inset-0`) and right-side 520px panel on desktop. Added scroll-to-top behavior when opening a drawer action panel from the sticky footer using a `scrollContainerRef`. Build passes with zero TypeScript errors. Approved by user.
 - Phase 5 completed (2026-05-17): Added Prisma 7 data layer foundation with PostgreSQL (Neon). Installed `prisma`, `@prisma/client`, `@prisma/adapter-pg`, `pg`, `tsx`, `dotenv`. Created `prisma/schema.prisma` with 13 models (Stock, StockQuote, StockScore, StockDrawerDetail, WatchlistItem, User, AlertRule, MarketStat, DashboardSummaryCard, DiscoverSetup, AiInsight, RecentAlert, plus enums). Configured Prisma 7 with `prisma.config.ts` (dotenv loading + datasource URL — required because Prisma 7 no longer supports `url` in schema.prisma). Created `src/lib/db/prisma.ts` as a singleton PrismaClient using `@prisma/adapter-pg`. Created `prisma/seed.ts` seeding all dashboard data (user, market stats, summary cards, 5 hot stocks with quotes/scores/drawer details, 3 extra stocks for top score changes, watchlist items, discover setups, AI insights, recent alerts). Created `src/lib/data/dashboard.ts` with `getDashboardData()` server-side loader. Updated `app/page.tsx` to be an async server component calling `getDashboardData()` and passing data as props; marked `force-dynamic` to prevent static pre-rendering. Updated all dashboard components to accept data as props instead of importing from `mock-data.ts` — type-only imports from `mock-data.ts` remain (types are still defined there); `TodaysSignalCard` still uses `mockTodaysSignal` as there is no DB model for the signal yet. Applied migration and seed to both dev (`ep-dry-river`) and prod (`ep-red-block`) Neon databases. Seed is idempotent (upserts by unique keys; AiInsight/RecentAlert/SummaryCard use deleteMany+createMany). Add/Edit/Alert drawer actions remain local-only. Build passes with zero TypeScript errors. Approved by user.
 - Phase 6 completed (2026-05-18): Replaced local-only drawer actions with DB-backed Server Actions and Prisma. Created `src/lib/data/current-user.ts` with `getCurrentUserForDemo()` helper (looks up demo user by email, easy to swap for real auth later). Created `src/lib/validation/drawer-actions.ts` with Zod schemas for all four mutations. Created `src/actions/drawer-actions.ts` with four server actions: `addStockToWatchlist` (upsert via `userId_stockId` composite key), `updateWatchlistItem` (find by composite key then update by id), `removeStockFromWatchlist` (find then delete by id), `createAlertRule` (create with stock/user lookup). Prisma 7 enum values used as string literals with `as const` (Prisma 7 does not re-export enums from `@prisma/client`). Added `ActiveAlertRule` exported type and `alertRulesBySymbol: Record<string, ActiveAlertRule[]>` to `getDashboardData()` in `dashboard.ts`; the alert rule query runs separately after the 9-element `Promise.all` to avoid TypeScript tuple inference breakage at 10+ elements. Threaded `alertRulesBySymbol` through `app/page.tsx` → `DashboardGrid` → `StockPreviewDrawer` → `CreateAlertPanel`. Added "Alert Active" amber badge to drawer header when `existingAlerts.length > 0`. Added existing alerts list inside `CreateAlertPanel` with `formatAlertType` / `formatFrequency` helpers. Added Remove from Watchlist button at the bottom of `EditWatchlistPanel` (red-tinted text, trash icon, separate `useTransition` from save). All mutations call `router.refresh()` on success to reload server data; `DashboardGrid` syncs `selectedStock` from refreshed `hotStocks` prop via `useEffect`. No new Prisma models added, no migration created — existing Phase 5 schema was sufficient. Build passes with zero TypeScript errors. `prisma validate` and `prisma migrate status` both pass clean. Approved by user.
+- Phase 7 completed (2026-05-18): Built the Scanner page foundation at `/scanner`. Created `src/lib/data/scanner.ts` with `getScannerData()` server-side loader using existing Prisma models (Stock, StockQuote, StockScore, StockDrawerDetail, WatchlistItem, AlertRule). Created `app/scanner/page.tsx` as a dynamic server component. Created 7 scanner-specific components under `src/components/scanner/`: `ScannerPageClient.tsx` (client state manager), `ScannerHeader.tsx`, `ScannerViewPills.tsx` (8 preset views: All Stocks, Hot Today, Strong Momentum, Best Opportunities, Unusual Volume, FOMO Risk, In Watchlist, Alert Active), `ScannerControls.tsx` (search input + sort dropdown + result count), `ScannerFilters.tsx` (Sector / Risk / Setup dropdowns + Watchlist / Alert Active toggles + Clear), `ScannerTable.tsx` (desktop 13-column table with hover and selected-row state), `MobileScannerCard.tsx` (mobile stock cards). Client-side filtering and sorting (Best Signal formula, Hot Score, Opp Score, Daily Change, Relative Volume, Analyst Upside, Symbol). Reused existing `StockPreviewDrawer` from the dashboard without modification — all drawer actions (Add/Edit/Remove Watchlist, Create Alert) work identically from the Scanner. Updated `AppSidebar.tsx` to use `usePathname()` and `Link` for dynamic active nav state so Scanner nav item highlights correctly. Added `showSearch` prop to `TopBar` and `ClientAppShell` (defaults `true`) and passed `showSearch={false}` from the scanner page to hide the redundant TopBar search on `/scanner`. No new Prisma models, no migration, no schema changes. No duplicate server actions. Build passes with zero TypeScript errors. `prisma validate` and `prisma migrate status` both pass clean. Approved by user.

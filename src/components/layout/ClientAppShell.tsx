@@ -8,9 +8,10 @@ import type { DashboardUser } from "@/src/lib/data/dashboard";
 interface ClientAppShellProps {
   user: DashboardUser;
   children: React.ReactNode;
+  showSearch?: boolean;
 }
 
-export default function ClientAppShell({ user, children }: ClientAppShellProps) {
+export default function ClientAppShell({ user, children, showSearch = true }: ClientAppShellProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
@@ -36,6 +37,7 @@ export default function ClientAppShell({ user, children }: ClientAppShellProps) 
           onMenuToggle={() => setIsSidebarOpen((v) => !v)}
           isSidebarCollapsed={isSidebarCollapsed}
           onToggleCollapse={() => setIsSidebarCollapsed((v) => !v)}
+          showSearch={showSearch}
         />
         <main className="flex-1 overflow-y-auto px-4 md:px-6 py-4 md:py-6 pb-10">
           {children}

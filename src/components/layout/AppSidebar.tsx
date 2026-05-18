@@ -1,5 +1,7 @@
 "use client";
 
+import { usePathname } from "next/navigation";
+import Link from "next/link";
 import {
   LayoutDashboard,
   Radar,
@@ -13,12 +15,12 @@ import {
 import type { DashboardUser } from "@/src/lib/data/dashboard";
 
 const navItems = [
-  { label: "Dashboard", icon: LayoutDashboard, active: true },
-  { label: "Scanner", icon: Radar, active: false },
-  { label: "Watchlist", icon: Star, active: false },
-  { label: "Alerts", icon: Bell, active: false, badge: 3 },
-  { label: "Stocks", icon: LineChart, active: false },
-  { label: "AI Insights", icon: Sparkles, active: false },
+  { label: "Dashboard", icon: LayoutDashboard, href: "/" },
+  { label: "Scanner", icon: Radar, href: "/scanner" },
+  { label: "Watchlist", icon: Star, href: "/watchlist" },
+  { label: "Alerts", icon: Bell, href: "/alerts", badge: 3 },
+  { label: "Stocks", icon: LineChart, href: "/stocks" },
+  { label: "AI Insights", icon: Sparkles, href: "/ai-insights" },
 ];
 
 interface AppSidebarProps {
@@ -34,6 +36,8 @@ export default function AppSidebar({
   isCollapsed = false,
   onClose,
 }: AppSidebarProps) {
+  const pathname = usePathname();
+
   return (
     <aside
       className={`
@@ -75,15 +79,20 @@ export default function AppSidebar({
       <nav className="flex-1 px-2 py-4 flex flex-col gap-0.5">
         {navItems.map((item) => {
           const Icon = item.icon;
+          const isActive =
+            item.href === "/"
+              ? pathname === "/"
+              : pathname === item.href || pathname.startsWith(item.href + "/");
           return (
-            <button
+            <Link
               key={item.label}
+              href={item.href}
               onClick={onClose}
               title={isCollapsed ? item.label : undefined}
               className={`flex items-center py-2.5 rounded-lg text-sm w-full transition-colors ${
                 isCollapsed ? "justify-center px-0" : "gap-3 px-3"
               } ${
-                item.active
+                isActive
                   ? "bg-slate-800 text-white"
                   : "text-slate-400 hover:text-white hover:bg-slate-800/60"
               }`}
@@ -101,7 +110,7 @@ export default function AppSidebar({
                   {item.badge}
                 </span>
               )}
-            </button>
+            </Link>
           );
         })}
       </nav>
