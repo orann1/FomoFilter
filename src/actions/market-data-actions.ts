@@ -27,6 +27,69 @@ function deriveSyncStatus(
   return "success";
 }
 
+async function persistSyncLog(
+  type: string,
+  provider: string,
+  status: SyncRunStatus,
+  requestedCount: number,
+  successCount: number,
+  skippedCount: number,
+  failedCount: number,
+  persisted: boolean,
+  message: string,
+  startedAt: Date,
+  finishedAt: Date,
+  durationMs: number,
+  updatedSymbols: string[],
+  skippedSymbols: SyncSymbolResult[],
+  failedSymbols: SyncSymbolResult[]
+): Promise<void> {
+  const syncRun = await prisma.syncRun.create({
+    data: {
+      type,
+      provider,
+      status,
+      requestedCount,
+      successCount,
+      skippedCount,
+      failedCount,
+      persisted,
+      message,
+      startedAt,
+      finishedAt,
+      durationMs,
+    },
+  });
+
+  const items = [
+    ...updatedSymbols.map((sym) => ({
+      syncRunId: syncRun.id,
+      symbol: sym,
+      status: "success",
+      reason: "Updated successfully",
+      dbAction: "updated",
+    })),
+    ...skippedSymbols.map((s) => ({
+      syncRunId: syncRun.id,
+      symbol: s.symbol,
+      status: "skipped",
+      reason: s.reason ?? null,
+      dbAction: s.dbAction,
+    })),
+    ...failedSymbols.map((s) => ({
+      syncRunId: syncRun.id,
+      symbol: s.symbol,
+      status: "failed",
+      reason: s.reason ?? null,
+      dbAction: s.dbAction,
+    })),
+  ];
+
+  if (items.length > 0) {
+    await prisma.syncRunItem.createMany({ data: items });
+  }
+}
+
 export async function testFmpProfileAction(): Promise<ProviderTestResult> {
   return stripRaw(await testFmpProfile("NVDA"));
 }
@@ -61,6 +124,8 @@ export async function syncQuotesSampleAction(): Promise<SyncActionResult> {
 
   if (!providerResult.ok || !providerResult.data) {
     const finishedAt = new Date();
+    const durationMs = finishedAt.getTime() - startedAt.getTime();
+    const errorMsg = providerResult.error ?? "Provider request failed before any symbol was processed";
     for (const sym of symbols) {
       failedSymbols.push({
         symbol: sym,
@@ -69,6 +134,12 @@ export async function syncQuotesSampleAction(): Promise<SyncActionResult> {
         dbAction: "kept_existing",
       });
     }
+    await persistSyncLog(
+      "quotes-sample", "twelve-data", "failed",
+      symbols.length, 0, 0, symbols.length, false,
+      errorMsg, startedAt, finishedAt, durationMs,
+      [], [], failedSymbols
+    );
     return {
       status: "failed",
       provider: "twelve-data",
@@ -82,9 +153,9 @@ export async function syncQuotesSampleAction(): Promise<SyncActionResult> {
       failedSymbols,
       startedAt: startedAt.toISOString(),
       finishedAt: finishedAt.toISOString(),
-      durationMs: finishedAt.getTime() - startedAt.getTime(),
+      durationMs,
       persisted: false,
-      message: providerResult.error ?? "Provider request failed before any symbol was processed",
+      message: errorMsg,
     };
   }
 
@@ -172,14 +243,24 @@ export async function syncQuotesSampleAction(): Promise<SyncActionResult> {
   }
 
   const finishedAt = new Date();
+  const durationMs = finishedAt.getTime() - startedAt.getTime();
   const successCount = updatedSymbols.length;
   const skippedCount = skippedSymbols.length;
   const failedCount = failedSymbols.length;
   const status = deriveSyncStatus(successCount, skippedCount, failedCount);
+  const persisted = successCount > 0;
 
   const messageParts: string[] = [`${successCount} updated`];
   if (skippedCount > 0) messageParts.push(`${skippedCount} skipped`);
   if (failedCount > 0) messageParts.push(`${failedCount} failed`);
+  const message = messageParts.join(", ");
+
+  await persistSyncLog(
+    "quotes-sample", "twelve-data", status,
+    symbols.length, successCount, skippedCount, failedCount, persisted,
+    message, startedAt, finishedAt, durationMs,
+    updatedSymbols, skippedSymbols, failedSymbols
+  );
 
   return {
     status,
@@ -194,9 +275,9 @@ export async function syncQuotesSampleAction(): Promise<SyncActionResult> {
     failedSymbols,
     startedAt: startedAt.toISOString(),
     finishedAt: finishedAt.toISOString(),
-    durationMs: finishedAt.getTime() - startedAt.getTime(),
-    persisted: successCount > 0,
-    message: messageParts.join(", "),
+    durationMs,
+    persisted,
+    message,
   };
 }
 
@@ -273,14 +354,24 @@ export async function syncProfilesSampleAction(): Promise<SyncActionResult> {
   }
 
   const finishedAt = new Date();
+  const durationMs = finishedAt.getTime() - startedAt.getTime();
   const successCount = updatedSymbols.length;
   const skippedCount = skippedSymbols.length;
   const failedCount = failedSymbols.length;
   const status = deriveSyncStatus(successCount, skippedCount, failedCount);
+  const persisted = successCount > 0;
 
   const messageParts: string[] = [`${successCount} updated`];
   if (skippedCount > 0) messageParts.push(`${skippedCount} skipped`);
   if (failedCount > 0) messageParts.push(`${failedCount} failed`);
+  const message = messageParts.join(", ");
+
+  await persistSyncLog(
+    "profiles-sample", "fmp", status,
+    symbols.length, successCount, skippedCount, failedCount, persisted,
+    message, startedAt, finishedAt, durationMs,
+    updatedSymbols, skippedSymbols, failedSymbols
+  );
 
   return {
     status,
@@ -295,8 +386,8 @@ export async function syncProfilesSampleAction(): Promise<SyncActionResult> {
     failedSymbols,
     startedAt: startedAt.toISOString(),
     finishedAt: finishedAt.toISOString(),
-    durationMs: finishedAt.getTime() - startedAt.getTime(),
-    persisted: successCount > 0,
-    message: messageParts.join(", "),
+    durationMs,
+    persisted,
+    message,
   };
 }

@@ -2,11 +2,11 @@
 
 ## Feature Name
 
-Phase 9C — Safe Quote Sync Metadata, API Keys, and Sync Reporting
+Phase 9D — Persistent Sync Logs for Manual Market Data Sync
 
 ## Status
 
-Not Started
+Completed
 
 ---
 
@@ -14,10 +14,11 @@ Not Started
 
 This feature continues the Market Data Sync roadmap.
 
-Read this strategy document before implementation:
+Read these documents before implementation:
 
 ```txt
 Context/Features/market-data-sync-strategy.md
+Context/current-feature.md
 ```
 
 Also use the project context files:
@@ -27,187 +28,432 @@ Context/CLAUDE.md
 Context/project-overview.md
 Context/coding-standards.md
 Context/ai-interaction.md
-Context/current-feature.md
 ```
 
 ---
 
 ## Goal
 
-Make the manual market-data sync safer and more transparent before expanding it beyond small samples.
+Add persistent sync logging for manual market-data sync actions.
 
-This phase focuses on:
+The goal is to make every sync auditable after page refresh, browser close, or later debugging.
 
-1. API key setup and validation.
-2. Safe DB update rules.
-3. Quote sync metadata.
-4. Partial sync handling.
-5. Clear sync result reporting in `/admin/sync`.
+After this phase, `/admin/sync` should not only show the latest in-memory result. It should also show recent persisted sync runs and symbol-level results.
 
-This phase should not build full Russell 1000 sync, cron jobs, scoring, alert evaluation, or full market-data automation.
+This phase prepares the system for controlled quote batches in the next phase.
 
 ---
 
 ## Why This Phase Matters
 
-Market data sync can fail for many reasons:
+Manual sync already supports:
 
-- Missing API key.
-- Invalid API key.
-- Rate limits.
-- Network timeout.
-- Provider error.
-- Provider returns empty data.
-- Provider returns partial data.
-- One symbol fails while others succeed.
-- Provider returns null, empty string, or invalid numbers.
+- Provider tests
+- Quote sample sync
+- Profile sample sync
+- Safe update behavior
+- Partial success handling
+- Detailed in-page result reporting
 
-The system must never create data holes because of a bad API response.
+But the current result is temporary. Once the page refreshes, the sync history is lost.
 
-Preferred behavior:
+Before expanding from 5-symbol samples to larger batches, the system needs persistent logs.
+
+Important questions this phase should answer after every sync:
 
 ```txt
-Keep the last known good value.
-Report what failed.
-Save what succeeded.
-Do not hide partial failure.
+What sync ran?
+When did it run?
+Which provider was used?
+How many symbols were requested?
+How many succeeded?
+How many were skipped?
+How many failed?
+Which symbols failed?
+Why did they fail?
+Were DB values updated or kept?
+Can I safely run the sync again?
 ```
 
 ---
 
 ## Core Rules
 
-### Rule 1 — Ask the User for API Keys
+### Rule 1 — Keep Successful Updates
 
-Before running real provider tests or sync actions, ask the user to add API keys to `.env.local`.
+If a sync updates some symbols and then later symbols fail, keep the successful updates.
 
-Expected variables:
+Do not roll back the whole sync.
 
-```env
-FMP_API_KEY=
-TWELVE_DATA_API_KEY=
-FINNHUB_API_KEY=
-```
-
-The user has already created the keys, but they must be added locally.
-
-After adding keys:
-
-```txt
-Restart the dev server.
-```
-
-Important:
-
-- Do not ask the user to paste keys into chat.
-- Do not hardcode keys.
-- Do not commit `.env.local`.
-- Do not expose keys to the client.
-- Do not log keys.
-- Do not return keys in server action responses.
+Each symbol update should remain atomic.
 
 ---
 
-### Rule 2 — Never Overwrite Good Data with Bad Data
+### Rule 2 — Persist the Sync Result
 
-Never overwrite existing non-empty DB values with:
+Every sample sync action that writes or attempts to write DB data must create a persisted sync log.
 
-- `null`
-- `undefined`
-- empty string
-- `NaN`
-- invalid number
-- missing provider response
-- failed provider response
-- partial provider response that lacks the required field
+This includes:
 
-If a new value is invalid, keep the current DB value and report the issue.
+- `Sync Quotes Sample`
+- `Sync Profiles Sample`
 
-Example:
-
-```txt
-Provider returns price = null
-→ Do not update StockQuote.price
-→ Keep old price
-→ Mark symbol as skipped
-→ Reason: Missing or invalid price
-```
+Provider test buttons may optionally log, but they are not required in this phase because they do not write to DB.
 
 ---
 
-### Rule 3 — Partial Success Is Not Full Success
+### Rule 3 — Never Hide Partial Failure
 
-If some symbols succeed and some fail, the sync status must be:
+If one symbol fails or is skipped, the run must not be shown as full success.
+
+Use:
 
 ```txt
 partial_success
 ```
 
-Do not report `success` unless every requested symbol was processed and updated successfully.
+when some symbols succeed and others fail/skip.
 
 ---
 
-### Rule 4 — Save Successful Symbols Even If Later Symbols Fail
+### Rule 4 — Keep Existing DB Values on Failure
 
-Do not wrap the entire sync in one large transaction.
+If a provider returns bad data, empty data, or an error:
 
-A sync of many symbols should not be all-or-nothing.
-
-Preferred behavior:
-
-```txt
-Each symbol update is atomic.
-Successes are saved.
-Failures are reported.
-The run can be repeated.
-```
-
-Example:
-
-```txt
-Requested: 50
-Updated: 40
-Skipped: 5
-Failed: 5
-Status: partial_success
-```
-
-The 40 successful updates should remain saved.
+- Do not overwrite existing DB values.
+- Log the symbol as skipped or failed.
+- Store the reason.
+- Store `dbAction = kept_existing`.
 
 ---
 
-### Rule 5 — Scanner and Dashboard Must Never Call APIs During Render
+### Rule 5 — Do Not Build More Sync Scope Yet
 
-The UI should read from DB only.
+This phase is about logging, not expanding sync coverage.
 
-Correct architecture:
+Do not add:
 
-```txt
-Admin Manual Sync
-      ↓
-Provider API
-      ↓
-DB
-      ↓
-Scanner / Dashboard / Drawer
-```
-
-Do not call providers inside dashboard/scanner render loaders.
+- Full Russell 1000 sync
+- Watchlist sync
+- Active alerts sync
+- Cron
+- Scoring
+- Alert evaluation
+- Historical candle sync
+- Fundamentals sync beyond the existing profile sample behavior
 
 ---
 
-## Implementation Scope
+## Build in This Phase
 
-### Build in This Phase
+### 1. Add SyncRun Model
 
-1. Add safe update helpers.
-2. Improve quote sample sync safety.
-3. Add quote sync metadata to `StockQuote`.
-4. Improve sync result shape.
-5. Improve `/admin/sync` result reporting.
-6. Ask user to add API keys locally before real provider testing.
-7. Ensure sample sync keeps previous DB values when provider data is bad.
-8. Ensure partial sync results are visible and understandable.
+Add a Prisma model to persist the overall sync run.
+
+Suggested model:
+
+```prisma
+model SyncRun {
+  id             String        @id @default(cuid())
+  type           String
+  provider       String
+  status         String
+  requestedCount Int
+  successCount   Int
+  skippedCount   Int
+  failedCount    Int
+  persisted      Boolean       @default(false)
+  message        String?
+  startedAt      DateTime
+  finishedAt     DateTime?
+  durationMs     Int?
+  createdAt      DateTime      @default(now())
+  items          SyncRunItem[]
+
+  @@index([type])
+  @@index([provider])
+  @@index([status])
+  @@index([startedAt])
+}
+```
+
+Allowed statuses:
+
+```txt
+success
+partial_success
+failed
+```
+
+Allowed types should match existing actions:
+
+```txt
+quotes-sample
+profiles-sample
+```
+
+Optional provider test types can be added later.
+
+---
+
+### 2. Add SyncRunItem Model
+
+Add a Prisma model to persist symbol-level results.
+
+Suggested model:
+
+```prisma
+model SyncRunItem {
+  id        String   @id @default(cuid())
+  syncRunId String
+  syncRun   SyncRun @relation(fields: [syncRunId], references: [id], onDelete: Cascade)
+
+  symbol    String
+  status    String
+  reason    String?
+  dbAction  String
+  createdAt DateTime @default(now())
+
+  @@index([syncRunId])
+  @@index([symbol])
+  @@index([status])
+}
+```
+
+Allowed item statuses:
+
+```txt
+success
+skipped
+failed
+```
+
+Allowed `dbAction` values:
+
+```txt
+updated
+kept_existing
+not_found
+none
+```
+
+---
+
+### 3. Create Migration
+
+Use Prisma migration only.
+
+Suggested command:
+
+```txt
+npx prisma migrate dev --name add-sync-run-logs
+```
+
+Do not use:
+
+```txt
+prisma db push
+```
+
+---
+
+### 4. Persist Sync Logs from Server Actions
+
+Update existing sync server actions in:
+
+```txt
+src/actions/market-data-actions.ts
+```
+
+When `Sync Quotes Sample` or `Sync Profiles Sample` finishes, persist:
+
+1. One `SyncRun`
+2. One `SyncRunItem` per symbol result
+
+The persisted values should match the in-page result.
+
+Important:
+
+- If the whole provider batch request fails before symbol processing starts, create a `SyncRun` with status `failed`.
+- If symbol processing is partial, create `SyncRun` with status `partial_success`.
+- If all symbols succeed, create `SyncRun` with status `success`.
+
+---
+
+### 5. Keep Current Result UI
+
+Do not remove the current last-result panel.
+
+The immediate result after button click is still useful.
+
+Keep:
+
+```txt
+Step 4 — Review Results
+```
+
+or if it has not yet been renamed, rename:
+
+```txt
+Step 4 — Last Result
+```
+
+to:
+
+```txt
+Step 4 — Review Results
+```
+
+---
+
+### 6. Add Recent Sync Runs UI
+
+Add a new section to `/admin/sync`:
+
+```txt
+Recent Sync Runs
+```
+
+Place it below the current result viewer.
+
+Show the latest 10 sync runs.
+
+Suggested table columns:
+
+| Time | Type | Provider | Status | Requested | Updated | Skipped | Failed | Persisted |
+| --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- |
+
+Use clear visual badges:
+
+- green for `success`
+- amber for `partial_success`
+- red for `failed`
+
+---
+
+### 7. Add Symbol-Level Details
+
+For each recent sync run, allow viewing symbol-level details.
+
+Acceptable UI options:
+
+1. Expand/collapse row
+2. Details panel under selected run
+3. Simple nested list under each run card
+
+Show:
+
+| Symbol | Status | Reason | DB Action |
+| --- | --- | --- | --- |
+
+Examples:
+
+```txt
+NVDA — success — Quote updated — updated
+SMCI — skipped — Missing price — kept_existing
+PLTR — failed — Provider timeout — kept_existing
+```
+
+---
+
+### 8. Server Data Loader
+
+Create or update a server-side data loader for recent sync runs.
+
+Suggested file:
+
+```txt
+src/lib/data/admin-sync.ts
+```
+
+Suggested function:
+
+```ts
+getRecentSyncRuns(limit = 10)
+```
+
+Requirements:
+
+- Server-side only.
+- Query latest sync runs.
+- Include items.
+- Do not expose secrets.
+- Sort newest first.
+
+---
+
+### 9. Refresh After Sync
+
+After running a sync action:
+
+- The immediate result viewer should update.
+- The recent sync runs list should also reflect the new run.
+
+Implementation options:
+
+- Use `router.refresh()` after action success.
+- Or return the persisted run and update local state.
+
+Prefer the approach that fits the existing code style.
+
+---
+
+## Data Retention
+
+No retention cleanup is required in this phase.
+
+Future cleanup can delete old sync logs after a configured period.
+
+Do not build cleanup jobs now.
+
+---
+
+## What Should Be Logged
+
+### For SyncRun
+
+Log:
+
+- type
+- provider
+- status
+- requestedCount
+- successCount
+- skippedCount
+- failedCount
+- persisted
+- message
+- startedAt
+- finishedAt
+- durationMs
+
+### For SyncRunItem
+
+Log:
+
+- symbol
+- status
+- reason
+- dbAction
+
+Do not log:
+
+- API keys
+- full raw provider payloads
+- URLs containing API keys
+- secrets
+- unnecessary large JSON responses
+
+---
+
+## Security / Safety
+
+- Do not expose API keys in sync logs.
+- Do not store full provider response payloads.
+- Do not store sanitized URLs unless clearly safe.
+- Do not make `/admin/sync` public-user ready.
+- Do not add auth in this phase.
+- Keep `NEXT_PUBLIC_SHOW_ADMIN_TOOLS=true` gating for sidebar visibility.
 
 ---
 
@@ -215,457 +461,136 @@ Do not call providers inside dashboard/scanner render loaders.
 
 Do not build these in this phase:
 
-- Full Russell 1000 quote sync.
-- Full fundamentals sync.
-- Full analyst sync.
-- Full news persistence.
-- Historical candle sync.
-- Technical calculations.
-- Score recalculation.
-- Alert evaluation.
-- Scheduled cron jobs.
-- Background queue.
-- Retry failed-only action.
-- Persistent `SyncRun` / `SyncRunItem` tables, unless explicitly approved.
-- Auth for `/admin/sync`.
-- User-facing sync controls outside `/admin/sync`.
+- Full quote batch sync
+- Watchlist quote sync
+- Active-alert quote sync
+- Russell 1000 sync
+- Retry failed button
+- Cron / scheduled jobs
+- Queue system
+- Alert evaluation
+- Score recalculation
+- Historical candle sync
+- News persistence
+- Fundamentals sync beyond current profile sample
+- Admin authentication
+- Provider cost dashboard
 
 ---
 
-## API Key Setup Requirements
+## Manual QA Checklist
 
-Before testing with configured keys, the AI agent should ask the user:
+### Migration / Schema
 
-```txt
-Please add these keys to .env.local:
-
-FMP_API_KEY=
-TWELVE_DATA_API_KEY=
-FINNHUB_API_KEY=
-
-Then restart the dev server.
-```
-
-Do not request the actual key values in chat.
-
-The `/admin/sync` page should continue to show:
+Run:
 
 ```txt
-Configured / Missing
+npx prisma validate
+npx prisma migrate status
 ```
 
-for each provider.
+Confirm:
 
-It must never show the actual key.
+- New migration exists.
+- Database is up to date.
+- No unrelated schema changes were made.
 
 ---
 
-## Safe Update Helper Requirements
+### Sync Quotes Sample Logging
 
-Create a small shared helper for safe updates.
-
-Suggested file:
+Run:
 
 ```txt
-src/lib/market-data/safe-update.ts
+Sync Quotes Sample
 ```
 
-Suggested helpers:
+Expected:
 
-```ts
-export function isValidNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
-export function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
-}
-
-export function keepExistingIfInvalid<T>(
-  incoming: T | null | undefined,
-  existing: T
-): T {
-  if (incoming === null || incoming === undefined) return existing;
-
-  if (typeof incoming === "string" && incoming.trim() === "") {
-    return existing;
-  }
-
-  if (typeof incoming === "number" && !Number.isFinite(incoming)) {
-    return existing;
-  }
-
-  return incoming;
-}
-```
-
-Use equivalent logic if a better implementation fits the existing code style.
-
-### Important
-
-Safe update helpers should be used before writing provider data to DB.
+- Current result panel shows the sync result.
+- Recent Sync Runs list gets a new row.
+- Row shows correct type: `quotes-sample`.
+- Provider: `twelve-data`.
+- Requested / updated / skipped / failed counts match the result panel.
+- Symbol-level details show all requested symbols.
+- Successful symbols show `dbAction = updated`.
+- No duplicate `StockQuote` rows are created.
 
 ---
 
-## StockQuote Metadata
+### Sync Profiles Sample Logging
 
-The current known gap:
-
-```txt
-StockQuote.source does not exist.
-StockQuote.lastSyncedAt does not exist.
-```
-
-This phase should add quote sync metadata if missing.
-
-Suggested Prisma changes:
-
-```prisma
-model StockQuote {
-  // existing fields...
-
-  source          String?
-  lastSyncedAt    DateTime?
-  sourceUpdatedAt DateTime?
-}
-```
-
-Use these fields to record:
-
-| Field | Meaning |
-| --- | --- |
-| `source` | provider that last successfully updated the quote |
-| `lastSyncedAt` | when our system successfully wrote/validated the quote |
-| `sourceUpdatedAt` | timestamp from provider, if available |
-
-If schema changes are needed, use Prisma migration only.
-
-Suggested migration name:
+Run:
 
 ```txt
-add-stock-quote-sync-metadata
+Sync Profiles Sample
 ```
 
-Do not use `prisma db push`.
+Expected:
+
+- Current result panel shows the sync result.
+- Recent Sync Runs list gets a new row.
+- Row shows correct type: `profiles-sample`.
+- Provider: `fmp`.
+- Requested / updated / skipped / failed counts match the result panel.
+- Symbol-level details show all requested symbols.
+- Successful symbols show `dbAction = updated`.
+- Failed/skipped symbols show clear reasons.
+- Existing DB values remain protected by safe update rules.
 
 ---
 
-## Sync Result Reporting
+### Partial Failure Logging
 
-Every sync action should return a detailed result.
+If practical, simulate a partial failure.
 
-Suggested type:
+Expected:
 
-```ts
-export type SyncRunStatus = "success" | "partial_success" | "failed";
-
-export type SyncSymbolResult = {
-  symbol: string;
-  status: "success" | "skipped" | "failed";
-  reason?: string;
-  dbAction: "updated" | "kept_existing" | "not_found" | "none";
-};
-
-export type SyncActionResult = {
-  status: SyncRunStatus;
-  provider: "fmp" | "twelve-data" | "finnhub";
-  action: string;
-  requestedCount: number;
-  successCount: number;
-  skippedCount: number;
-  failedCount: number;
-  updatedSymbols: string[];
-  skippedSymbols: SyncSymbolResult[];
-  failedSymbols: SyncSymbolResult[];
-  startedAt: string;
-  finishedAt: string;
-  durationMs: number;
-  persisted: boolean;
-  message: string;
-};
-```
-
-The exact shape can vary, but it must include:
-
-- status
-- provider
-- action
-- requested count
-- success count
-- skipped count
-- failed count
-- updated symbols
-- skipped symbols with reasons
-- failed symbols with reasons
-- started time
-- finished time
-- duration
-- whether data was persisted
+- SyncRun status is `partial_success`.
+- Successful symbols are logged as `success`.
+- Failed/skipped symbols are logged correctly.
+- Reasons are persisted.
+- DB actions are correct.
+- Current result and recent history match.
 
 ---
 
-## Status Rules
+### Failed Run Logging
 
-### success
+If practical, temporarily test missing provider key or invalid provider behavior.
 
-Use only when:
+Expected:
 
-```txt
-All requested symbols were updated successfully.
-```
-
-### partial_success
-
-Use when:
-
-```txt
-At least one symbol succeeded
-AND at least one symbol was skipped or failed.
-```
-
-### failed
-
-Use when:
-
-```txt
-No requested symbols were successfully updated.
-```
+- SyncRun status is `failed` if no symbols succeed.
+- Failure reason is clear.
+- No DB values are overwritten.
+- Log does not contain API keys.
 
 ---
 
-## Difference Between Skipped and Failed
+### Page Refresh Behavior
 
-### Skipped
+After running a sync:
 
-Provider responded, but the data is not usable.
+1. Refresh `/admin/sync`.
+2. Confirm recent sync runs are still visible.
+3. Confirm symbol-level details are still available.
 
-Examples:
-
-- Missing price.
-- Invalid number.
-- Empty response for symbol.
-- Symbol missing from batch response.
-- Empty string for required profile field.
-
-DB behavior:
-
-```txt
-Keep existing value.
-Do not overwrite.
-Report skipped.
-```
-
-### Failed
-
-Provider/system error occurred.
-
-Examples:
-
-- API timeout.
-- Rate limit.
-- HTTP 500.
-- Invalid API key.
-- Network failure.
-- Unexpected provider format.
-
-DB behavior:
-
-```txt
-Keep existing value.
-Do not overwrite.
-Report failed.
-```
+This is the main acceptance check for persistent logs.
 
 ---
 
-## Quote Sync Behavior
+### Regression
 
-Update `Sync Quotes Sample`.
+Confirm:
 
-Expected behavior:
-
-1. Load a small set of existing DB symbols.
-2. Fetch quotes from Twelve Data.
-3. For each symbol:
-   - Validate provider response.
-   - Validate price.
-   - Safely parse numeric fields.
-   - Update only valid fields.
-   - Keep existing DB values for invalid fields.
-   - Set `source = "twelve-data"` only when at least one valid quote field is updated.
-   - Set `lastSyncedAt` only when the quote is successfully updated.
-   - Set `sourceUpdatedAt` if provider timestamp exists.
-4. Return detailed sync report.
-5. Do not create duplicate `StockQuote` rows.
-6. Do not create duplicate `Stock` rows.
-7. Do not update symbols that do not exist in DB.
-
-### Required quote fields for success
-
-At minimum, a quote update should require:
-
-```txt
-symbol
-valid price
-```
-
-If price is missing/invalid:
-
-```txt
-skip symbol
-keep existing DB values
-```
-
-### Optional quote fields
-
-These can be updated only when valid:
-
-- changePercent
-- open
-- high
-- low
-- previousClose
-- volume
-
-If any optional field is missing, keep the existing value and add a warning if useful.
-
----
-
-## Profile Sync Behavior
-
-Update `Sync Profiles Sample` safe update behavior.
-
-Expected behavior:
-
-1. Fetch profiles from FMP.
-2. For each symbol:
-   - Validate profile response.
-   - Update only valid fields.
-   - Never overwrite existing useful values with `null`, `undefined`, empty string, or invalid numbers.
-3. Return detailed sync report.
-4. Do not create duplicate `Stock` rows.
-
-Fields to update only when valid:
-
-- name
-- sector
-- marketCap
-- exchange, industry, country, currency if already supported by schema and mapping
-
-Important:
-
-Use helper logic that treats empty string as invalid.
-
----
-
-## Admin UI Reporting
-
-Update `/admin/sync` result viewer to show clear sync summaries.
-
-After a sync, show:
-
-```txt
-Status: Success / Partial Success / Failed
-Provider
-Action
-Requested
-Updated
-Skipped
-Failed
-Started
-Finished
-Duration
-Persisted: Yes/No
-```
-
-Show tables/lists:
-
-### Updated Symbols
-
-```txt
-NVDA — updated
-AMD — updated
-```
-
-### Skipped Symbols
-
-```txt
-SMCI — skipped — Missing price — kept existing value
-```
-
-### Failed Symbols
-
-```txt
-PLTR — failed — Rate limit — kept existing value
-```
-
-The UI should make it clear:
-
-```txt
-Skipped/failed symbols keep their last known DB value.
-```
-
----
-
-## Partial Failure Policy
-
-If a sync fails after processing some symbols:
-
-- Keep already-saved successful updates.
-- Report remaining symbols as failed if possible.
-- Show `partial_success`.
-- Do not rollback successful symbol updates.
-- Do not mark the whole run as success.
-- Do not hide the failure.
-
-If the provider batch request fails before any symbol is processed:
-
-```txt
-status = failed
-successCount = 0
-```
-
-If provider returns partial batch data:
-
-```txt
-available symbols = success/skipped based on data quality
-missing symbols = skipped or failed with reason
-```
-
----
-
-## Future Persistent Sync Logs
-
-Do not build persistent sync logs in this phase unless explicitly approved.
-
-But design the result shape so it can later map to:
-
-```prisma
-model SyncRun {
-  id           String   @id @default(cuid())
-  type         String
-  provider     String
-  status       String
-  requested    Int
-  succeeded    Int
-  skipped      Int
-  failed       Int
-  startedAt    DateTime @default(now())
-  finishedAt   DateTime?
-  errorMessage String?
-}
-
-model SyncRunItem {
-  id          String @id @default(cuid())
-  syncRunId   String
-  symbol      String
-  status      String
-  reason      String?
-  dbAction    String
-}
-```
-
-This is future work.
+- Dashboard still loads.
+- Scanner still loads.
+- Drawer still works.
+- Add/Edit/Remove Watchlist still works.
+- Create Alert still works.
+- Admin Sync sidebar item still works.
+- No provider calls happen during Dashboard or Scanner render.
 
 ---
 
@@ -680,73 +605,13 @@ npx prisma validate
 npx prisma migrate status
 ```
 
-If schema changes are made:
+If migration is added:
 
 ```txt
-npx prisma migrate dev --name add-stock-quote-sync-metadata
-npm run db:seed
+npx prisma migrate dev --name add-sync-run-logs
 ```
 
-Only use Prisma migrations.
-
----
-
-## Manual QA Checklist
-
-### Missing API Keys
-
-- `/admin/sync` loads.
-- Providers show Missing.
-- Buttons return clear missing-key errors.
-- No crash.
-- No DB writes.
-
-### Configured API Keys
-
-After user adds keys to `.env.local` and restarts server:
-
-- Providers show Configured.
-- Test Twelve Quote works.
-- Test FMP Profile works.
-- Test Finnhub News works.
-
-### Quote Sync
-
-- Run Sync Quotes Sample.
-- Confirm status is success, partial_success, or failed.
-- Confirm counts are correct.
-- Confirm invalid provider data does not overwrite existing DB values.
-- Confirm skipped/failed symbols are listed with reasons.
-- Confirm successful symbols update `StockQuote`.
-- Confirm `source` and `lastSyncedAt` update only for successful quote updates.
-- Confirm scanner/dashboard still load.
-
-### Profile Sync
-
-- Run Sync Profiles Sample.
-- Confirm empty/null provider fields do not overwrite existing useful DB values.
-- Confirm counts are correct.
-- Confirm skipped/failed symbols are listed with reasons.
-
-### Partial Failure
-
-If practical, simulate partial failure by using one invalid symbol in a sample list.
-
-Expected:
-
-- Valid symbols update.
-- Invalid symbol is skipped/failed.
-- Overall status is partial_success.
-- Existing values are kept for invalid symbol.
-
-### Regression
-
-- Dashboard still loads.
-- Scanner still loads.
-- Drawer still works.
-- Add/Edit/Remove Watchlist still works.
-- Create Alert still works.
-- No provider calls happen during dashboard/scanner render.
+Do not use `db push`.
 
 ---
 
@@ -754,17 +619,21 @@ Expected:
 
 This phase is complete when:
 
-- API key setup instructions are clear.
-- Safe update helpers exist.
-- Quote sync does not overwrite good data with bad data.
-- Profile sync does not overwrite good data with bad data.
-- Quote metadata exists on `StockQuote` if migration was required.
-- Sync results show success/skipped/failed breakdown.
-- Partial sync is reported as partial_success.
-- Successful symbols remain saved even if other symbols fail.
-- `/admin/sync` clearly shows what happened in every sync.
-- API keys are still safe.
-- No full sync, cron, scoring, or alert evaluation is added.
+- `SyncRun` model exists.
+- `SyncRunItem` model exists.
+- Prisma migration is created and applied.
+- Quote sample sync persists a `SyncRun`.
+- Quote sample sync persists `SyncRunItem` rows.
+- Profile sample sync persists a `SyncRun`.
+- Profile sample sync persists `SyncRunItem` rows.
+- `/admin/sync` shows recent sync runs after page refresh.
+- Symbol-level details are visible.
+- Counts match between immediate result and persisted log.
+- Partial failures are logged as `partial_success`.
+- Failed runs are logged as `failed`.
+- No API keys or raw sensitive payloads are stored.
+- Safe update behavior remains unchanged.
+- No full sync or cron is added.
 - Build passes.
 - Prisma validation passes.
 - Migration status is clean.
@@ -777,16 +646,16 @@ After implementation, provide:
 
 1. Files created.
 2. Files changed.
-3. Whether schema was changed.
-4. Migration name, if any.
-5. How API key setup is handled.
-6. Safe update helper details.
-7. Quote sync behavior.
-8. Profile sync behavior.
-9. Sync result shape.
-10. Partial failure behavior.
-11. Missing-key QA result.
-12. Configured-key QA result, if keys are available.
+3. Prisma schema changes.
+4. Migration name.
+5. SyncRun fields implemented.
+6. SyncRunItem fields implemented.
+7. Which actions now persist logs.
+8. Recent Sync Runs UI summary.
+9. Symbol-level details UI summary.
+10. QA result for quote sample sync.
+11. QA result for profile sample sync.
+12. Page refresh persistence result.
 13. Build / Prisma validation results.
 14. Known issues.
 15. Whether ready for browser QA.
@@ -806,5 +675,6 @@ After implementation, provide:
 - Phase 6 completed (2026-05-18): Replaced local-only drawer actions with DB-backed Server Actions and Prisma. Created `src/lib/data/current-user.ts` with `getCurrentUserForDemo()` helper (looks up demo user by email, easy to swap for real auth later). Created `src/lib/validation/drawer-actions.ts` with Zod schemas for all four mutations. Created `src/actions/drawer-actions.ts` with four server actions: `addStockToWatchlist` (upsert via `userId_stockId` composite key), `updateWatchlistItem` (find by composite key then update by id), `removeStockFromWatchlist` (find then delete by id), `createAlertRule` (create with stock/user lookup). Prisma 7 enum values used as string literals with `as const` (Prisma 7 does not re-export enums from `@prisma/client`). Added `ActiveAlertRule` exported type and `alertRulesBySymbol: Record<string, ActiveAlertRule[]>` to `getDashboardData()` in `dashboard.ts`; the alert rule query runs separately after the 9-element `Promise.all` to avoid TypeScript tuple inference breakage at 10+ elements. Threaded `alertRulesBySymbol` through `app/page.tsx` → `DashboardGrid` → `StockPreviewDrawer` → `CreateAlertPanel`. Added "Alert Active" amber badge to drawer header when `existingAlerts.length > 0`. Added existing alerts list inside `CreateAlertPanel` with `formatAlertType` / `formatFrequency` helpers. Added Remove from Watchlist button at the bottom of `EditWatchlistPanel` (red-tinted text, trash icon, separate `useTransition` from save). All mutations call `router.refresh()` on success to reload server data; `DashboardGrid` syncs `selectedStock` from refreshed `hotStocks` prop via `useEffect`. No new Prisma models added, no migration created — existing Phase 5 schema was sufficient. Build passes with zero TypeScript errors. `prisma validate` and `prisma migrate status` both pass clean. Approved by user.
 - Phase 7 completed (2026-05-18): Built the Scanner page foundation at `/scanner`. Created `src/lib/data/scanner.ts` with `getScannerData()` server-side loader using existing Prisma models (Stock, StockQuote, StockScore, StockDrawerDetail, WatchlistItem, AlertRule). Created `app/scanner/page.tsx` as a dynamic server component. Created 7 scanner-specific components under `src/components/scanner/`: `ScannerPageClient.tsx` (client state manager), `ScannerHeader.tsx`, `ScannerViewPills.tsx` (8 preset views: All Stocks, Hot Today, Strong Momentum, Best Opportunities, Unusual Volume, FOMO Risk, In Watchlist, Alert Active), `ScannerControls.tsx` (search input + sort dropdown + result count), `ScannerFilters.tsx` (Sector / Risk / Setup dropdowns + Watchlist / Alert Active toggles + Clear), `ScannerTable.tsx` (desktop 13-column table with hover and selected-row state), `MobileScannerCard.tsx` (mobile stock cards). Client-side filtering and sorting (Best Signal formula, Hot Score, Opp Score, Daily Change, Relative Volume, Analyst Upside, Symbol). Reused existing `StockPreviewDrawer` from the dashboard without modification — all drawer actions (Add/Edit/Remove Watchlist, Create Alert) work identically from the Scanner. Updated `AppSidebar.tsx` to use `usePathname()` and `Link` for dynamic active nav state so Scanner nav item highlights correctly. Added `showSearch` prop to `TopBar` and `ClientAppShell` (defaults `true`) and passed `showSearch={false}` from the scanner page to hide the redundant TopBar search on `/scanner`. No new Prisma models, no migration, no schema changes. No duplicate server actions. Build passes with zero TypeScript errors. `prisma validate` and `prisma migrate status` both pass clean. Approved by user.
 - Phase 8 completed (2026-05-19): Added database-backed market universe support to the Scanner. Added `StockUniverseType` enum, `StockUniverse` and `StockUniverseMember` models to `prisma/schema.prisma`; added `universeMemberships` relation on `Stock`. Applied migration `20260519115623_add_stock_universes`. Updated `prisma/seed.ts` to create/upsert three system universes (Russell 1000 as `BASE_UNIVERSE` with `isDefault=true`, S&P 500 and Nasdaq 100 as `INDEX`) and assign all 8 seeded stocks to Russell 1000 with demo sub-membership (NVDA/AMD/TSLA → S&P 500 + Nasdaq 100, PLTR → S&P 500, SMCI/SOFI/KVYO/MHNI → Russell 1000 only). Seed is fully idempotent. Updated `getScannerData()` to accept `universeSlug` param (defaults to `russell-1000`), filter stocks by universe membership, include per-stock membership slugs, and derive `isSp500`, `isNasdaq100`, `isRussell1000`, `isRussell1000Only` flags — `isRussell1000Only` is computed, not stored. Scanner page reads `?universe=<slug>` query param and passes available universes and selected slug to the client. Added Universe selector strip (Globe icon, shows base universes, highlights active). Added Index filter dropdown (All Indexes / S&P 500 / Nasdaq 100 / Russell 1000 Only) to `ScannerFilters`; clear filters resets it to All. Added compact index badge below stock name in `ScannerTable` symbol cell and in `MobileScannerCard`. Added five optional universe fields to `HotStock` type in `mock-data.ts` (no dashboard impact). No external APIs, no real index import, no scoring engine, no price-eligibility rules. All existing scanner/drawer/dashboard behavior preserved. Build passes with zero TypeScript errors. `prisma validate` and `prisma migrate status` both pass clean. Seed idempotency verified by running twice. Approved by user.
-- Phase 9C completed (2026-05-19): Added safe quote sync metadata, API key validation, and detailed sync reporting. Added `source`, `lastSyncedAt`, `sourceUpdatedAt` fields to `StockQuote` via migration `20260519144031_add_stock_quote_sync_metadata`. Created `src/lib/market-data/safe-update.ts` with `isValidNumber`, `keepExistingIfInvalid` helpers. Updated `src/lib/market-data/types.ts` with `SyncRunStatus`, `SyncSymbolResult`, `SyncActionResult` types replacing the coarse `SyncSummary`. Rewrote `src/actions/market-data-actions.ts` to use safe helpers and return per-symbol success/skipped/failed breakdown; each symbol update is atomic (partial success preserved). Rewrote `src/components/admin/SyncPageClient.tsx` with 4-step workflow layout, button descriptions, DB safety note, empty result placeholder, and clear updated/skipped/failed symbol lists. Added `Admin Sync` nav item to `AppSidebar.tsx` behind `NEXT_PUBLIC_SHOW_ADMIN_TOOLS=true` flag with amber DEV badge and active state. Fixed FMP provider: all `/api/v3/` legacy endpoints return HTTP 403 for non-legacy users (deprecated after August 31, 2025) — replaced with `/stable/profile?symbol=` and `/stable/analyst-estimates?symbol=&period=annual&limit=1`; fixed field mappings (`marketCap` not `mktCap`, `exchange` not `exchangeShortName`). Build passes, `prisma validate` and `prisma migrate status` both clean. QA confirmed: Twelve Data quote sync OK, FMP profile sync OK (all 5 symbols), Finnhub news test OK, partial-success simulation OK, no duplicate rows, no API key exposure, dashboard/scanner/drawer regression clean. Approved by user.
 - Phase 9B completed (2026-05-19): Built the market data provider layer and admin manual sync shell. Created shared provider types in `src/lib/market-data/types.ts` (`MarketDataProvider`, `ProviderTestResult`, `NormalizedQuote`, `NormalizedCompanyProfile`, `NormalizedNewsItem`, `SyncSummary`). Created three server-side-only provider clients: `providers/fmp.ts` (`testFmpProfile`, `fetchFmpCompanyProfile`, `fetchFmpAnalystTarget`), `providers/twelve-data.ts` (`testTwelveQuote`, `fetchTwelveQuote`, `fetchTwelveQuotes` batch), `providers/finnhub.ts` (`testFinnhubNews`, `fetchFinnhubCompanyNews`, `fetchFinnhubQuote`). All providers check for missing API key, handle HTTP errors, handle rate limits (429), normalize response shapes, and never expose keys. Created `src/actions/market-data-actions.ts` with five server actions: `testFmpProfileAction`, `testTwelveQuoteAction`, `testFinnhubNewsAction`, `syncQuotesSampleAction` (upserts `StockQuote` for up to 5 DB symbols via Twelve Data), `syncProfilesSampleAction` (updates `Stock.name/sector/marketCap` for up to 5 DB symbols via FMP). Raw provider response bodies stripped from action returns via `stripRaw()` before client serialization. Created `app/admin/sync/page.tsx` (server component, resolves key presence server-side) and `src/components/admin/SyncPageClient.tsx` (client, all 5 action buttons with loading states and result viewer). No schema changes, no new migrations, no existing files modified. `StockQuote.source` and `StockQuote.lastSyncedAt` intentionally not added — noted as a gap for Phase 9D. Build passes, `prisma validate` and `prisma migrate status` both clean. Approved by user.
+- Phase 9C completed (2026-05-19): Added safe quote sync metadata, API key validation, and detailed sync reporting. Added `source`, `lastSyncedAt`, `sourceUpdatedAt` fields to `StockQuote` via migration `20260519144031_add_stock_quote_sync_metadata`. Created `src/lib/market-data/safe-update.ts` with `isValidNumber`, `keepExistingIfInvalid` helpers. Updated `src/lib/market-data/types.ts` with `SyncRunStatus`, `SyncSymbolResult`, `SyncActionResult` types replacing the coarse `SyncSummary`. Rewrote `src/actions/market-data-actions.ts` to use safe helpers and return per-symbol success/skipped/failed breakdown; each symbol update is atomic (partial success preserved). Rewrote `src/components/admin/SyncPageClient.tsx` with 4-step workflow layout, button descriptions, DB safety note, empty result placeholder, and clear updated/skipped/failed symbol lists. Added `Admin Sync` nav item to `AppSidebar.tsx` behind `NEXT_PUBLIC_SHOW_ADMIN_TOOLS=true` flag with amber DEV badge and active state. Fixed FMP provider: all `/api/v3/` legacy endpoints return HTTP 403 for non-legacy users (deprecated after August 31, 2025) — replaced with `/stable/profile?symbol=` and `/stable/analyst-estimates?symbol=&period=annual&limit=1`; fixed field mappings (`marketCap` not `mktCap`, `exchange` not `exchangeShortName`). Build passes, `prisma validate` and `prisma migrate status` both clean. QA confirmed: Twelve Data quote sync OK, FMP profile sync OK (all 5 symbols), Finnhub news test OK, partial-success simulation OK, no duplicate rows, no API key exposure, dashboard/scanner/drawer regression clean. Approved by user.
+- Phase 9D completed (2026-05-19): Added persistent sync logging for manual market-data sync actions. Added `SyncRun` and `SyncRunItem` Prisma models via migration `20260519191321_add_sync_run_logs`. Created `src/lib/data/admin-sync.ts` with `getRecentSyncRuns(limit = 10)` server loader. Updated `src/actions/market-data-actions.ts` with `persistSyncLog()` helper; both `syncQuotesSampleAction` and `syncProfilesSampleAction` now persist a `SyncRun` + per-symbol `SyncRunItem` rows on every run (including early-failure paths). Updated `src/components/admin/SyncPageClient.tsx`: renamed Step 4 to "Review Results", added Step 5 "Recent Sync Runs" — a table showing the latest 10 runs with green/amber/red status badges, counts, and click-to-expand symbol-level details (symbol, status, reason, dbAction). Updated `app/admin/sync/page.tsx` to load recent sync runs server-side and pass serialised to the client; `router.refresh()` called after each sync to keep the table current. Cascade delete on SyncRunItem. No API keys, URLs, or raw provider payloads stored. Safe update behavior unchanged. Build passes, `prisma validate` and `prisma migrate status` both clean. Full QA passed: schema verified, persist logic audited on all code paths, security confirmed, no regressions. Approved by user.

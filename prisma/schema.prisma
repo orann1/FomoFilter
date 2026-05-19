@@ -292,3 +292,42 @@ model RecentAlert {
   icon       String
   createdAt  DateTime @default(now())
 }
+
+model SyncRun {
+  id             String        @id @default(cuid())
+  type           String
+  provider       String
+  status         String
+  requestedCount Int
+  successCount   Int
+  skippedCount   Int
+  failedCount    Int
+  persisted      Boolean       @default(false)
+  message        String?
+  startedAt      DateTime
+  finishedAt     DateTime?
+  durationMs     Int?
+  createdAt      DateTime      @default(now())
+  items          SyncRunItem[]
+
+  @@index([type])
+  @@index([provider])
+  @@index([status])
+  @@index([startedAt])
+}
+
+model SyncRunItem {
+  id        String   @id @default(cuid())
+  syncRunId String
+  syncRun   SyncRun  @relation(fields: [syncRunId], references: [id], onDelete: Cascade)
+
+  symbol    String
+  status    String
+  reason    String?
+  dbAction  String
+  createdAt DateTime @default(now())
+
+  @@index([syncRunId])
+  @@index([symbol])
+  @@index([status])
+}
