@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   testFmpProfileAction,
   testTwelveQuoteAction,
@@ -24,7 +25,39 @@ import {
   Info,
   ShieldAlert,
   ArrowRight,
+  ChevronDown,
+  ChevronRight,
+  Clock,
 } from "lucide-react";
+
+// ── Serialised types from the server ─────────────────────────────────────────
+
+interface SyncRunItemData {
+  id: string;
+  symbol: string;
+  status: string;
+  reason: string | null;
+  dbAction: string;
+  createdAt: string;
+}
+
+interface SyncRunData {
+  id: string;
+  type: string;
+  provider: string;
+  status: string;
+  requestedCount: number;
+  successCount: number;
+  skippedCount: number;
+  failedCount: number;
+  persisted: boolean;
+  message: string | null;
+  startedAt: string;
+  finishedAt: string | null;
+  durationMs: number | null;
+  createdAt: string;
+  items: SyncRunItemData[];
+}
 
 interface ProviderStatus {
   fmp: boolean;
@@ -34,6 +67,7 @@ interface ProviderStatus {
 
 interface SyncPageClientProps {
   providerStatus: ProviderStatus;
+  recentSyncRuns: SyncRunData[];
 }
 
 type LastResult =
@@ -57,7 +91,32 @@ function StatusBadge({ configured }: { configured: boolean }) {
   );
 }
 
-function SyncStatusBadge({ status }: { status: SyncRunStatus }) {
+function SyncStatusBadge({ status }: { status: SyncRunStatus | string }) {
+  if (status === "success") {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-400 bg-emerald-900/30 border border-emerald-800/50 px-2 py-0.5 rounded">
+        <CheckCircle className="w-3 h-3" />
+        Success
+      </span>
+    );
+  }
+  if (status === "partial_success") {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-400 bg-amber-900/30 border border-amber-800/50 px-2 py-0.5 rounded">
+        <AlertTriangle className="w-3 h-3" />
+        Partial
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-red-400 bg-red-900/30 border border-red-800/50 px-2 py-0.5 rounded">
+      <XCircle className="w-3 h-3" />
+      Failed
+    </span>
+  );
+}
+
+function InlineSyncStatusBadge({ status }: { status: SyncRunStatus }) {
   if (status === "success") {
     return (
       <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-emerald-400">
@@ -130,7 +189,7 @@ function SyncResultViewer({ result }: { result: SyncActionResult }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-4">
-        <SyncStatusBadge status={result.status} />
+        <InlineSyncStatusBadge status={result.status} />
         <span className="text-xs text-slate-400">{result.message}</span>
       </div>
 
@@ -239,9 +298,152 @@ function TestResultViewer({ result }: { result: ProviderTestResult }) {
   );
 }
 
+// ── Recent Sync Runs ──────────────────────────────────────────────────────────
+
+function ItemStatusIcon({ status }: { status: string }) {
+  if (status === "success") return <CheckCircle className="w-3 h-3 text-emerald-400 shrink-0" />;
+  if (status === "skipped") return <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />;
+  return <XCircle className="w-3 h-3 text-red-400 shrink-0" />;
+}
+
+function dbActionLabel(action: string): string {
+  if (action === "updated") return "updated";
+  if (action === "kept_existing") return "kept existing";
+  if (action === "not_found") return "not found";
+  return action;
+}
+
+function SyncRunRow({ run }: { run: SyncRunData }) {
+  const [expanded, setExpanded] = useState(false);
+  const startedDate = new Date(run.startedAt);
+
+  return (
+    <>
+      <tr
+        className="border-b border-slate-700/50 hover:bg-slate-800/40 cursor-pointer"
+        onClick={() => setExpanded((v) => !v)}
+      >
+        <td className="px-3 py-2.5 text-xs text-slate-400 whitespace-nowrap">
+          <span className="inline-flex items-center gap-1.5">
+            <Clock className="w-3 h-3 shrink-0" />
+            {startedDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            <span className="text-slate-600 text-[10px]">
+              {startedDate.toLocaleDateString([], { month: "short", day: "numeric" })}
+            </span>
+          </span>
+        </td>
+        <td className="px-3 py-2.5 text-xs font-mono text-slate-300">{run.type}</td>
+        <td className="px-3 py-2.5 text-xs text-slate-400">{run.provider}</td>
+        <td className="px-3 py-2.5">
+          <SyncStatusBadge status={run.status} />
+        </td>
+        <td className="px-3 py-2.5 text-xs text-slate-300 text-right">{run.requestedCount}</td>
+        <td className="px-3 py-2.5 text-xs text-emerald-400 text-right">{run.successCount}</td>
+        <td className="px-3 py-2.5 text-xs text-amber-400 text-right">{run.skippedCount}</td>
+        <td className="px-3 py-2.5 text-xs text-red-400 text-right">{run.failedCount}</td>
+        <td className="px-3 py-2.5 text-xs text-center">
+          {run.persisted ? (
+            <span className="text-emerald-400">Yes</span>
+          ) : (
+            <span className="text-slate-600">No</span>
+          )}
+        </td>
+        <td className="px-3 py-2.5 text-slate-500">
+          {expanded ? (
+            <ChevronDown className="w-3.5 h-3.5" />
+          ) : (
+            <ChevronRight className="w-3.5 h-3.5" />
+          )}
+        </td>
+      </tr>
+      {expanded && run.items.length > 0 && (
+        <tr className="border-b border-slate-700/30 bg-slate-900/40">
+          <td colSpan={10} className="px-4 py-3">
+            <div className="space-y-1">
+              {run.items.map((item) => (
+                <div key={item.id} className="flex items-start gap-2 text-xs">
+                  <ItemStatusIcon status={item.status} />
+                  <span className="font-mono font-semibold text-slate-200 w-14 shrink-0">
+                    {item.symbol}
+                  </span>
+                  <span
+                    className={
+                      item.status === "success"
+                        ? "text-emerald-400"
+                        : item.status === "skipped"
+                        ? "text-amber-400"
+                        : "text-red-400"
+                    }
+                  >
+                    {item.status}
+                  </span>
+                  {item.reason && (
+                    <span className="text-slate-500">— {item.reason}</span>
+                  )}
+                  <span className="ml-auto text-slate-600 shrink-0">
+                    {dbActionLabel(item.dbAction)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </td>
+        </tr>
+      )}
+      {expanded && run.items.length === 0 && (
+        <tr className="border-b border-slate-700/30 bg-slate-900/40">
+          <td colSpan={10} className="px-4 py-3 text-xs text-slate-600">
+            No symbol-level items recorded.
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+function RecentSyncRunsTable({ runs }: { runs: SyncRunData[] }) {
+  if (runs.length === 0) {
+    return (
+      <div className="flex items-start gap-2.5 text-slate-500">
+        <Info className="w-4 h-4 shrink-0 mt-0.5" />
+        <p className="text-sm leading-relaxed">
+          No sync runs yet. Run a sample sync above to see history here.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left min-w-[700px]">
+        <thead>
+          <tr className="border-b border-slate-700">
+            {["Time", "Type", "Provider", "Status", "Req", "Updated", "Skipped", "Failed", "Persisted", ""].map(
+              (h) => (
+                <th
+                  key={h}
+                  className="px-3 pb-2 text-[10px] font-semibold uppercase tracking-wider text-slate-500"
+                >
+                  {h}
+                </th>
+              )
+            )}
+          </tr>
+        </thead>
+        <tbody>
+          {runs.map((run) => (
+            <SyncRunRow key={run.id} run={run} />
+          ))}
+        </tbody>
+      </table>
+      <p className="mt-2 text-[10px] text-slate-600">Click a row to expand symbol-level details.</p>
+    </div>
+  );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function SyncPageClient({ providerStatus }: SyncPageClientProps) {
+export default function SyncPageClient({ providerStatus, recentSyncRuns }: SyncPageClientProps) {
+  const router = useRouter();
   const [lastResult, setLastResult] = useState<LastResult>(null);
   const [activeAction, setActiveAction] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -261,6 +463,7 @@ export default function SyncPageClient({ providerStatus }: SyncPageClientProps) 
       const result = await fn();
       setLastResult({ kind: "sync", result });
       setActiveAction(null);
+      router.refresh();
     });
   }
 
@@ -296,6 +499,7 @@ export default function SyncPageClient({ providerStatus }: SyncPageClientProps) 
             "2 — Test Providers",
             "3 — Run Sample Sync",
             "4 — Review Results",
+            "5 — Sync History",
           ].map((step, i, arr) => (
             <span key={step} className="flex items-center gap-1.5">
               <span className="text-slate-200 font-medium">{step}</span>
@@ -442,10 +646,10 @@ FINNHUB_API_KEY=`}
         </div>
       </section>
 
-      {/* ── Step 4: Results ───────────────────────────────────────────────── */}
+      {/* ── Step 4: Review Results ────────────────────────────────────────── */}
       <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
         <h2 className="text-sm font-semibold text-slate-200 mb-3">
-          Step 4 — Last Result
+          Step 4 — Review Results
         </h2>
         {lastResult === null ? (
           <div className="flex items-start gap-2.5 text-slate-500">
@@ -460,6 +664,15 @@ FINNHUB_API_KEY=`}
           <TestResultViewer result={lastResult.result} />
         )}
       </section>
+
+      {/* ── Step 5: Recent Sync Runs ──────────────────────────────────────── */}
+      <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+        <h2 className="text-sm font-semibold text-slate-200 mb-3">
+          Step 5 — Recent Sync Runs
+        </h2>
+        <RecentSyncRunsTable runs={recentSyncRuns} />
+      </section>
+
     </div>
   );
 }
