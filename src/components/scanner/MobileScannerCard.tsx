@@ -41,6 +41,17 @@ export default function MobileScannerCard({
             )}
           </div>
           <p className="text-xs text-slate-500 truncate">{stock.name}</p>
+          {(stock.isSp500 || stock.isNasdaq100 || stock.isRussell1000Only) && (
+            <p className="text-[10px] text-blue-400/70 font-medium mt-0.5">
+              {stock.isSp500 && stock.isNasdaq100
+                ? "S&P 500 · NDX"
+                : stock.isSp500
+                ? "S&P 500"
+                : stock.isNasdaq100
+                ? "Nasdaq 100"
+                : "R1000 Only"}
+            </p>
+          )}
         </div>
         <div className="text-right shrink-0 ml-3">
           <p className="text-white font-semibold tabular-nums">{formatCurrency(stock.price)}</p>

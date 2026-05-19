@@ -673,6 +673,88 @@ async function main() {
   });
   console.log("Seeded recent alerts");
 
+  // ── Stock Universes ──────────────────────────────────────────────────────────
+  const russell1000 = await prisma.stockUniverse.upsert({
+    where: { slug: "russell-1000" },
+    update: {},
+    create: {
+      name: "Russell 1000",
+      slug: "russell-1000",
+      description: "Large and mid-cap US-listed stocks — base scanning universe",
+      type: "BASE_UNIVERSE",
+      isDefault: true,
+      isSystem: true,
+    },
+  });
+
+  const sp500 = await prisma.stockUniverse.upsert({
+    where: { slug: "sp-500" },
+    update: {},
+    create: {
+      name: "S&P 500",
+      slug: "sp-500",
+      description: "S&P 500 index members",
+      type: "INDEX",
+      isDefault: false,
+      isSystem: true,
+    },
+  });
+
+  const nasdaq100 = await prisma.stockUniverse.upsert({
+    where: { slug: "nasdaq-100" },
+    update: {},
+    create: {
+      name: "Nasdaq 100",
+      slug: "nasdaq-100",
+      description: "Nasdaq 100 index members",
+      type: "INDEX",
+      isDefault: false,
+      isSystem: true,
+    },
+  });
+  console.log("Seeded stock universes");
+
+  // ── Universe Memberships ─────────────────────────────────────────────────────
+  // All seeded stocks → Russell 1000 (demo only, not authoritative market data)
+  // Demo index membership: NVDA, AMD, TSLA → R1000 + S&P 500 + Nasdaq 100
+  //                        PLTR → R1000 + S&P 500
+  //                        SMCI, SOFI, KVYO, MHNI → R1000 only
+
+  const allSeededSymbols = ["NVDA", "SMCI", "PLTR", "TSLA", "AMD", "SOFI", "KVYO", "MHNI"];
+  const sp500Symbols = new Set(["NVDA", "AMD", "TSLA", "PLTR"]);
+  const nasdaq100Symbols = new Set(["NVDA", "AMD", "TSLA"]);
+
+  for (const symbol of allSeededSymbols) {
+    const stock = await prisma.stock.findUnique({ where: { symbol } });
+    if (!stock) continue;
+
+    // Russell 1000 — all seeded stocks
+    await prisma.stockUniverseMember.upsert({
+      where: { stockId_universeId: { stockId: stock.id, universeId: russell1000.id } },
+      update: {},
+      create: { stockId: stock.id, universeId: russell1000.id },
+    });
+
+    // S&P 500 — demo subset
+    if (sp500Symbols.has(symbol)) {
+      await prisma.stockUniverseMember.upsert({
+        where: { stockId_universeId: { stockId: stock.id, universeId: sp500.id } },
+        update: {},
+        create: { stockId: stock.id, universeId: sp500.id },
+      });
+    }
+
+    // Nasdaq 100 — demo subset
+    if (nasdaq100Symbols.has(symbol)) {
+      await prisma.stockUniverseMember.upsert({
+        where: { stockId_universeId: { stockId: stock.id, universeId: nasdaq100.id } },
+        update: {},
+        create: { stockId: stock.id, universeId: nasdaq100.id },
+      });
+    }
+  }
+  console.log("Seeded universe memberships");
+
   console.log("Database seeded successfully.");
 }
 

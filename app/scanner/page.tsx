@@ -4,8 +4,15 @@ import ClientAppShell from "@/src/components/layout/ClientAppShell";
 import { getScannerData } from "@/src/lib/data/scanner";
 import ScannerPageClient from "@/src/components/scanner/ScannerPageClient";
 
-export default async function ScannerPage() {
-  const data = await getScannerData();
+interface ScannerPageProps {
+  searchParams: Promise<{ universe?: string }>;
+}
+
+export default async function ScannerPage({ searchParams }: ScannerPageProps) {
+  const params = await searchParams;
+  const universeSlug = params.universe ?? "russell-1000";
+
+  const data = await getScannerData({ universeSlug });
 
   return (
     <ClientAppShell user={data.user} showSearch={false}>
@@ -14,6 +21,8 @@ export default async function ScannerPage() {
         watchlistItems={data.watchlistItems}
         stockDrawerDetails={data.stockDrawerDetails}
         alertRulesBySymbol={data.alertRulesBySymbol}
+        universes={data.universes}
+        selectedUniverseSlug={data.selectedUniverseSlug}
       />
     </ClientAppShell>
   );

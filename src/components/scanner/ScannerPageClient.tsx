@@ -1,17 +1,19 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import type { HotStock, WatchlistItem, StockDrawerDetail } from "@/src/lib/mock-data";
 import type { LocalWatchlistEntry } from "@/src/types/drawer";
 import type { ActiveAlertRule } from "@/src/lib/data/dashboard";
+import type { ScannerUniverse } from "@/src/lib/data/scanner";
 import StockPreviewDrawer from "@/src/components/dashboard/StockPreviewDrawer";
 import ScannerHeader from "./ScannerHeader";
 import ScannerViewPills, { type ScannerView } from "./ScannerViewPills";
 import ScannerControls, { type SortKey } from "./ScannerControls";
-import ScannerFilters, { type ScannerFilterState } from "./ScannerFilters";
+import ScannerFilters, { type ScannerFilterState, type IndexFilter } from "./ScannerFilters";
 import ScannerTable from "./ScannerTable";
 import MobileScannerCard from "./MobileScannerCard";
-import { Radar } from "lucide-react";
+import { Radar, Globe } from "lucide-react";
 
 const CLOSE_ANIMATION_MS = 300;
 
@@ -19,6 +21,7 @@ const DEFAULT_FILTERS: ScannerFilterState = {
   sector: "all",
   risk: "all",
   setup: "all",
+  indexFilter: "all",
   watchlistOnly: false,
   alertActiveOnly: false,
 };
@@ -60,6 +63,19 @@ function sortStocks(stocks: HotStock[], sortBy: SortKey): HotStock[] {
   }
 }
 
+function applyIndexFilter(stocks: HotStock[], indexFilter: IndexFilter): HotStock[] {
+  switch (indexFilter) {
+    case "sp-500":
+      return stocks.filter((s) => s.isSp500);
+    case "nasdaq-100":
+      return stocks.filter((s) => s.isNasdaq100);
+    case "russell-1000-only":
+      return stocks.filter((s) => s.isRussell1000Only);
+    default:
+      return stocks;
+  }
+}
+
 function applyViewFilter(
   stocks: HotStock[],
   alertRulesBySymbol: Record<string, ActiveAlertRule[]>,
@@ -97,6 +113,8 @@ interface ScannerPageClientProps {
   watchlistItems: WatchlistItem[];
   stockDrawerDetails: Record<string, StockDrawerDetail>;
   alertRulesBySymbol: Record<string, ActiveAlertRule[]>;
+  universes: ScannerUniverse[];
+  selectedUniverseSlug: string;
 }
 
 export default function ScannerPageClient({
@@ -104,7 +122,11 @@ export default function ScannerPageClient({
   watchlistItems,
   stockDrawerDetails,
   alertRulesBySymbol,
+  universes,
+  selectedUniverseSlug,
 }: ScannerPageClientProps) {
+  const router = useRouter();
+
   // Drawer state
   const [selectedStock, setSelectedStock] = useState<HotStock | null>(null);
   const [isDrawerClosing, setIsDrawerClosing] = useState(false);
@@ -115,6 +137,7 @@ export default function ScannerPageClient({
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<SortKey>("best-signal");
   const [filters, setFilters] = useState<ScannerFilterState>(DEFAULT_FILTERS);
+  const [universeSlug, setUniverseSlug] = useState(selectedUniverseSlug);
 
   // Sync selected stock after router.refresh()
   useEffect(() => {
@@ -123,6 +146,12 @@ export default function ScannerPageClient({
       if (updated) setSelectedStock(updated);
     }
   }, [stocks]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When universe changes, reload via URL search param
+  function handleUniverseChange(slug: string) {
+    setUniverseSlug(slug);
+    router.push(`/scanner?universe=${slug}`);
+  }
 
   // Derive available filter options from data
   const availableSectors = useMemo(() => {
@@ -147,37 +176,39 @@ export default function ScannerPageClient({
       );
     }
 
-    // 2. Sector filter
+    // 2. Index filter
+    result = applyIndexFilter(result, filters.indexFilter);
+
+    // 3. Sector filter
     if (filters.sector !== "all") {
       result = result.filter((s) => s.sector === filters.sector);
     }
 
-    // 3. Risk filter
+    // 4. Risk filter
     if (filters.risk !== "all") {
       result = result.filter((s) => s.risk === filters.risk);
     }
 
-    // 4. Setup filter
+    // 5. Setup filter
     if (filters.setup !== "all") {
       result = result.filter((s) => s.setup === filters.setup);
     }
 
-    // 5. Watchlist only
+    // 6. Watchlist only
     if (filters.watchlistOnly) {
       result = result.filter((s) => s.inWatchlist);
     }
 
-    // 6. Alert active only
+    // 7. Alert active only
     if (filters.alertActiveOnly) {
       result = result.filter((s) => (alertRulesBySymbol[s.symbol]?.length ?? 0) > 0);
     }
 
-    // 7. View filter
+    // 8. View filter
     result = applyViewFilter(result, alertRulesBySymbol, activeView);
 
-    // 8. Sort — view's default sort unless user has selected one
-    const effectiveSort = sortBy;
-    result = sortStocks(result, effectiveSort);
+    // 9. Sort
+    result = sortStocks(result, sortBy);
 
     return result;
   }, [stocks, search, filters, activeView, sortBy, alertRulesBySymbol]);
@@ -227,9 +258,38 @@ export default function ScannerPageClient({
     ? localWatchlistEntries[selectedStock.symbol]
     : undefined;
 
+  // Base universe options (only BASE_UNIVERSE type)
+  const baseUniverses = universes.filter((u) => u.type === "BASE_UNIVERSE");
+
   return (
     <div>
       <ScannerHeader />
+
+      {/* Universe selector */}
+      {baseUniverses.length > 0 && (
+        <div className="flex items-center gap-2 mb-4">
+          <div className="flex items-center gap-1.5 text-slate-500">
+            <Globe size={13} />
+            <span className="text-xs font-medium">Universe:</span>
+          </div>
+          <div className="flex gap-1.5">
+            {baseUniverses.map((u) => (
+              <button
+                key={u.slug}
+                onClick={() => handleUniverseChange(u.slug)}
+                className={`px-3 py-1.5 rounded-lg text-xs border transition-colors ${
+                  universeSlug === u.slug
+                    ? "bg-emerald-500/10 border-emerald-600/50 text-emerald-300 font-medium"
+                    : "bg-slate-800/60 border-slate-700/60 text-slate-400 hover:text-slate-300"
+                }`}
+              >
+                {u.name}
+              </button>
+            ))}
+          </div>
+          <span className="text-xs text-slate-600 ml-1">{stocks.length} stocks</span>
+        </div>
+      )}
 
       <ScannerViewPills activeView={activeView} onViewChange={handleViewChange} />
 
