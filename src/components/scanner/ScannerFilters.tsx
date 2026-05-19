@@ -1,10 +1,12 @@
 import { SlidersHorizontal, Star, Bell, X } from "lucide-react";
-import type { RiskLevel } from "@/src/lib/mock-data";
+
+export type IndexFilter = "all" | "sp-500" | "nasdaq-100" | "russell-1000-only";
 
 export type ScannerFilterState = {
   sector: string;
   risk: string;
   setup: string;
+  indexFilter: IndexFilter;
   watchlistOnly: boolean;
   alertActiveOnly: boolean;
 };
@@ -24,18 +26,19 @@ const riskOptions: { value: string; label: string }[] = [
   { value: "EXTREME", label: "Extreme" },
 ];
 
-const riskColors: Record<string, string> = {
-  LOW: "text-emerald-400",
-  MEDIUM: "text-amber-400",
-  HIGH: "text-orange-400",
-  EXTREME: "text-red-400",
-};
+const indexOptions: { value: IndexFilter; label: string }[] = [
+  { value: "all", label: "All Indexes" },
+  { value: "sp-500", label: "S&P 500" },
+  { value: "nasdaq-100", label: "Nasdaq 100" },
+  { value: "russell-1000-only", label: "Russell 1000 Only" },
+];
 
 export function hasActiveFilters(filters: ScannerFilterState): boolean {
   return (
     filters.sector !== "all" ||
     filters.risk !== "all" ||
     filters.setup !== "all" ||
+    filters.indexFilter !== "all" ||
     filters.watchlistOnly ||
     filters.alertActiveOnly
   );
@@ -59,6 +62,21 @@ export default function ScannerFilters({
         <SlidersHorizontal size={13} />
         <span className="text-xs font-medium">Filters:</span>
       </div>
+
+      {/* Index filter */}
+      <select
+        value={filters.indexFilter}
+        onChange={(e) => update({ indexFilter: e.target.value as IndexFilter })}
+        className={`bg-slate-800/60 border rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-emerald-600/60 transition-colors cursor-pointer ${
+          filters.indexFilter !== "all"
+            ? "border-emerald-600/50 text-emerald-300"
+            : "border-slate-700/60 text-slate-400"
+        }`}
+      >
+        {indexOptions.map((opt) => (
+          <option key={opt.value} value={opt.value}>{opt.label}</option>
+        ))}
+      </select>
 
       {/* Sector */}
       <select
@@ -141,6 +159,7 @@ export default function ScannerFilters({
               sector: "all",
               risk: "all",
               setup: "all",
+              indexFilter: "all",
               watchlistOnly: false,
               alertActiveOnly: false,
             })

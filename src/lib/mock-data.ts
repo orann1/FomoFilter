@@ -49,6 +49,11 @@ export type HotStock = {
   analystUpside: number;
   analystRating: string;
   marketCap: string;
+  universeSlugs?: string[];
+  isSp500?: boolean;
+  isNasdaq100?: boolean;
+  isRussell1000?: boolean;
+  isRussell1000Only?: boolean;
 };
 
 export const mockHotStocks: HotStock[] = [

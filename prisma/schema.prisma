@@ -25,20 +25,58 @@ enum Plan {
 }
 
 model Stock {
-  id             String             @id @default(cuid())
-  symbol         String             @unique
-  name           String
-  sector         String?
-  marketCap      String?
-  isActive       Boolean            @default(true)
-  createdAt      DateTime           @default(now())
-  updatedAt      DateTime           @updatedAt
+  id                  String             @id @default(cuid())
+  symbol              String             @unique
+  name                String
+  sector              String?
+  marketCap           String?
+  isActive            Boolean            @default(true)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
 
-  quote          StockQuote?
-  score          StockScore?
-  drawerDetail   StockDrawerDetail?
-  watchlistItems WatchlistItem[]
-  alertRules     AlertRule[]
+  quote               StockQuote?
+  score               StockScore?
+  drawerDetail        StockDrawerDetail?
+  watchlistItems      WatchlistItem[]
+  alertRules          AlertRule[]
+  universeMemberships StockUniverseMember[]
+}
+
+enum StockUniverseType {
+  BASE_UNIVERSE
+  INDEX
+  THEME
+  CUSTOM
+}
+
+model StockUniverse {
+  id          String            @id @default(cuid())
+  name        String
+  slug        String            @unique
+  description String?
+  type        StockUniverseType
+  isDefault   Boolean           @default(false)
+  isSystem    Boolean           @default(true)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  members     StockUniverseMember[]
+
+  @@index([type])
+  @@index([isDefault])
+}
+
+model StockUniverseMember {
+  stockId    String
+  universeId String
+  addedAt    DateTime @default(now())
+
+  stock      Stock         @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  universe   StockUniverse @relation(fields: [universeId], references: [id], onDelete: Cascade)
+
+  @@id([stockId, universeId])
+  @@index([universeId])
+  @@index([stockId])
 }
 
 model StockQuote {

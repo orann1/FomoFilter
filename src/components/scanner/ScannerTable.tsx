@@ -84,11 +84,20 @@ export default function ScannerTable({
                   )}
                 </td>
 
-                {/* Symbol + name */}
+                {/* Symbol + name + index badge */}
                 <td className="px-3 py-3">
                   <div>
                     <span className="text-white font-semibold">{stock.symbol}</span>
                     <p className="text-xs text-slate-500 truncate max-w-[140px]">{stock.name}</p>
+                    {stock.isSp500 && stock.isNasdaq100 ? (
+                      <span className="text-[10px] text-blue-400/70 font-medium">S&P 500 · NDX</span>
+                    ) : stock.isSp500 ? (
+                      <span className="text-[10px] text-blue-400/70 font-medium">S&P 500</span>
+                    ) : stock.isNasdaq100 ? (
+                      <span className="text-[10px] text-blue-400/70 font-medium">Nasdaq 100</span>
+                    ) : stock.isRussell1000Only ? (
+                      <span className="text-[10px] text-slate-600 font-medium">R1000 Only</span>
+                    ) : null}
                   </div>
                 </td>
 

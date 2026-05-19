@@ -2,27 +2,63 @@ import { prisma } from "@/src/lib/db/prisma";
 import type { HotStock, WatchlistItem, StockDrawerDetail, RiskLevel } from "@/src/lib/mock-data";
 import type { DashboardUser, ActiveAlertRule } from "@/src/lib/data/dashboard";
 
+export type ScannerUniverse = {
+  name: string;
+  slug: string;
+  type: string;
+  isDefault: boolean;
+};
+
 export type ScannerData = {
   user: DashboardUser;
   stocks: HotStock[];
   watchlistItems: WatchlistItem[];
   stockDrawerDetails: Record<string, StockDrawerDetail>;
   alertRulesBySymbol: Record<string, ActiveAlertRule[]>;
+  universes: ScannerUniverse[];
+  selectedUniverseSlug: string;
 };
 
-export async function getScannerData(): Promise<ScannerData> {
-  const [dbUser, dbStocks, dbWatchlistItems] = await Promise.all([
+interface GetScannerDataParams {
+  universeSlug?: string;
+}
+
+export async function getScannerData({
+  universeSlug = "russell-1000",
+}: GetScannerDataParams = {}): Promise<ScannerData> {
+  const [dbUser, dbUniverses, dbWatchlistItems] = await Promise.all([
     prisma.user.findFirst({ orderBy: { createdAt: "asc" } }),
-    prisma.stock.findMany({
-      where: { isActive: true, quote: { isNot: null }, score: { isNot: null } },
-      include: { quote: true, score: true, drawerDetail: true },
-      orderBy: { score: { hotScore: "desc" } },
-    }),
+    prisma.stockUniverse.findMany({ orderBy: [{ isDefault: "desc" }, { name: "asc" }] }),
     prisma.watchlistItem.findMany({
       include: { stock: { include: { quote: true, score: true } } },
       orderBy: { createdAt: "asc" },
     }),
   ]);
+
+  // Resolve the selected universe
+  const selectedUniverse =
+    dbUniverses.find((u) => u.slug === universeSlug) ??
+    dbUniverses.find((u) => u.isDefault) ??
+    dbUniverses[0] ??
+    null;
+
+  const dbStocks = await prisma.stock.findMany({
+    where: {
+      isActive: true,
+      quote: { isNot: null },
+      score: { isNot: null },
+      ...(selectedUniverse
+        ? { universeMemberships: { some: { universeId: selectedUniverse.id } } }
+        : {}),
+    },
+    include: {
+      quote: true,
+      score: true,
+      drawerDetail: true,
+      universeMemberships: { include: { universe: { select: { slug: true } } } },
+    },
+    orderBy: { score: { hotScore: "desc" } },
+  });
 
   const dbAlertRules = await prisma.alertRule.findMany({
     where: { isActive: true },
@@ -39,29 +75,49 @@ export async function getScannerData(): Promise<ScannerData> {
 
   const watchlistStockIds = new Set(dbWatchlistItems.map((w) => w.stockId));
 
+  const universes: ScannerUniverse[] = dbUniverses.map((u) => ({
+    name: u.name,
+    slug: u.slug,
+    type: u.type,
+    isDefault: u.isDefault,
+  }));
+
   const stocks: HotStock[] = dbStocks
     .filter((s) => s.quote && s.score)
-    .map((s) => ({
-      symbol: s.symbol,
-      name: s.name,
-      price: Number(s.quote!.price),
-      change: Number(s.quote!.changePercent),
-      setup: s.score!.setupStatus,
-      hot: s.score!.hotScore,
-      opp: s.score!.opportunityScore,
-      risk: s.score!.riskLevel as RiskLevel,
-      catalyst: s.score!.catalyst,
-      inWatchlist: watchlistStockIds.has(s.id),
-      sector: s.sector ?? "",
-      weekChange: Number(s.quote!.weekChange),
-      monthChange: Number(s.quote!.monthChange),
-      volume: s.quote!.volume ?? "",
-      relativeVolume: Number(s.quote!.relativeVolume ?? 0),
-      analystTarget: Number(s.quote!.analystTarget ?? 0),
-      analystUpside: Number(s.quote!.analystUpside ?? 0),
-      analystRating: s.quote!.analystRating ?? "",
-      marketCap: String(s.marketCap ?? ""),
-    }));
+    .map((s) => {
+      const slugs = s.universeMemberships.map((m) => m.universe.slug);
+      const isSp500 = slugs.includes("sp-500");
+      const isNasdaq100 = slugs.includes("nasdaq-100");
+      const isRussell1000 = slugs.includes("russell-1000");
+      const isRussell1000Only = isRussell1000 && !isSp500 && !isNasdaq100;
+
+      return {
+        symbol: s.symbol,
+        name: s.name,
+        price: Number(s.quote!.price),
+        change: Number(s.quote!.changePercent),
+        setup: s.score!.setupStatus,
+        hot: s.score!.hotScore,
+        opp: s.score!.opportunityScore,
+        risk: s.score!.riskLevel as RiskLevel,
+        catalyst: s.score!.catalyst,
+        inWatchlist: watchlistStockIds.has(s.id),
+        sector: s.sector ?? "",
+        weekChange: Number(s.quote!.weekChange),
+        monthChange: Number(s.quote!.monthChange),
+        volume: s.quote!.volume ?? "",
+        relativeVolume: Number(s.quote!.relativeVolume ?? 0),
+        analystTarget: Number(s.quote!.analystTarget ?? 0),
+        analystUpside: Number(s.quote!.analystUpside ?? 0),
+        analystRating: s.quote!.analystRating ?? "",
+        marketCap: String(s.marketCap ?? ""),
+        universeSlugs: slugs,
+        isSp500,
+        isNasdaq100,
+        isRussell1000,
+        isRussell1000Only,
+      };
+    });
 
   const watchlistItems: WatchlistItem[] = dbWatchlistItems
     .filter((w) => w.stock.quote && w.stock.score)
@@ -143,7 +199,15 @@ export async function getScannerData(): Promise<ScannerData> {
     });
   }
 
-  return { user, stocks, watchlistItems, stockDrawerDetails, alertRulesBySymbol };
+  return {
+    user,
+    stocks,
+    watchlistItems,
+    stockDrawerDetails,
+    alertRulesBySymbol,
+    universes,
+    selectedUniverseSlug: selectedUniverse?.slug ?? "russell-1000",
+  };
 }
 
 function mapDbWatchStatus(status: string): WatchlistItem["status"] {
