@@ -11,6 +11,7 @@ import {
   Sparkles,
   Settings,
   X,
+  ShieldAlert,
 } from "lucide-react";
 import type { DashboardUser } from "@/src/lib/data/dashboard";
 
@@ -22,6 +23,8 @@ const navItems = [
   { label: "Stocks", icon: LineChart, href: "/stocks" },
   { label: "AI Insights", icon: Sparkles, href: "/ai-insights" },
 ];
+
+const showAdminTools = process.env.NEXT_PUBLIC_SHOW_ADMIN_TOOLS === "true";
 
 interface AppSidebarProps {
   user: DashboardUser;
@@ -117,6 +120,42 @@ export default function AppSidebar({
 
       {/* Footer */}
       <div className="px-2 py-4 border-t border-slate-800 flex flex-col gap-0.5">
+        {showAdminTools && (
+          <>
+            {(() => {
+              const isActive = pathname === "/admin/sync" || pathname.startsWith("/admin/sync/");
+              return (
+                <Link
+                  href="/admin/sync"
+                  onClick={onClose}
+                  title={isCollapsed ? "Admin Sync" : undefined}
+                  className={`flex items-center py-2.5 rounded-lg text-sm w-full transition-colors ${
+                    isCollapsed ? "justify-center px-0" : "gap-3 px-3"
+                  } ${
+                    isActive
+                      ? "bg-amber-900/40 text-amber-300"
+                      : "text-amber-600 hover:text-amber-400 hover:bg-amber-900/20"
+                  }`}
+                >
+                  <ShieldAlert size={16} className="shrink-0" />
+                  <span
+                    className={`flex-1 text-left whitespace-nowrap overflow-hidden transition-[opacity,max-width] duration-300 ${
+                      isCollapsed ? "opacity-0 max-w-0" : "opacity-100 max-w-[160px]"
+                    }`}
+                  >
+                    Admin Sync
+                  </span>
+                  {!isCollapsed && (
+                    <span className="text-[10px] font-semibold text-amber-700 bg-amber-900/40 border border-amber-800/60 px-1.5 py-0.5 rounded shrink-0 leading-none">
+                      DEV
+                    </span>
+                  )}
+                </Link>
+              );
+            })()}
+            <div className="border-t border-slate-800/60 my-1" />
+          </>
+        )}
         <button
           title={isCollapsed ? "Settings" : undefined}
           className={`flex items-center py-2.5 rounded-lg text-sm text-slate-400 hover:text-white hover:bg-slate-800/60 transition-colors w-full ${

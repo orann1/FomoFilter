@@ -46,6 +46,7 @@ export type NormalizedNewsItem = {
   source: MarketDataProvider;
 };
 
+// Legacy summary type — kept for backward compatibility
 export type SyncSummary = {
   provider: MarketDataProvider;
   action: string;
@@ -55,4 +56,31 @@ export type SyncSummary = {
   failedSymbols: string[];
   persisted: boolean;
   errors: string[];
+};
+
+export type SyncRunStatus = "success" | "partial_success" | "failed";
+
+export type SyncSymbolResult = {
+  symbol: string;
+  status: "success" | "skipped" | "failed";
+  reason?: string;
+  dbAction: "updated" | "kept_existing" | "not_found" | "none";
+};
+
+export type SyncActionResult = {
+  status: SyncRunStatus;
+  provider: MarketDataProvider;
+  action: string;
+  requestedCount: number;
+  successCount: number;
+  skippedCount: number;
+  failedCount: number;
+  updatedSymbols: string[];
+  skippedSymbols: SyncSymbolResult[];
+  failedSymbols: SyncSymbolResult[];
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+  persisted: boolean;
+  message: string;
 };

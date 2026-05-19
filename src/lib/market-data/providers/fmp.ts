@@ -3,17 +3,48 @@ import type {
   NormalizedCompanyProfile,
 } from "@/src/lib/market-data/types";
 
-const BASE_URL = "https://financialmodelingprep.com/api/v3";
+// FMP deprecated all /api/v3/ legacy endpoints after August 31, 2025.
+// All requests now use the /stable/ base URL with symbol as a query param.
+const BASE_URL = "https://financialmodelingprep.com/stable";
 
 function getApiKey(): string | null {
   return process.env.FMP_API_KEY ?? null;
 }
 
+function handleFmpError(
+  status: number,
+  body: string,
+  action: string
+): ProviderTestResult {
+  const safe = body.slice(0, 300);
+  if (status === 403) {
+    return {
+      ok: false,
+      provider: "fmp",
+      action,
+      error: `FMP returned HTTP 403. The API key may be invalid or not authorized for this endpoint. No DB values were changed. Body: ${safe}`,
+    };
+  }
+  if (status === 429) {
+    return {
+      ok: false,
+      provider: "fmp",
+      action,
+      error: "FMP rate limit exceeded (429). No DB values were changed.",
+    };
+  }
+  return {
+    ok: false,
+    provider: "fmp",
+    action,
+    error: `FMP responded with status ${status}. No DB values were changed. Body: ${safe}`,
+  };
+}
+
 export async function testFmpProfile(
   symbol: string
 ): Promise<ProviderTestResult<NormalizedCompanyProfile>> {
-  const result = await fetchFmpCompanyProfile(symbol);
-  return result;
+  return fetchFmpCompanyProfile(symbol);
 }
 
 export async function fetchFmpCompanyProfile(
@@ -30,25 +61,12 @@ export async function fetchFmpCompanyProfile(
   }
 
   try {
-    const url = `${BASE_URL}/profile/${encodeURIComponent(symbol)}?apikey=${apiKey}`;
+    const url = `${BASE_URL}/profile?symbol=${encodeURIComponent(symbol)}&apikey=${apiKey}`;
     const res = await fetch(url, { cache: "no-store" });
 
-    if (res.status === 429) {
-      return {
-        ok: false,
-        provider: "fmp",
-        action: "company-profile",
-        error: "FMP rate limit exceeded (429)",
-      };
-    }
-
     if (!res.ok) {
-      return {
-        ok: false,
-        provider: "fmp",
-        action: "company-profile",
-        error: `FMP responded with status ${res.status}`,
-      };
+      const body = await res.text().catch(() => "");
+      return handleFmpError(res.status, body, "company-profile") as ProviderTestResult<NormalizedCompanyProfile>;
     }
 
     const json: unknown = await res.json();
@@ -68,10 +86,12 @@ export async function fetchFmpCompanyProfile(
     const profile: NormalizedCompanyProfile = {
       symbol: typeof raw.symbol === "string" ? raw.symbol : symbol,
       name: typeof raw.companyName === "string" ? raw.companyName : null,
-      exchange: typeof raw.exchangeShortName === "string" ? raw.exchangeShortName : null,
+      // stable endpoint uses "exchange", not "exchangeShortName"
+      exchange: typeof raw.exchange === "string" ? raw.exchange : null,
       sector: typeof raw.sector === "string" ? raw.sector : null,
       industry: typeof raw.industry === "string" ? raw.industry : null,
-      marketCap: typeof raw.mktCap === "number" ? raw.mktCap : null,
+      // stable endpoint uses "marketCap", not "mktCap"
+      marketCap: typeof raw.marketCap === "number" ? raw.marketCap : null,
       currency: typeof raw.currency === "string" ? raw.currency : null,
       country: typeof raw.country === "string" ? raw.country : null,
       website: typeof raw.website === "string" ? raw.website : null,
@@ -123,25 +143,12 @@ export async function fetchFmpAnalystTarget(
   }
 
   try {
-    const url = `${BASE_URL}/analyst-estimates/${encodeURIComponent(symbol)}?apikey=${apiKey}&limit=1`;
+    const url = `${BASE_URL}/analyst-estimates?symbol=${encodeURIComponent(symbol)}&period=annual&limit=1&apikey=${apiKey}`;
     const res = await fetch(url, { cache: "no-store" });
 
-    if (res.status === 429) {
-      return {
-        ok: false,
-        provider: "fmp",
-        action: "analyst-target",
-        error: "FMP rate limit exceeded (429)",
-      };
-    }
-
     if (!res.ok) {
-      return {
-        ok: false,
-        provider: "fmp",
-        action: "analyst-target",
-        error: `FMP responded with status ${res.status}`,
-      };
+      const body = await res.text().catch(() => "");
+      return handleFmpError(res.status, body, "analyst-target") as ProviderTestResult<FmpAnalystTarget>;
     }
 
     const json: unknown = await res.json();
@@ -158,9 +165,9 @@ export async function fetchFmpAnalystTarget(
     const raw = json[0] as Record<string, unknown>;
     const target: FmpAnalystTarget = {
       symbol,
-      targetHigh: typeof raw.estimatedEpsHigh === "number" ? raw.estimatedEpsHigh : null,
-      targetLow: typeof raw.estimatedEpsLow === "number" ? raw.estimatedEpsLow : null,
-      targetMean: typeof raw.estimatedEpsMean === "number" ? raw.estimatedEpsMean : null,
+      targetHigh: typeof raw.revenueHigh === "number" ? raw.revenueHigh : null,
+      targetLow: typeof raw.revenueLow === "number" ? raw.revenueLow : null,
+      targetMean: typeof raw.revenueAvg === "number" ? raw.revenueAvg : null,
       targetMedian: null,
       strongBuy: null,
       buy: null,
