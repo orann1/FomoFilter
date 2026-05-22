@@ -162,7 +162,10 @@ export async function fetchFinnhubQuote(
       low: toNum(raw.l),
       previousClose: toNum(raw.pc),
       volume: null,
-      timestamp: null,
+      timestamp:
+        typeof raw.t === "number" && raw.t > 0
+          ? new Date(raw.t * 1000).toISOString()
+          : null,
       source: "finnhub",
     };
 

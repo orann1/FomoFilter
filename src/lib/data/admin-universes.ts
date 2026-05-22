@@ -12,6 +12,8 @@ export type UniverseOverviewRow = {
   withProfile: number;
   lastUniverseSync: string | null;
   lastQuoteSync: string | null;
+  // Refresh cycle: count of active members with lastSyncedAt strictly newer than the oldest
+  quoteRefreshCycleSynced: number;
 };
 
 export type DbStockSummary = {
@@ -48,9 +50,20 @@ export async function getUniverseOverview(): Promise<UniverseOverviewRow[]> {
   });
 
   const quoteSyncRuns = await prisma.syncRun.findMany({
-    where: { type: { contains: "quote" } },
+    where: {
+      type: { contains: "quote" },
+      successCount: { gt: 0 },
+      persisted: true,
+    },
     orderBy: { startedAt: "desc" },
-    take: 20,
+    take: 5,
+  });
+
+  // All nasdaq100-batch runs in chronological order — used for cycle boundary calculation
+  const batchSyncRuns = await prisma.syncRun.findMany({
+    where: { type: "quotes-nasdaq100-batch" },
+    orderBy: { startedAt: "asc" },
+    select: { startedAt: true, successCount: true },
   });
 
   const latestUniverseSync = universeSyncRuns[0]?.startedAt ?? null;
@@ -76,6 +89,42 @@ export async function getUniverseOverview(): Promise<UniverseOverviewRow[]> {
       return s.name && s.name.trim().length > 0 && s.sector;
     }).length;
 
+    // Refresh cycle: derive cycle start from SyncRun history using running-total boundary.
+    // Scan runs oldest→newest, accumulate successCount; when total reaches activeCount,
+    // that marks the end of a complete cycle — the next run starts a new cycle.
+    // This correctly tracks 25→50→75→100 progression across consecutive batch runs.
+    let quoteRefreshCycleSynced = 0;
+    if (universe.slug === "nasdaq-100") {
+      const totalActive = activeMembers.length;
+      let running = 0;
+      let cycleStart: Date | null = null;
+      let cycleComplete = false;
+
+      for (const run of batchSyncRuns) {
+        if (cycleStart === null) cycleStart = run.startedAt;
+        running += run.successCount;
+        if (running >= totalActive) {
+          running = 0;
+          cycleComplete = true;
+          cycleStart = null; // reset: next run begins a new cycle
+        } else {
+          cycleComplete = false;
+        }
+      }
+
+      if (cycleComplete && cycleStart === null && batchSyncRuns.length > 0) {
+        // Last cycle just completed, no new run started yet
+        quoteRefreshCycleSynced = totalActive;
+      } else if (cycleStart !== null) {
+        // Cycle in progress: count DB members updated since cycle start
+        const threshold = cycleStart;
+        quoteRefreshCycleSynced = activeMembers.filter((m) => {
+          const t = m.stock.quote?.lastSyncedAt;
+          return t !== null && t !== undefined && t >= threshold;
+        }).length;
+      }
+    }
+
     return {
       universeId: universe.id,
       universeName: universe.name,
@@ -88,8 +137,39 @@ export async function getUniverseOverview(): Promise<UniverseOverviewRow[]> {
       withProfile,
       lastUniverseSync: latestUniverseSync?.toISOString() ?? null,
       lastQuoteSync: latestQuoteSync?.toISOString() ?? null,
+      quoteRefreshCycleSynced,
     };
   });
+}
+
+export async function getNextNasdaq100QuoteBatch(limit = 25): Promise<string[]> {
+  const universe = await prisma.stockUniverse.findUnique({
+    where: { slug: "nasdaq-100" },
+  });
+
+  if (!universe) return [];
+
+  const members = await prisma.stockUniverseMember.findMany({
+    where: { universeId: universe.id, isActive: true },
+    include: {
+      stock: {
+        select: {
+          symbol: true,
+          quote: { select: { lastSyncedAt: true } },
+        },
+      },
+    },
+  });
+
+  // Sort: missing quotes first (null → -1), then oldest lastSyncedAt, then symbol ASC
+  members.sort((a, b) => {
+    const aTime = a.stock.quote?.lastSyncedAt?.getTime() ?? -1;
+    const bTime = b.stock.quote?.lastSyncedAt?.getTime() ?? -1;
+    if (aTime !== bTime) return aTime - bTime;
+    return a.stock.symbol.localeCompare(b.stock.symbol);
+  });
+
+  return members.slice(0, limit).map((m) => m.stock.symbol);
 }
 
 export async function getDbStockSummary(): Promise<DbStockSummary> {

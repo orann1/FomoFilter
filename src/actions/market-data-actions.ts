@@ -7,10 +7,12 @@ import {
   fetchFmpNasdaq100Constituents,
 } from "@/src/lib/market-data/providers/fmp";
 import { testTwelveQuote, fetchTwelveQuotes } from "@/src/lib/market-data/providers/twelve-data";
-import { testFinnhubNews } from "@/src/lib/market-data/providers/finnhub";
+import { testFinnhubNews, fetchFinnhubQuote } from "@/src/lib/market-data/providers/finnhub";
 import { isValidNumber, keepExistingIfInvalid } from "@/src/lib/market-data/safe-update";
+import { getNextNasdaq100QuoteBatch } from "@/src/lib/data/admin-universes";
 import type {
   ProviderTestResult,
+  NormalizedQuote,
   SyncActionResult,
   SyncRunStatus,
   SyncSymbolResult,
@@ -132,68 +134,148 @@ export async function testFinnhubNewsAction(): Promise<ProviderTestResult> {
   return stripRaw(await testFinnhubNews("NVDA"));
 }
 
-export async function syncQuotesSampleAction(): Promise<SyncActionResult> {
+// ── Shared quote sync core ────────────────────────────────────────────────────
+
+async function syncQuotesForSymbols(
+  symbols: string[],
+  syncType: string,
+  provider: "twelve-data" | "finnhub" = "twelve-data"
+): Promise<SyncActionResult> {
   const startedAt = new Date();
-
-  const dbStocks = await prisma.stock.findMany({
-    where: { isActive: true },
-    select: { symbol: true },
-    take: 10,
-  });
-
-  const symbols =
-    dbStocks.length > 0
-      ? dbStocks.map((s) => s.symbol).slice(0, 5)
-      : ["NVDA", "AMD", "TSLA", "PLTR", "SMCI"];
 
   const updatedSymbols: string[] = [];
   const skippedSymbols: SyncSymbolResult[] = [];
   const failedSymbols: SyncSymbolResult[] = [];
+  const quoteDbActions = new Map<string, string>();
+  const symbolQuoteMap = new Map<string, NormalizedQuote>();
 
-  const providerResult = await fetchTwelveQuotes(symbols);
+  // ── Fetch phase ──────────────────────────────────────────────────────────
 
-  if (!providerResult.ok || !providerResult.data) {
-    const finishedAt = new Date();
-    const durationMs = finishedAt.getTime() - startedAt.getTime();
-    const errorMsg = providerResult.error ?? "Provider request failed before any symbol was processed";
-    for (const sym of symbols) {
-      failedSymbols.push({
+  if (provider === "finnhub") {
+    let rateLimitHit = false;
+
+    for (const symbol of symbols) {
+      if (rateLimitHit) {
+        skippedSymbols.push({
+          symbol,
+          status: "skipped",
+          reason: "Finnhub rate limit reached. Wait and run again.",
+          dbAction: "kept_existing",
+        });
+        continue;
+      }
+
+      const result = await fetchFinnhubQuote(symbol);
+
+      if (!result.ok) {
+        if (
+          result.error?.includes("rate limit") ||
+          result.error?.includes("429")
+        ) {
+          rateLimitHit = true;
+          skippedSymbols.push({
+            symbol,
+            status: "skipped",
+            reason: "Finnhub rate limit reached. Wait and run again.",
+            dbAction: "kept_existing",
+          });
+        } else {
+          failedSymbols.push({
+            symbol,
+            status: "failed",
+            reason: result.error ?? "Provider request failed",
+            dbAction: "kept_existing",
+          });
+        }
+        continue;
+      }
+
+      if (result.data) {
+        symbolQuoteMap.set(symbol, result.data);
+      } else {
+        skippedSymbols.push({
+          symbol,
+          status: "skipped",
+          reason: "No quote data returned by Finnhub",
+          dbAction: "kept_existing",
+        });
+      }
+    }
+  } else {
+    // Twelve Data batch fetch
+    const providerResult = await fetchTwelveQuotes(symbols);
+
+    if (!providerResult.ok || !providerResult.data) {
+      const finishedAt = new Date();
+      const durationMs = finishedAt.getTime() - startedAt.getTime();
+      const errorMsg =
+        providerResult.error ?? "Provider request failed before any symbol was processed";
+      const allFailed: SyncSymbolResult[] = symbols.map((sym) => ({
         symbol: sym,
         status: "failed",
         reason: providerResult.error ?? "Provider request failed",
         dbAction: "kept_existing",
+      }));
+      const failSyncRun = await prisma.syncRun.create({
+        data: {
+          type: syncType,
+          provider,
+          status: "failed",
+          requestedCount: symbols.length,
+          successCount: 0,
+          skippedCount: 0,
+          failedCount: symbols.length,
+          persisted: false,
+          message: errorMsg,
+          startedAt,
+          finishedAt,
+          durationMs,
+        },
       });
+      await prisma.syncRunItem.createMany({
+        data: allFailed.map((s) => ({
+          syncRunId: failSyncRun.id,
+          symbol: s.symbol,
+          status: "failed",
+          reason: s.reason ?? null,
+          dbAction: s.dbAction,
+        })),
+      });
+      return {
+        status: "failed",
+        provider,
+        action: syncType,
+        requestedCount: symbols.length,
+        successCount: 0,
+        skippedCount: 0,
+        failedCount: symbols.length,
+        updatedSymbols: [],
+        skippedSymbols: [],
+        failedSymbols: allFailed,
+        startedAt: startedAt.toISOString(),
+        finishedAt: finishedAt.toISOString(),
+        durationMs,
+        persisted: false,
+        message: errorMsg,
+      };
     }
-    await persistSyncLog(
-      "quotes-sample", "twelve-data", "failed",
-      symbols.length, 0, 0, symbols.length, false,
-      errorMsg, startedAt, finishedAt, durationMs,
-      [], [], failedSymbols
-    );
-    return {
-      status: "failed",
-      provider: "twelve-data",
-      action: "quotes-sample",
-      requestedCount: symbols.length,
-      successCount: 0,
-      skippedCount: 0,
-      failedCount: symbols.length,
-      updatedSymbols: [],
-      skippedSymbols: [],
-      failedSymbols,
-      startedAt: startedAt.toISOString(),
-      finishedAt: finishedAt.toISOString(),
-      durationMs,
-      persisted: false,
-      message: errorMsg,
-    };
+
+    for (const q of providerResult.data) {
+      symbolQuoteMap.set(q.symbol, q);
+    }
   }
 
-  const quotes = providerResult.data;
-  const fetchedSymbolMap = new Map(quotes.map((q) => [q.symbol, q]));
+  // ── Process phase ────────────────────────────────────────────────────────
+
+  const handledSymbols = new Set([
+    ...skippedSymbols.map((s) => s.symbol),
+    ...failedSymbols.map((s) => s.symbol),
+  ]);
 
   for (const symbol of symbols) {
-    const quote = fetchedSymbolMap.get(symbol);
+    if (handledSymbols.has(symbol)) continue;
+
+    const quote = symbolQuoteMap.get(symbol);
 
     if (!quote) {
       skippedSymbols.push({
@@ -233,6 +315,7 @@ export async function syncQuotesSampleAction(): Promise<SyncActionResult> {
 
       const existing = stock.quote;
       const now = new Date();
+      const isNewQuote = !existing;
 
       await prisma.stockQuote.upsert({
         where: { stockId: stock.id },
@@ -241,7 +324,11 @@ export async function syncQuotesSampleAction(): Promise<SyncActionResult> {
           price: quote.price,
           changePercent: isValidNumber(quote.changePercent) ? quote.changePercent : 0,
           volume: isValidNumber(quote.volume) ? String(Math.round(quote.volume)) : null,
-          source: "twelve-data",
+          open: isValidNumber(quote.open) ? quote.open : null,
+          dayHigh: isValidNumber(quote.high) ? quote.high : null,
+          dayLow: isValidNumber(quote.low) ? quote.low : null,
+          previousClose: isValidNumber(quote.previousClose) ? quote.previousClose : null,
+          source: provider,
           lastSyncedAt: now,
           sourceUpdatedAt: quote.timestamp ? new Date(quote.timestamp) : null,
         },
@@ -250,10 +337,17 @@ export async function syncQuotesSampleAction(): Promise<SyncActionResult> {
           changePercent: isValidNumber(quote.changePercent)
             ? quote.changePercent
             : existing?.changePercent ?? 0,
+          // Finnhub /quote has no volume — preserve existing value rather than overwriting
           volume: isValidNumber(quote.volume)
             ? String(Math.round(quote.volume))
             : existing?.volume ?? undefined,
-          source: "twelve-data",
+          open: isValidNumber(quote.open) ? quote.open : existing?.open ?? null,
+          dayHigh: isValidNumber(quote.high) ? quote.high : existing?.dayHigh ?? null,
+          dayLow: isValidNumber(quote.low) ? quote.low : existing?.dayLow ?? null,
+          previousClose: isValidNumber(quote.previousClose)
+            ? quote.previousClose
+            : existing?.previousClose ?? null,
+          source: provider,
           lastSyncedAt: now,
           sourceUpdatedAt: quote.timestamp
             ? new Date(quote.timestamp)
@@ -262,6 +356,7 @@ export async function syncQuotesSampleAction(): Promise<SyncActionResult> {
       });
 
       updatedSymbols.push(symbol);
+      quoteDbActions.set(symbol, isNewQuote ? "created_quote" : "updated_quote");
     } catch (err) {
       failedSymbols.push({
         symbol,
@@ -285,17 +380,55 @@ export async function syncQuotesSampleAction(): Promise<SyncActionResult> {
   if (failedCount > 0) messageParts.push(`${failedCount} failed`);
   const message = messageParts.join(", ");
 
-  await persistSyncLog(
-    "quotes-sample", "twelve-data", status,
-    symbols.length, successCount, skippedCount, failedCount, persisted,
-    message, startedAt, finishedAt, durationMs,
-    updatedSymbols, skippedSymbols, failedSymbols
-  );
+  const syncRun = await prisma.syncRun.create({
+    data: {
+      type: syncType,
+      provider,
+      status,
+      requestedCount: symbols.length,
+      successCount,
+      skippedCount,
+      failedCount,
+      persisted,
+      message,
+      startedAt,
+      finishedAt,
+      durationMs,
+    },
+  });
+
+  const items = [
+    ...updatedSymbols.map((sym) => ({
+      syncRunId: syncRun.id,
+      symbol: sym,
+      status: "success",
+      reason: "Updated successfully",
+      dbAction: quoteDbActions.get(sym) ?? "updated_quote",
+    })),
+    ...skippedSymbols.map((s) => ({
+      syncRunId: syncRun.id,
+      symbol: s.symbol,
+      status: "skipped",
+      reason: s.reason ?? null,
+      dbAction: s.dbAction,
+    })),
+    ...failedSymbols.map((s) => ({
+      syncRunId: syncRun.id,
+      symbol: s.symbol,
+      status: "failed",
+      reason: s.reason ?? null,
+      dbAction: s.dbAction,
+    })),
+  ];
+
+  if (items.length > 0) {
+    await prisma.syncRunItem.createMany({ data: items });
+  }
 
   return {
     status,
-    provider: "twelve-data",
-    action: "quotes-sample",
+    provider,
+    action: syncType,
     requestedCount: symbols.length,
     successCount,
     skippedCount,
@@ -309,6 +442,51 @@ export async function syncQuotesSampleAction(): Promise<SyncActionResult> {
     persisted,
     message,
   };
+}
+
+export async function syncQuotesSampleAction(): Promise<SyncActionResult> {
+  const dbStocks = await prisma.stock.findMany({
+    where: { isActive: true },
+    select: { symbol: true },
+    take: 10,
+  });
+
+  const symbols =
+    dbStocks.length > 0
+      ? dbStocks.map((s) => s.symbol).slice(0, 5)
+      : ["NVDA", "AMD", "TSLA", "PLTR", "SMCI"];
+
+  return syncQuotesForSymbols(symbols, "quotes-sample");
+}
+
+// ── Nasdaq 100 Quote Snapshot Batch Sync ─────────────────────────────────────
+
+export async function syncNasdaq100QuoteSnapshotsAction(): Promise<SyncActionResult> {
+  const symbols = await getNextNasdaq100QuoteBatch(25);
+
+  if (symbols.length === 0) {
+    const now = new Date().toISOString();
+    return {
+      status: "failed",
+      provider: "finnhub",
+      action: "quotes-nasdaq100-batch",
+      requestedCount: 0,
+      successCount: 0,
+      skippedCount: 0,
+      failedCount: 0,
+      updatedSymbols: [],
+      skippedSymbols: [],
+      failedSymbols: [],
+      startedAt: now,
+      finishedAt: now,
+      durationMs: 0,
+      persisted: false,
+      message:
+        "No active Nasdaq 100 members found. Run the Nasdaq 100 Universe sync first.",
+    };
+  }
+
+  return syncQuotesForSymbols(symbols, "quotes-nasdaq100-batch", "finnhub");
 }
 
 export async function syncProfilesSampleAction(): Promise<SyncActionResult> {
