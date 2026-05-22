@@ -67,16 +67,22 @@ model StockUniverse {
 }
 
 model StockUniverseMember {
-  stockId    String
-  universeId String
-  addedAt    DateTime @default(now())
+  stockId          String
+  universeId       String
+  isActive         Boolean   @default(true)
+  addedAt          DateTime  @default(now())
+  lastSeenAt       DateTime?
+  removedAt        DateTime?
+  source           String?
+  statusReasonCode String?
 
-  stock      Stock         @relation(fields: [stockId], references: [id], onDelete: Cascade)
-  universe   StockUniverse @relation(fields: [universeId], references: [id], onDelete: Cascade)
+  stock            Stock         @relation(fields: [stockId], references: [id], onDelete: Cascade)
+  universe         StockUniverse @relation(fields: [universeId], references: [id], onDelete: Cascade)
 
   @@id([stockId, universeId])
   @@index([universeId])
   @@index([stockId])
+  @@index([isActive])
 }
 
 model StockQuote {

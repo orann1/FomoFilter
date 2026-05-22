@@ -2,6 +2,10 @@ import type {
   ProviderTestResult,
   NormalizedCompanyProfile,
 } from "@/src/lib/market-data/types";
+import {
+  NASDAQ_100_SYMBOLS,
+  type IndexConstituent,
+} from "@/src/lib/market-data/nasdaq100-fallback-symbols";
 
 // FMP deprecated all /api/v3/ legacy endpoints after August 31, 2025.
 // All requests now use the /stable/ base URL with symbol as a query param.
@@ -191,4 +195,86 @@ export async function fetchFmpAnalystTarget(
       error: err instanceof Error ? err.message : "Unknown error fetching FMP analyst data",
     };
   }
+}
+
+// ── Nasdaq 100 Constituent List ────────────────────────────────────────────────
+//
+// Investigation result (2026-05-21):
+//   Endpoint tested:  https://financialmodelingprep.com/stable/nasdaq-constituent
+//   HTTP status:      402 Payment Required — not available on current plan
+//   /api/v4 variants: 403 Legacy endpoint — deprecated after August 31, 2025
+//
+// Approach: use the maintained NASDAQ_100_SYMBOLS static list for index composition.
+// FMP /stable/profile (HTTP 200 on current plan) enriches new stocks when first created.
+// Upgrade to /stable/nasdaq-constituent when the plan includes it.
+
+export async function fetchFmpNasdaq100Constituents(): Promise<
+  ProviderTestResult<IndexConstituent[]>
+> {
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    return {
+      ok: false,
+      provider: "fmp",
+      action: "nasdaq100-constituents",
+      error: "Missing FMP_API_KEY",
+    };
+  }
+
+  const symbols = [...NASDAQ_100_SYMBOLS];
+
+  // Fetch profiles for all symbols in parallel (batches of 10 to avoid rate limits).
+  const BATCH = 10;
+  const constituents: IndexConstituent[] = [];
+  const errors: string[] = [];
+
+  for (let i = 0; i < symbols.length; i += BATCH) {
+    const batch = symbols.slice(i, i + BATCH);
+    const results = await Promise.allSettled(
+      batch.map(async (symbol) => {
+        const url = `${BASE_URL}/profile?symbol=${encodeURIComponent(symbol)}&apikey=${apiKey}`;
+        const res = await fetch(url, { cache: "no-store" });
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status} for ${symbol}`);
+        }
+        const json: unknown = await res.json();
+        if (!Array.isArray(json) || json.length === 0) {
+          // Return minimal data from static list if profile not available
+          return { symbol } as IndexConstituent;
+        }
+        const raw = json[0] as Record<string, unknown>;
+        return {
+          symbol: typeof raw.symbol === "string" ? raw.symbol : symbol,
+          companyName: typeof raw.companyName === "string" ? raw.companyName : null,
+          exchange: typeof raw.exchange === "string" ? raw.exchange : null,
+          sector: typeof raw.sector === "string" ? raw.sector : null,
+          industry: typeof raw.industry === "string" ? raw.industry : null,
+          marketCap: typeof raw.marketCap === "number" ? raw.marketCap : null,
+        } satisfies IndexConstituent;
+      })
+    );
+    for (const r of results) {
+      if (r.status === "fulfilled") {
+        constituents.push(r.value);
+      } else {
+        errors.push(r.reason instanceof Error ? r.reason.message : String(r.reason));
+      }
+    }
+  }
+
+  if (constituents.length === 0) {
+    return {
+      ok: false,
+      provider: "fmp",
+      action: "nasdaq100-constituents",
+      error: `All ${symbols.length} profile fetches failed. Errors: ${errors.slice(0, 3).join("; ")}`,
+    };
+  }
+
+  return {
+    ok: true,
+    provider: "fmp",
+    action: "nasdaq100-constituents",
+    data: constituents,
+  };
 }

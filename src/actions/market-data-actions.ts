@@ -1,7 +1,11 @@
 "use server";
 
 import { prisma } from "@/src/lib/db/prisma";
-import { testFmpProfile, fetchFmpCompanyProfile } from "@/src/lib/market-data/providers/fmp";
+import {
+  testFmpProfile,
+  fetchFmpCompanyProfile,
+  fetchFmpNasdaq100Constituents,
+} from "@/src/lib/market-data/providers/fmp";
 import { testTwelveQuote, fetchTwelveQuotes } from "@/src/lib/market-data/providers/twelve-data";
 import { testFinnhubNews } from "@/src/lib/market-data/providers/finnhub";
 import { isValidNumber, keepExistingIfInvalid } from "@/src/lib/market-data/safe-update";
@@ -11,6 +15,32 @@ import type {
   SyncRunStatus,
   SyncSymbolResult,
 } from "@/src/lib/market-data/types";
+
+export type UniverseSyncActionResult = {
+  status: SyncRunStatus;
+  provider: string;
+  action: string;
+  requestedCount: number;
+  successCount: number;
+  skippedCount: number;
+  failedCount: number;
+  deactivatedCount: number;
+  createdStocks: number;
+  createdMemberships: number;
+  reactivated: number;
+  alreadyActive: number;
+  message: string;
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+  persisted: boolean;
+  items: Array<{
+    symbol: string;
+    status: string;
+    reason: string;
+    dbAction: string;
+  }>;
+};
 
 function stripRaw<T>(result: ProviderTestResult<T>): ProviderTestResult<T> {
   const { raw: _raw, ...safe } = result;
@@ -389,5 +419,297 @@ export async function syncProfilesSampleAction(): Promise<SyncActionResult> {
     durationMs,
     persisted,
     message,
+  };
+}
+
+// ── Nasdaq 100 Universe Sync ──────────────────────────────────────────────────
+
+export async function syncNasdaq100UniverseAction(): Promise<UniverseSyncActionResult> {
+  const startedAt = new Date();
+
+  type ItemRecord = { symbol: string; status: string; reason: string; dbAction: string };
+  const items: ItemRecord[] = [];
+
+  let createdStocks = 0;
+  let createdMemberships = 0;
+  let reactivated = 0;
+  let alreadyActive = 0;
+  let deactivatedCount = 0;
+  let failedCount = 0;
+  let skippedCount = 0;
+
+  // 1. Fetch constituents (static list + FMP profile enrichment)
+  const constituentResult = await fetchFmpNasdaq100Constituents();
+
+  if (!constituentResult.ok || !constituentResult.data) {
+    const finishedAt = new Date();
+    const msg = constituentResult.error ?? "Provider request failed";
+    await prisma.syncRun.create({
+      data: {
+        type: "nasdaq100-universe-sync",
+        provider: "static_fallback",
+        status: "failed",
+        requestedCount: 0,
+        successCount: 0,
+        skippedCount: 0,
+        failedCount: 1,
+        persisted: false,
+        message: msg,
+        startedAt,
+        finishedAt,
+        durationMs: finishedAt.getTime() - startedAt.getTime(),
+      },
+    });
+    return {
+      status: "failed",
+      provider: "static_fallback",
+      action: "nasdaq100-universe-sync",
+      requestedCount: 0,
+      successCount: 0,
+      skippedCount: 0,
+      failedCount: 1,
+      deactivatedCount: 0,
+      createdStocks: 0,
+      createdMemberships: 0,
+      reactivated: 0,
+      alreadyActive: 0,
+      message: msg,
+      startedAt: startedAt.toISOString(),
+      finishedAt: finishedAt.toISOString(),
+      durationMs: finishedAt.getTime() - startedAt.getTime(),
+      persisted: false,
+      items: [],
+    };
+  }
+
+  const constituents = constituentResult.data;
+  const returnedSymbols = new Set(constituents.map((c) => c.symbol.toUpperCase()));
+
+  // 2. Ensure Nasdaq 100 universe exists
+  const universe = await prisma.stockUniverse.upsert({
+    where: { slug: "nasdaq-100" },
+    create: {
+      name: "Nasdaq 100",
+      slug: "nasdaq-100",
+      type: "INDEX",
+      isDefault: false,
+      isSystem: true,
+    },
+    update: { updatedAt: new Date() },
+  });
+
+  // 3. Get currently active Nasdaq 100 members for deactivation pass
+  const activeBeforeSync = await prisma.stockUniverseMember.findMany({
+    where: { universeId: universe.id, isActive: true },
+    select: { stockId: true, stock: { select: { symbol: true } } },
+  });
+  const activeSymbolsBeforeSync = new Map(
+    activeBeforeSync.map((m) => [m.stock.symbol.toUpperCase(), m.stockId])
+  );
+
+  // 4. Process each returned constituent
+  for (const constituent of constituents) {
+    const symbol = constituent.symbol.toUpperCase();
+    if (!symbol || symbol.trim().length === 0) {
+      skippedCount++;
+      items.push({ symbol, status: "skipped", reason: "Invalid symbol", dbAction: "invalid_symbol" });
+      continue;
+    }
+
+    try {
+      const now = new Date();
+
+      // Upsert stock
+      let stock = await prisma.stock.findUnique({ where: { symbol } });
+      let newStockCreated = false;
+
+      if (!stock) {
+        stock = await prisma.stock.create({
+          data: {
+            symbol,
+            name: constituent.companyName ?? symbol,
+            sector: constituent.sector ?? undefined,
+            marketCap: constituent.marketCap != null ? String(constituent.marketCap) : undefined,
+          },
+        });
+        newStockCreated = true;
+        createdStocks++;
+      } else {
+        // Safe update: only fill missing fields, never overwrite valid with null
+        const updateData: Record<string, unknown> = {};
+        if (constituent.companyName && !stock.name) updateData.name = constituent.companyName;
+        if (constituent.sector && !stock.sector) updateData.sector = constituent.sector;
+        if (constituent.marketCap != null && !stock.marketCap) {
+          updateData.marketCap = String(constituent.marketCap);
+        }
+        if (Object.keys(updateData).length > 0) {
+          await prisma.stock.update({ where: { id: stock.id }, data: updateData });
+        }
+      }
+
+      // Upsert membership
+      const existingMembership = await prisma.stockUniverseMember.findUnique({
+        where: { stockId_universeId: { stockId: stock.id, universeId: universe.id } },
+      });
+
+      if (!existingMembership) {
+        await prisma.stockUniverseMember.create({
+          data: {
+            stockId: stock.id,
+            universeId: universe.id,
+            isActive: true,
+            addedAt: now,
+            lastSeenAt: now,
+            source: "static_fallback",
+            statusReasonCode: "created_from_static_fallback",
+          },
+        });
+        createdMemberships++;
+        const dbAction = newStockCreated ? "created_stock_and_membership" : "created_membership";
+        items.push({
+          symbol,
+          status: "success",
+          reason: newStockCreated ? "Created stock and membership" : "Created membership",
+          dbAction,
+        });
+      } else if (!existingMembership.isActive) {
+        await prisma.stockUniverseMember.update({
+          where: { stockId_universeId: { stockId: stock.id, universeId: universe.id } },
+          data: {
+            isActive: true,
+            lastSeenAt: now,
+            removedAt: null,
+            statusReasonCode: "reactivated_from_provider",
+          },
+        });
+        reactivated++;
+        items.push({ symbol, status: "success", reason: "Membership reactivated", dbAction: "reactivated_membership" });
+      } else {
+        await prisma.stockUniverseMember.update({
+          where: { stockId_universeId: { stockId: stock.id, universeId: universe.id } },
+          data: {
+            lastSeenAt: now,
+            statusReasonCode: "provider_active",
+          },
+        });
+        alreadyActive++;
+        items.push({ symbol, status: "success", reason: "Already active", dbAction: "already_active" });
+      }
+    } catch (err) {
+      failedCount++;
+      items.push({
+        symbol,
+        status: "failed",
+        reason: err instanceof Error ? err.message : "Unknown error",
+        dbAction: "failed",
+      });
+    }
+  }
+
+  // 5. Deactivate previously active symbols missing from latest sync
+  const now = new Date();
+  for (const [sym, stockId] of activeSymbolsBeforeSync) {
+    if (!returnedSymbols.has(sym)) {
+      try {
+        await prisma.stockUniverseMember.update({
+          where: { stockId_universeId: { stockId, universeId: universe.id } },
+          data: {
+            isActive: false,
+            removedAt: now,
+            statusReasonCode: "missing_from_latest_provider_sync",
+          },
+        });
+        deactivatedCount++;
+        items.push({
+          symbol: sym,
+          status: "success",
+          reason: "Not returned by latest provider sync",
+          dbAction: "deactivated_membership",
+        });
+      } catch (err) {
+        failedCount++;
+        items.push({
+          symbol: sym,
+          status: "failed",
+          reason: err instanceof Error ? err.message : "Deactivation error",
+          dbAction: "failed",
+        });
+      }
+    }
+  }
+
+  const finishedAt = new Date();
+  const durationMs = finishedAt.getTime() - startedAt.getTime();
+  const successCount = createdStocks + createdMemberships + reactivated + alreadyActive + deactivatedCount;
+  const status: SyncRunStatus =
+    failedCount > 0 && successCount === 0
+      ? "failed"
+      : failedCount > 0 || skippedCount > 0
+      ? "partial_success"
+      : "success";
+  const persisted = successCount > 0;
+
+  const message = [
+    `Fetched ${constituents.length} symbols from static fallback list.`,
+    `FMP /stable/nasdaq-constituent returned HTTP 402 on current plan.`,
+    `Finnhub /indices/constituents returned HTML paywall.`,
+    `FMP was used only for profile enrichment.`,
+    `Created stocks: ${createdStocks}.`,
+    `Created memberships: ${createdMemberships}.`,
+    `Reactivated: ${reactivated}.`,
+    `Already active: ${alreadyActive}.`,
+    `Deactivated: ${deactivatedCount}.`,
+    `Failed: ${failedCount}.`,
+  ].join(" ");
+
+  // 6. Persist SyncRun + SyncRunItems
+  const syncRun = await prisma.syncRun.create({
+    data: {
+      type: "nasdaq100-universe-sync",
+      provider: "static_fallback",
+      status,
+      requestedCount: constituents.length,
+      successCount,
+      skippedCount,
+      failedCount,
+      persisted,
+      message,
+      startedAt,
+      finishedAt,
+      durationMs,
+    },
+  });
+
+  if (items.length > 0) {
+    await prisma.syncRunItem.createMany({
+      data: items.map((item) => ({
+        syncRunId: syncRun.id,
+        symbol: item.symbol,
+        status: item.status,
+        reason: item.reason,
+        dbAction: item.dbAction,
+      })),
+    });
+  }
+
+  return {
+    status,
+    provider: "static_fallback",
+    action: "nasdaq100-universe-sync",
+    requestedCount: constituents.length,
+    successCount,
+    skippedCount,
+    failedCount,
+    deactivatedCount,
+    createdStocks,
+    createdMemberships,
+    reactivated,
+    alreadyActive,
+    message,
+    startedAt: startedAt.toISOString(),
+    finishedAt: finishedAt.toISOString(),
+    durationMs,
+    persisted,
+    items,
   };
 }
