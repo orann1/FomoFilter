@@ -5,17 +5,19 @@ import SyncPageClient from "@/src/components/admin/SyncPageClient";
 import { getCurrentUserForDemo } from "@/src/lib/data/current-user";
 import { getRecentSyncRuns } from "@/src/lib/data/admin-sync";
 import { getUniverseOverview, getDbStockSummary } from "@/src/lib/data/admin-universes";
+import { getAdminStockDataInventory } from "@/src/lib/data/admin-stock-data";
 
 function isKeyConfigured(key: string | undefined): boolean {
   return typeof key === "string" && key.trim().length > 0;
 }
 
 export default async function AdminSyncPage() {
-  const [user, recentSyncRuns, universeOverview, dbStockSummary] = await Promise.all([
+  const [user, recentSyncRuns, universeOverview, dbStockSummary, stockInventory] = await Promise.all([
     getCurrentUserForDemo(),
     getRecentSyncRuns(10),
     getUniverseOverview(),
     getDbStockSummary(),
+    getAdminStockDataInventory(),
   ]);
 
   const providerStatus = {
@@ -47,6 +49,7 @@ export default async function AdminSyncPage() {
         }))}
         universeOverview={universeOverview}
         dbStockSummary={dbStockSummary}
+        stockInventory={stockInventory}
       />
     </ClientAppShell>
   );
