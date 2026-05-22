@@ -19,6 +19,8 @@ import type {
 } from "@/src/lib/market-data/types";
 import type { UniverseSyncActionResult } from "@/src/actions/market-data-actions";
 import type { UniverseOverviewRow, DbStockSummary } from "@/src/lib/data/admin-universes";
+import type { AdminStockDataInventoryRow } from "@/src/lib/data/admin-stock-data";
+import DataInventoryTab from "@/src/components/admin/DataInventoryTab";
 import {
   CheckCircle,
   XCircle,
@@ -35,6 +37,7 @@ import {
   Globe,
   BarChart3,
   History,
+  List,
 } from "lucide-react";
 
 // ── Serialised types from the server ─────────────────────────────────────────
@@ -77,6 +80,7 @@ interface SyncPageClientProps {
   recentSyncRuns: SyncRunData[];
   universeOverview: UniverseOverviewRow[];
   dbStockSummary: DbStockSummary;
+  stockInventory: AdminStockDataInventoryRow[];
 }
 
 type LastResult =
@@ -85,7 +89,7 @@ type LastResult =
   | { kind: "universe"; result: UniverseSyncActionResult }
   | null;
 
-type TabId = "overview" | "sync-actions" | "provider-tests" | "sync-history";
+type TabId = "overview" | "data-inventory" | "sync-actions" | "provider-tests" | "sync-history";
 
 // ── Sync action metadata (write actions only) ─────────────────────────────────
 
@@ -683,6 +687,7 @@ function UniverseOverviewTable({ rows }: { rows: UniverseOverviewRow[] }) {
 
 const TABS: Array<{ id: TabId; label: string; icon: React.ReactNode }> = [
   { id: "overview", label: "Overview", icon: <BarChart3 className="w-3.5 h-3.5" /> },
+  { id: "data-inventory", label: "Data Inventory", icon: <List className="w-3.5 h-3.5" /> },
   { id: "sync-actions", label: "Sync Actions", icon: <RefreshCw className="w-3.5 h-3.5" /> },
   { id: "provider-tests", label: "Provider Tests", icon: <FlaskConical className="w-3.5 h-3.5" /> },
   { id: "sync-history", label: "Sync History", icon: <History className="w-3.5 h-3.5" /> },
@@ -722,6 +727,7 @@ export default function SyncPageClient({
   recentSyncRuns,
   universeOverview,
   dbStockSummary,
+  stockInventory,
 }: SyncPageClientProps) {
   const router = useRouter();
   const [lastResult, setLastResult] = useState<LastResult>(null);
@@ -860,7 +866,14 @@ export default function SyncPageClient({
       )}
 
       {/* ══════════════════════════════════════════════════════════════════ */}
-      {/* Tab 2 — Sync Actions                                              */}
+      {/* Tab 2 — Data Inventory                                            */}
+      {/* ══════════════════════════════════════════════════════════════════ */}
+      {activeTab === "data-inventory" && (
+        <DataInventoryTab rows={stockInventory} />
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════ */}
+      {/* Tab 3 — Sync Actions                                              */}
       {/* ══════════════════════════════════════════════════════════════════ */}
       {activeTab === "sync-actions" && (
         <div className="space-y-5">

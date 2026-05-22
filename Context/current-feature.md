@@ -1,8 +1,4 @@
-# Current Feature
-
-## Feature Name
-
-Phase 9F — Nasdaq 100 Controlled Quote Snapshot Sync
+# Phase 9G — Admin Data Inventory Tab
 
 ## Status
 
@@ -10,597 +6,776 @@ Completed
 
 ---
 
-## Feature Reference
-
-This feature continues the updated Market Data Sync strategy.
-
-Read these documents before implementation:
-
-```txt
-Context/Features/market-data-sync-strategy-updated.md
-Context/current-feature.md
-```
-
-Also use the project context files:
-
-```txt
-Context/CLAUDE.md
-Context/project-overview.md
-Context/coding-standards.md
-Context/ai-interaction.md
-```
-
----
-
 ## Goal
 
-Add a controlled quote snapshot sync for active Nasdaq 100 members.
+Add a new **Data Inventory** tab to `/admin/sync`.
 
-The goal is to update quote data for the Nasdaq 100 in safe, limited batches using Twelve Data, without running a full all-at-once sync and without calling APIs from Scanner render paths.
+The goal is to provide a physical, DB-backed view of the current stock data stored in FomoFilter.
 
-This phase should reduce `Missing Quotes` and `Stale Quotes` in the Admin Universe Overview and make the Scanner more useful with real quote snapshot data.
+This tab should help answer:
 
----
+- Which stocks exist in the DB?
+- Which universes do they belong to?
+- Which profile fields are available?
+- Which quote fields are available?
+- Which provider/source supplied each field?
+- Which stocks have scores?
+- Which stocks are currently eligible for the Scanner?
+- Which data is missing and why?
 
-## Current Context
+This phase is a visibility/admin phase.
 
-Phase 9E completed:
-
-- Nasdaq 100 universe management.
-- 100 active Nasdaq 100 members in the DB.
-- Static fallback source for Nasdaq 100 membership.
-- FMP used only for profile enrichment.
-- Admin Sync tabs.
-- DB Stock Summary.
-- Universe Overview.
-- SyncRun / SyncRunItem logging.
-- Admin in-progress panel with elapsed timer.
-
-Current issue after Phase 9E:
-
-```txt
-Nasdaq 100 has active members, but many are missing quotes or have stale quotes.
-```
-
-Phase 9F should address quote coverage only.
+It must not add new sync actions, new external API calls, scoring logic, or Scanner behavior changes.
 
 ---
 
-## Core Scope
+## Why This Phase Is Needed
 
-Build:
+After Phase 9F, Nasdaq 100 quote snapshots are stored in the DB, but `/scanner` does not show those stocks yet because the Scanner currently requires `StockScore` rows.
 
-1. Nasdaq 100 quote snapshot batch sync.
-2. Batch size fixed at 25 symbols per run.
-3. Smart selection of the next 25 symbols.
-4. Twelve Data as the primary quote provider.
-5. Reuse existing quote sync logic and safe-update behavior.
-6. Persist `SyncRun` and `SyncRunItem`.
-7. Add an Admin button in the Sync Actions tab.
-8. Update Admin overview after sync.
-9. Keep all existing Admin tabs and loading UX.
-
----
-
-## Critical Rules
-
-### Rule 1 — No Full Nasdaq 100 All-at-Once Sync
-
-Do not add:
-
-```txt
-Sync All Nasdaq 100 Quotes
-```
-
-Only add:
-
-```txt
-Sync Nasdaq 100 Quote Snapshots — Next 25
-```
-
-or a very similar label.
-
----
-
-### Rule 2 — Fixed Batch Size
-
-Use a fixed batch size:
-
-```txt
-25 symbols per run
-```
-
-Do not add a batch-size selector in this phase.
-
-Reason:
-
-- Lower API credit risk.
-- Simpler QA.
-- Better controlled behavior.
-- Easier to reason about rotating batches.
-
----
-
-### Rule 3 — Use Only Active Nasdaq 100 Members
-
-The quote batch must select only:
-
-```txt
-Nasdaq 100 members where StockUniverseMember.isActive = true
-```
-
-Do not sync inactive Nasdaq 100 members in this phase.
-
-Do not sync S&P 500 or Russell 1000 in this phase.
-
----
-
-### Rule 4 — No API Calls from Scanner/Dashboard Render
-
-Do not call Twelve Data, FMP, or Finnhub from:
-
-```txt
-/scanner
-/
-Dashboard render
-Drawer render
-```
-
-Quote sync must happen only through Admin manual sync actions.
-
----
-
-### Rule 5 — Keep Safe Update Behavior
-
-Provider data must not blindly overwrite existing DB values.
-
-If Twelve Data returns missing, invalid, empty, or unusable values:
-
-- Do not overwrite existing valid values.
-- Mark the symbol as skipped or failed.
-- Preserve other successful symbols.
-- Store the issue in `SyncRunItem.reason`.
-- Set the correct `dbAction`.
-
----
-
-### Rule 6 — No Scoring Yet
-
-Do not add or modify:
-
-```txt
-Hot Score
-Opportunity Score
-Risk Score
-FOMO Risk
-Setup classification
-Alert evaluation
-```
-
-This phase only syncs quote snapshots.
-
----
-
-## Data to Sync
-
-Phase 9F is not just “price”.
-
-It should sync the quote snapshot fields available from Twelve Data and supported by the current schema.
-
-Target quote snapshot data:
-
-```txt
-current price
-daily change
-daily change percent
-volume
-open
-high
-low
-previous close / close
-source
-last synced timestamp
-source updated timestamp, if available
-```
-
-Before implementation, inspect:
-
-1. The current `StockQuote` Prisma model.
-2. The current `NormalizedQuote` type.
-3. The current `fetchTwelveQuotes()` normalization.
-4. The current `syncQuotesSampleAction()` upsert logic.
-
-Then decide whether the existing schema already supports the desired fields.
-
----
-
-## Schema Decision Requirement
-
-Before coding the batch sync, inspect `StockQuote`.
-
-### If `StockQuote` already supports enough fields
-
-Do not add a migration.
-
-Use existing fields only.
-
-### If important quote snapshot fields are missing
-
-Add a small Prisma migration.
-
-Potential fields to consider only if missing and supported by Twelve Data:
-
-```txt
-open
-high
-low
-previousClose
-volume
-change
-changePercent
-source
-lastSyncedAt
-sourceUpdatedAt
-```
-
-Do not add fields that are not currently needed.
-
-Do not add historical candle fields to `StockQuote`.
-
-Historical candles belong in a future `StockCandle` table or equivalent.
-
----
-
-## Provider
-
-Use Twelve Data.
-
-```txt
-provider = twelve-data
-```
-
-Do not use FMP for the Nasdaq 100 quote batch unless Twelve Data fails and a fallback is explicitly approved in a later phase.
-
-Do not use Finnhub fallback in this phase unless explicitly required after QA.
-
----
-
-## Batch Selection Logic
-
-Create a selector for the next 25 Nasdaq 100 quote targets.
-
-Suggested function:
+Current Scanner logic requires:
 
 ```ts
-getNextNasdaq100QuoteBatch(limit = 25)
+quote: { isNot: null }
+score: { isNot: null }
 ```
 
-Suggested location:
+Nasdaq 100 stocks now have `StockQuote` rows, but most or all do not yet have `StockScore` rows.
+
+Because of this, we need a DB visibility screen that shows the real state of stored data before we continue adding fundamentals, analyst data, scoring, or Scanner expansion.
+
+The new tab should become the admin source of truth for:
 
 ```txt
-src/lib/data/admin-universes.ts
+What data do we currently have?
+Where did it come from?
+What is missing?
+Why is a stock not visible in the Scanner?
 ```
-
-or a more appropriate server-side data file if it already exists.
-
-Selection rules:
-
-```txt
-1. Active Nasdaq 100 members with no StockQuote first
-2. Then active Nasdaq 100 members with oldest StockQuote.lastSyncedAt
-3. Tie-breaker: symbol ASC
-4. Limit 25
-```
-
-More detailed behavior:
-
-- Only select stocks with active Nasdaq 100 membership.
-- Prefer missing quotes first.
-- For existing quotes, oldest `lastSyncedAt` first.
-- Treat `lastSyncedAt = null` as stale.
-- Use symbol ASC as deterministic fallback.
-- Return exactly up to 25 symbols.
-- If fewer than 25 active symbols need sync, return fewer.
-- If all 100 are fresh, still allow selecting the 25 oldest if the button is clicked manually.
 
 ---
 
-## Server Action
+## Current Data Context
 
-Add a new server action.
+After Phase 9F, the system should have:
 
-Suggested function name:
+### Nasdaq 100 Membership
 
-```ts
-syncNasdaq100QuoteSnapshotsAction()
+- 100 active Nasdaq 100 members.
+- Membership source: `static_fallback`.
+- Stored in `StockUniverseMember`.
+
+### Profile / Reference Data
+
+Profile enrichment was previously done through FMP.
+
+Typical fields may include:
+
+- Company name.
+- Exchange.
+- Sector.
+- Industry.
+- Market cap.
+
+### Quote Snapshot Data
+
+Nasdaq 100 quote snapshots are now synced through Finnhub.
+
+Finnhub quote provides:
+
+- Price.
+- Change percent.
+- Open.
+- Day high.
+- Day low.
+- Previous close.
+- Timestamp / source updated timestamp.
+
+Finnhub `/quote` does **not** provide volume.
+
+Volume should therefore be:
+
+- Existing value if already present from a different provider.
+- `N/A` if not available.
+- Never labeled as Finnhub if Finnhub did not supply it.
+
+### Scanner Visibility
+
+Nasdaq 100 stocks may not appear in `/scanner` yet because they are missing `StockScore`.
+
+This is expected and should be visible in the new Data Inventory tab.
+
+---
+
+## Scope
+
+Build a new tab in `/admin/sync`:
+
+```txt
+Data Inventory
+```
+
+The tab should render a table:
+
+```txt
+Stock Data Inventory
+```
+
+The table should display all stocks currently stored in the DB.
+
+Expected current count is around 104 stocks, but the implementation must not hardcode this number.
+
+---
+
+## Non-Scope
+
+Do not build the following in this phase:
+
+- New sync actions.
+- New API provider calls.
+- External API calls from this tab.
+- New routes.
+- Scanner redesign.
+- Scanner filter changes.
+- StockScore calculation.
+- Fundamentals sync.
+- Analyst sync.
+- Candles sync.
+- Technical indicators.
+- Cron jobs.
+- Background jobs.
+- Alert evaluation.
+- New provider integrations.
+
+This phase reads existing DB data only.
+
+---
+
+## Core Rule
+
+The Data Inventory tab must be DB-only.
+
+Allowed:
+
+```txt
+Prisma DB query
+Server-side loader
+Existing DB relations
+Derived DB-backed status fields
+```
+
+Not allowed:
+
+```txt
+Finnhub API call
+FMP API call
+Twelve Data API call
+Any fetch to an external provider
+Client-side API call to refresh data
+localStorage-based data state
+Hardcoded stock counts
+```
+
+---
+
+## Tab Placement
+
+Add the tab inside the existing `/admin/sync` page.
+
+Current tabs include:
+
+- Overview.
+- Sync Actions.
+- Provider Tests.
+- Sync History.
+
+Add:
+
+```txt
+Data Inventory
+```
+
+Recommended order:
+
+```txt
+Overview
+Data Inventory
+Sync Actions
+Provider Tests
+Sync History
+```
+
+`Data Inventory` should be easy to find.
+
+---
+
+## Table Header Structure
+
+The table must use a two-row header.
+
+### Header Row 1 — Parameter Name
+
+Shows the field/parameter name.
+
+Example:
+
+```txt
+Symbol | Company Name | Price | Change % | Open | Day High | Day Low | Previous Close | Volume | Has Score | Scanner Eligible
+```
+
+### Header Row 2 — Data Source
+
+Shows the source of that parameter.
+
+Example:
+
+```txt
+DB | FMP | Finnhub | Finnhub | Finnhub | Finnhub | Finnhub | Finnhub | Twelve Data / N/A | Internal | Internal
+```
+
+### Stock Rows
+
+Stock rows begin below the two header rows.
+
+Example concept:
+
+| Symbol | Company Name | Price | Change % | Open | Day High | Day Low | Previous Close | Volume | Has Score | Scanner Eligible |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| DB | FMP | Finnhub | Finnhub | Finnhub | Finnhub | Finnhub | Finnhub | Twelve Data / N/A | Internal | Internal |
+| AAPL | Apple Inc. | 198.20 | 1.4% | 196.00 | 199.10 | 195.80 | 195.40 | N/A | No | No — Missing score |
+
+The actual UI does not need to look exactly like this markdown table, but it must visually show:
+
+```txt
+Parameter name
+Source label under the parameter name
+Stock values below
+```
+
+---
+
+## Allowed Source Labels
+
+Not every source is an external provider.
+
+Allowed source labels:
+
+```txt
+DB
+Static Fallback
+FMP
+Finnhub
+Twelve Data
+Internal
+Mixed
+N/A
+```
+
+Use short labels to keep the table readable.
+
+---
+
+## Recommended Columns
+
+Include these columns if the data exists or can be derived safely from current DB relations.
+
+### Identity / Profile
+
+| Column | Source Label | Notes |
+| --- | --- | --- |
+| Symbol | DB | From `Stock.symbol` |
+| Company Name | FMP / DB | Use FMP if profile-enriched; DB if only stored stock name is available |
+| Exchange | FMP | If stored |
+| Sector | FMP | If stored |
+| Industry | FMP | If stored |
+| Market Cap | FMP | If stored |
+
+### Universe
+
+| Column | Source Label | Notes |
+| --- | --- | --- |
+| In Nasdaq 100 | Static Fallback / DB | Derived from active `StockUniverseMember` |
+| Universe Source | DB | Show actual membership source, e.g. `static_fallback` |
+| Membership Active | DB | Yes/No |
+| Membership Last Seen | DB | `lastSeenAt` if available |
+| Membership Removed At | DB | Optional, if useful |
+
+### Quote Snapshot
+
+| Column | Source Label | Notes |
+| --- | --- | --- |
+| Has Quote | DB | Yes/No |
+| Price | Finnhub / actual quote source | Prefer `StockQuote.source` if present |
+| Change % | Finnhub / actual quote source | Prefer `StockQuote.source` if present |
+| Open | Finnhub / actual quote source | Prefer `StockQuote.source` if present |
+| Day High | Finnhub / actual quote source | Prefer `StockQuote.source` if present |
+| Day Low | Finnhub / actual quote source | Prefer `StockQuote.source` if present |
+| Previous Close | Finnhub / actual quote source | Prefer `StockQuote.source` if present |
+| Volume | Twelve Data / N/A / actual source | Do not label volume as Finnhub unless Finnhub actually supplied it |
+| Quote Source | DB | `StockQuote.source` |
+| Quote Last Synced | DB | `StockQuote.lastSyncedAt` |
+| Quote Source Updated | Finnhub / actual quote source | `StockQuote.sourceUpdatedAt` |
+
+### Scanner / Internal Status
+
+| Column | Source Label | Notes |
+| --- | --- | --- |
+| Has Score | Internal | Whether `StockScore` exists |
+| Scanner Eligible | Internal | Based on current Scanner rules |
+| Missing Reason | Internal | Explain why not scanner eligible |
+
+### Optional Useful Columns
+
+Add only if easy and already available from DB relations:
+
+| Column | Source Label | Notes |
+| --- | --- | --- |
+| In Watchlist | DB | Yes/No |
+| Has Active Alert | DB | Yes/No |
+| Created At | DB | If useful |
+| Updated At | DB | If useful |
+
+Do not add columns that require a new provider call.
+
+---
+
+## Per-Cell Source Rules
+
+### General Rule
+
+If a field has an actual stored source value, use it.
+
+For example:
+
+```txt
+Price source = StockQuote.source
+Quote Source = DB
+Universe Source = StockUniverseMember.source
+```
+
+### Quote Fields
+
+For quote fields, prefer the actual quote source:
+
+```txt
+StockQuote.source
+```
+
+If `StockQuote.source = finnhub`, then:
+
+- Price source = Finnhub.
+- Change % source = Finnhub.
+- Open source = Finnhub.
+- Day High source = Finnhub.
+- Day Low source = Finnhub.
+- Previous Close source = Finnhub.
+- Quote Source source label = DB.
+
+Volume is different.
+
+Since Finnhub `/quote` does not return volume:
+
+- If volume is null: source label should be `N/A`.
+- If volume exists from a previous provider and source cannot be separated per field: show the value, but label source carefully as `Mixed` or `DB`.
+- Do not label volume as Finnhub unless the implementation can prove Finnhub supplied it.
+
+### Profile Fields
+
+If current DB does not track profile-field source per field, use the planned/current known source label:
+
+```txt
+FMP
+```
+
+For example:
+
+- Company Name → FMP / DB.
+- Exchange → FMP.
+- Sector → FMP.
+- Industry → FMP.
+- Market Cap → FMP.
+
+If the exact source is unknown, use:
+
+```txt
+DB
 ```
 
 or:
 
-```ts
-syncNasdaq100QuotesBatchAction()
+```txt
+Mixed
 ```
 
-Requirements:
+Do not invent provider attribution.
 
-1. Load the next 25 active Nasdaq 100 symbols using the batch selection logic.
-2. If no symbols are found, return a clear skipped/no-op result.
-3. Call Twelve Data batch quote function.
-4. Apply safe validation per symbol.
-5. Upsert/update `StockQuote`.
-6. Persist `SyncRun`.
-7. Persist `SyncRunItem` for each requested symbol.
-8. Return a user-friendly `SyncActionResult`.
-9. Call `router.refresh()` from the client after completion.
-10. Do not expose raw provider payloads.
-11. Do not expose API keys.
+### Internal Fields
+
+Fields calculated by the app should use:
+
+```txt
+Internal
+```
+
+Examples:
+
+- Has Score.
+- Scanner Eligible.
+- Missing Reason.
+
+### Static Fallback Fields
+
+Universe membership fields should show:
+
+```txt
+Static Fallback / DB
+```
+
+or use the actual stored membership source:
+
+```txt
+static_fallback
+```
 
 ---
 
-## Reuse Existing Quote Sync Logic
+## Data Loader
 
-Do not duplicate the entire logic from `syncQuotesSampleAction`.
+Create a server-side data loader.
 
-Refactor if needed.
+Suggested file:
 
-Preferred approach:
+```txt
+src/lib/data/admin-stock-data.ts
+```
 
-Create a shared core helper such as:
+Suggested function:
 
 ```ts
-syncQuotesForSymbols({
-  symbols,
-  type,
-  provider,
-  sourceLabel,
+getAdminStockDataInventory()
+```
+
+The loader should query stocks with relevant relations.
+
+Suggested includes, adjusted to match the actual Prisma schema:
+
+```ts
+stock.findMany({
+  include: {
+    quote: true,
+    score: true,
+    universeMemberships: true,
+    watchlistItems: true,
+    alertRules: true,
+  },
 })
 ```
 
-Then use it from both:
+Use the actual relation names from the Prisma schema.
+
+Do not guess relation names if they differ.
+
+Return a clean view model to the client.
+
+---
+
+## Suggested View Model
+
+The final structure can vary, but it should be clean and table-friendly.
+
+Example:
 
 ```ts
-syncQuotesSampleAction()
-syncNasdaq100QuoteSnapshotsAction()
+type AdminStockDataInventoryRow = {
+  id: string;
+  symbol: string;
+  companyName: string | null;
+  exchange: string | null;
+  sector: string | null;
+  industry: string | null;
+  marketCap: string | null;
+
+  inNasdaq100: boolean;
+  universeSource: string | null;
+  membershipActive: boolean;
+  membershipLastSeenAt: string | null;
+
+  hasQuote: boolean;
+  price: string | null;
+  changePercent: string | null;
+  open: string | null;
+  dayHigh: string | null;
+  dayLow: string | null;
+  previousClose: string | null;
+  volume: string | null;
+  quoteSource: string | null;
+  quoteLastSyncedAt: string | null;
+  quoteSourceUpdatedAt: string | null;
+
+  hasScore: boolean;
+  scannerEligible: boolean;
+  missingReason: string;
+
+  inWatchlist?: boolean;
+  hasActiveAlert?: boolean;
+};
 ```
 
-Important:
-
-- Keep existing sample quote sync working.
-- Preserve existing result shape.
-- Preserve existing safe update behavior.
-- Preserve existing SyncRun logging.
-- Avoid copy/paste divergence.
-
-If refactoring introduces risk, keep the change small but still avoid unnecessary duplication where practical.
+Use strings for formatted display if that matches existing Admin UI patterns.
 
 ---
 
-## SyncRun / SyncRunItem
+## Scanner Eligible Logic
 
-Use the persistent logging system from Phase 9D.
-
-### SyncRun
-
-For Nasdaq 100 quote batch:
+Add derived fields:
 
 ```txt
-type = quotes-nasdaq100-batch
-provider = twelve-data
+scannerEligible
+missingReason
 ```
 
-Recommended message:
+Use the current Scanner behavior.
+
+Current Scanner requirement:
 
 ```txt
-Synced quote snapshots for next 25 active Nasdaq 100 members using Twelve Data. Selection priority: missing quotes first, then oldest lastSyncedAt.
+stock is active
+quote exists
+score exists
 ```
 
-Counts:
+Therefore:
 
 ```txt
-requestedCount = selected symbol count
-successCount = successful updates
-skippedCount = skipped symbols
-failedCount = failed symbols
-persisted = true if at least one DB update occurred
-status = success / partial_success / failed
+scannerEligible = true only if:
+- stock is active
+- StockQuote exists
+- StockScore exists
 ```
 
-### SyncRunItem
-
-For each requested symbol, store:
+Suggested missing reason logic:
 
 ```txt
-symbol
-status
-reason
-dbAction
+if stock inactive:
+  Inactive stock
+else if no quote:
+  Missing quote
+else if no score:
+  Missing score
+else:
+  Ready for scanner
 ```
 
-Suggested `dbAction` values:
+For Nasdaq 100 stocks after Phase 9F, expected result is usually:
 
 ```txt
-updated
-created
-kept_existing
-not_found
-failed
+Scanner Eligible: No
+Missing Reason: Missing score
 ```
 
-If existing quote rows are always upserted, use clear wording:
-
-```txt
-created_quote
-updated_quote
-kept_existing
-not_found
-failed
-```
-
-Consistency matters more than exact naming.
+Do not change Scanner filtering in this phase.
 
 ---
 
-## Admin UI
+## UI Requirements
 
-Update `/admin/sync`.
+The Data Inventory tab should be readable for 100+ rows.
 
-The page already has tabs. Keep them.
+Recommended UI:
 
-### Sync Actions Tab
+- Horizontal scroll.
+- Compact table rows.
+- Two-row sticky header if simple to implement.
+- Clear Yes/No badges.
+- `N/A` for missing values.
+- Clean number formatting.
+- Clean date formatting.
+- Avoid over-design.
 
-Add a new action under the existing sync actions:
+Recommended but optional if small and safe:
 
-```txt
-Sync Nasdaq 100 Quote Snapshots — Next 25
-```
+- Search by symbol/company.
+- Filter: All / Missing Score / Missing Quote / Scanner Eligible.
+- Filter: Nasdaq 100 only.
+- Small summary cards above the table.
 
-Suggested helper text:
-
-```txt
-Writes to DB. Uses Twelve Data. Selects active Nasdaq 100 members with missing quotes first, then oldest quote sync time. Fixed batch size: 25.
-```
-
-Show this near the universe sync and sample sync actions.
-
-Do not put this in the Provider Tests tab.
-
-### In-Progress Panel
-
-The existing in-progress panel should work for this new action.
-
-Add action metadata:
-
-```txt
-Action name: Sync Nasdaq 100 Quote Snapshots
-Typical duration: around 20–60 seconds for 25 symbols
-```
-
-Do not show fake percentage progress.
-
-Do not show fake remaining time.
-
-### Review Results
-
-The existing Review Results panel should display the result of the new action.
-
-It should show:
-
-- requested count
-- updated count
-- skipped count
-- failed count
-- symbols updated
-- symbols skipped
-- symbols failed
-- reasons
-
-### Sync History Tab
-
-The new run should appear in Recent Sync Runs.
-
-Expanding it should show symbol-level details.
-
-### Overview Tab
-
-After sync and refresh:
-
-- `Missing Quotes` for Nasdaq 100 should decrease.
-- `Stale Quotes` should change based on current stale logic.
-- `Last Quote Sync` should update.
-- DB Stock Summary should remain stable unless no stock existed, which should not happen because Phase 9E created the Nasdaq 100 stocks.
+Do not overbuild.
 
 ---
 
-## No UI Route Changes
+## Suggested Summary Cards
 
-Do not create new routes.
+Add summary cards at the top of the Data Inventory tab if easy.
 
-Keep everything inside:
+Examples:
+
+```txt
+Total Stocks
+With Quote
+Missing Quote
+With Score
+Scanner Eligible
+Nasdaq 100 Active
+```
+
+These should be DB-backed from the rows, not hardcoded.
+
+---
+
+## Formatting Rules
+
+### Missing Values
+
+Use:
+
+```txt
+N/A
+```
+
+Do not show empty strings.
+
+### Booleans
+
+Use readable values:
+
+```txt
+Yes
+No
+```
+
+Optional badges are fine.
+
+### Numbers
+
+Format reasonably:
+
+- Price: 2 decimals.
+- Percent: 2 decimals + `%`.
+- Market cap: compact format if already available.
+- Large numbers: compact or comma format.
+
+### Dates
+
+Use readable short date/time format.
+
+Example:
+
+```txt
+22 May 14:03
+```
+
+or the existing project date format.
+
+---
+
+## Source Row Visual Style
+
+The second header row should be visually lighter than the parameter-name row.
+
+Recommended styling:
+
+- Smaller text.
+- Muted color.
+- Uppercase or small caps if consistent.
+- No large visual noise.
+
+Example:
+
+```txt
+Price
+Finnhub
+```
+
+This should appear inside the header, not repeated for every row.
+
+---
+
+## Data Integrity Requirements
+
+The table must accurately show current DB state.
+
+Do not:
+
+- Pretend a field exists if it is null.
+- Show provider attribution that is not known.
+- Show Finnhub as the source for volume if Finnhub does not return volume.
+- Mark Scanner Eligible as Yes without a score.
+- Hide stocks that are missing data.
+- Filter out stocks without quotes or scores by default.
+
+This is an inventory table, so missing data is part of the point.
+
+---
+
+## Performance Requirements
+
+The current DB stock count is small enough for a single admin table.
+
+Still:
+
+- Use a server-side loader.
+- Avoid external calls.
+- Avoid per-row client fetches.
+- Avoid expensive repeated calculations on the client.
+- Keep the view model compact.
+
+Pagination is not required for ~100 stocks.
+
+If the table later grows to Russell 1000, pagination/virtualization can be added in a future phase.
+
+---
+
+## Browser QA Checklist
+
+Open:
 
 ```txt
 /admin/sync
 ```
 
-Do not add user-facing sync controls to `/scanner`.
-
----
-
-## Stale Quote Logic
-
-Use the existing Universe Overview stale quote logic.
-
-If needed, keep it simple:
+Go to:
 
 ```txt
-StockQuote.lastSyncedAt is null or older than 24 hours
+Data Inventory
 ```
 
-or:
+Confirm:
 
-```txt
-older than today
-```
-
-Do not over-engineer market-calendar logic in this phase.
+1. The tab appears.
+2. The table title is visible:
+   ```txt
+   Stock Data Inventory
+   ```
+3. The table loads all stocks from the DB.
+4. Nasdaq 100 stocks are visible.
+5. Rows are not filtered out just because they are missing score.
+6. The header has two rows:
+   - parameter names
+   - source labels.
+7. Source labels are visible under the parameter names.
+8. Quote fields are visible for synced Nasdaq 100 stocks:
+   - price
+   - change %
+   - open
+   - day high
+   - day low
+   - previous close
+   - quote source
+   - quote last synced
+9. Quote source shows `finnhub` for Phase 9F quote rows.
+10. Volume shows `N/A` or an existing value, but is not incorrectly labeled as Finnhub if Finnhub did not provide it.
+11. Has Score shows `No` for Nasdaq 100 stocks without `StockScore`.
+12. Scanner Eligible shows `No` for stocks missing score.
+13. Missing Reason shows `Missing score` for Nasdaq 100 quote-only stocks.
+14. Existing seeded scanner stocks with quote + score show `Scanner Eligible = Yes`, if applicable.
+15. No external API calls happen when opening the tab.
+16. Existing Admin tabs still work.
+17. Existing sync actions still work.
+18. The table is readable with horizontal scroll if needed.
 
 ---
 
-## API Credit / Rate Safety
-
-Twelve Data free plan is limited.
-
-Rules:
-
-- Fixed 25-symbol batch only.
-- No all-at-once Nasdaq 100 sync.
-- No automatic loop to run all 100.
-- No cron.
-- No retry loop.
-- No infinite polling.
-- Do not call Twelve Data from render paths.
-- Do not run multiple quote batch actions concurrently.
-- Disable buttons while a sync action is running.
-
-If Twelve Data batch endpoint has a provider-side limit smaller than 25, report it and stop.
-
-Do not silently split into multiple provider requests unless explicitly approved.
-
----
-
-## Out of Scope
-
-Do not build these in this phase:
-
-```txt
-Full Nasdaq 100 quote sync
-S&P 500 quote sync
-Russell 1000 quote sync
-Watchlist quote sync
-Active-alert quote sync
-Configurable batch size
-Cron or scheduled sync
-Historical candles
-StockCandle table
-Technical indicators
-Relative volume
-Average volume
-Scoring
-Alert evaluation
-News sync
-Analyst data sync
-Fundamentals sync
-Retry failed button
-Background jobs
-Polling
-Queue system
-User-facing scanner sync controls
-```
-
----
-
-## Manual QA Checklist
-
-### 1. Automated Checks
+## Validation
 
 Run:
 
@@ -611,224 +786,56 @@ npx prisma validate
 npx prisma migrate status
 ```
 
-If a migration is needed, confirm:
+No Prisma migration should be needed for this phase.
 
-- Migration name is clear.
-- Migration only touches quote snapshot fields.
-- No unrelated schema changes.
-
----
-
-### 2. Pre-Sync Admin State
-
-Open:
-
-```txt
-/admin/sync
-```
-
-Go to the Overview tab.
-
-Record:
-
-```txt
-Nasdaq 100 Active Members
-Missing Quotes
-Stale Quotes
-Last Quote Sync
-Total Stocks in DB
-```
-
-Expected before first batch:
-
-```txt
-Active Members = 100
-Missing Quotes likely high
-```
-
----
-
-### 3. Run Nasdaq 100 Quote Snapshot Batch
-
-Go to the Sync Actions tab.
-
-Click:
-
-```txt
-Sync Nasdaq 100 Quote Snapshots — Next 25
-```
-
-Expected:
-
-- Button disables.
-- Other write action buttons disable.
-- In-progress panel appears.
-- Elapsed timer updates.
-- Indeterminate progress bar appears.
-- No fake percentage.
-- No fake remaining time.
-- Action completes.
-- Review Results updates.
-
----
-
-### 4. Result Verification
-
-Expected:
-
-```txt
-requestedCount <= 25
-provider = twelve-data
-type = quotes-nasdaq100-batch
-status = success or partial_success
-```
-
-Confirm:
-
-- Updated symbols are listed.
-- Skipped symbols have reasons.
-- Failed symbols have reasons.
-- No API keys are shown.
-- No raw provider payloads are shown.
-
----
-
-### 5. SyncRun Verification
-
-Go to Sync History tab.
-
-Confirm:
-
-- A new row appears.
-- Type is `quotes-nasdaq100-batch`.
-- Provider is `twelve-data`.
-- Counts match Review Results.
-- Expanding the row shows symbol-level details.
-- `dbAction` values are meaningful.
-
----
-
-### 6. Overview Verification
-
-Return to Overview tab after sync.
-
-Confirm:
-
-- Nasdaq 100 `Missing Quotes` decreases by successful new quote count.
-- `Last Quote Sync` updates.
-- `Total Stocks in DB` does not unexpectedly increase.
-- Universe membership counts remain unchanged.
-- No watchlist or alert counts are affected.
-
----
-
-### 7. Repeat Run
-
-Run the action again.
-
-Expected:
-
-- It selects the next batch of 25 based on missing quotes / oldest sync.
-- It should not repeatedly select the exact same 25 if other Nasdaq 100 symbols are still missing quotes.
-- After multiple runs, Missing Quotes should continue decreasing.
-- No duplicate StockQuote rows are created.
-
----
-
-### 8. Idempotency / Duplicate Rows
-
-Verify:
-
-- `StockQuote` remains one row per stock.
-- Existing quote rows are updated, not duplicated.
-- Re-running after all 100 have quotes updates the 25 oldest, not creates duplicates.
-
----
-
-### 9. Error / Partial Failure Behavior
-
-If practical, simulate or observe a partial provider issue.
-
-Expected:
-
-- Successful symbols are persisted.
-- Failed/skipped symbols keep existing values.
-- Run status is `partial_success` if at least one success and at least one issue.
-- Run status is `failed` only if no symbols succeed.
-- Reasons are visible.
-
----
-
-### 10. Regression
-
-Confirm:
-
-- Dashboard still loads.
-- Scanner still loads.
-- Drawer still opens.
-- Watchlist actions still work.
-- Alert actions still work.
-- Provider tests still work.
-- Sync Quotes Sample still works.
-- Sync Profiles Sample still works.
-- Sync Nasdaq 100 Universe still works.
-- No provider calls happen during Dashboard render.
-- No provider calls happen during Scanner render.
-
----
-
-## Acceptance Criteria
-
-This phase is complete when:
-
-- Nasdaq 100 quote batch action exists.
-- Batch size is fixed at 25.
-- Only active Nasdaq 100 members are selected.
-- Selection prioritizes missing quotes first.
-- Then oldest `lastSyncedAt`.
-- Twelve Data is used as provider.
-- Quote snapshot fields are safely persisted.
-- Existing valid data is not overwritten by invalid provider data.
-- `SyncRun` is created with type `quotes-nasdaq100-batch`.
-- `SyncRun.provider = twelve-data`.
-- `SyncRunItem` rows are created per symbol.
-- Admin Review Results shows the run outcome.
-- Admin Sync History shows the run.
-- Universe Overview updates quote coverage.
-- Missing Quotes decreases after successful batches.
-- No full Nasdaq 100 sync is added.
-- No scoring is added.
-- No cron is added.
-- No API calls happen from Scanner render.
-- Build passes.
-- Prisma validates.
-- Migration status is clean.
+If a migration appears necessary, stop and report why before adding one.
 
 ---
 
 ## Required Implementation Report
 
-After implementation, return a report in English only with:
+Return a concise report in English only with:
 
 1. Files created.
 2. Files changed.
-3. Whether a Prisma migration was needed.
-4. If migration was added, migration name and fields.
-5. Current `StockQuote` fields reviewed.
-6. Twelve Data quote fields available after normalization.
-7. New or refactored helper functions.
-8. New server action.
-9. Batch selection logic summary.
-10. Admin UI changes.
-11. SyncRun / SyncRunItem logging summary.
-12. Pre-sync quote coverage.
-13. Post-sync quote coverage after one run.
-14. Repeat-run behavior.
-15. API key exposure verification.
-16. Regression results.
-17. Automated check results.
-18. Known issues.
-19. Ready for browser QA or not.
+3. New or updated data loader.
+4. Relations used in the DB query.
+5. Columns added to the Data Inventory table.
+6. Source row labels used.
+7. Scanner Eligible logic.
+8. Missing Reason logic.
+9. Summary cards added, if any.
+10. Whether search/filter was added.
+11. Whether any migration was needed.
+12. Browser QA result.
+13. Automated check results.
+14. Known issues.
+15. Ready for commit or not.
+
+---
+
+## Acceptance Criteria
+
+Phase 9G is complete when:
+
+- `/admin/sync` has a new `Data Inventory` tab.
+- The tab shows a DB-backed table of all stocks.
+- The table has a two-row header:
+  - parameter names.
+  - source labels.
+- The table shows current identity/profile, universe, quote, and internal/scanner status fields.
+- Nasdaq 100 stocks are visible even without scores.
+- Quote fields synced by Finnhub are visible.
+- Volume is not incorrectly attributed to Finnhub.
+- Scanner Eligible and Missing Reason explain why stocks do or do not appear in `/scanner`.
+- No external APIs are called from the tab.
+- No Scanner behavior is changed.
+- No scoring is added.
+- No migration is added unless explicitly justified.
+- Build passes.
+- TypeScript passes.
+- Prisma validate passes.
+- Prisma migrate status is clean.
 
 ---
 
@@ -850,3 +857,4 @@ After implementation, return a report in English only with:
 - Phase 9D completed (2026-05-19): Added persistent sync logging for manual market-data sync actions. Added `SyncRun` and `SyncRunItem` Prisma models via migration `20260519191321_add_sync_run_logs`. Created `src/lib/data/admin-sync.ts` with `getRecentSyncRuns(limit = 10)` server loader. Updated `src/actions/market-data-actions.ts` with `persistSyncLog()` helper; both `syncQuotesSampleAction` and `syncProfilesSampleAction` now persist a `SyncRun` + per-symbol `SyncRunItem` rows on every run (including early-failure paths). Updated `src/components/admin/SyncPageClient.tsx`: renamed Step 4 to "Review Results", added Step 5 "Recent Sync Runs" — a table showing the latest 10 runs with green/amber/red status badges, counts, and click-to-expand symbol-level details (symbol, status, reason, dbAction). Updated `app/admin/sync/page.tsx` to load recent sync runs server-side and pass serialised to the client; `router.refresh()` called after each sync to keep the table current. Cascade delete on SyncRunItem. No API keys, URLs, or raw provider payloads stored. Safe update behavior unchanged. Build passes, `prisma validate` and `prisma migrate status` both clean. Full QA passed: schema verified, persist logic audited on all code paths, security confirmed, no regressions. Approved by user.
 - Phase 9E completed (2026-05-21): Added universe management and Nasdaq 100 membership sync with Admin visibility and UX improvements. Extended `StockUniverseMember` with active/inactive membership metadata (`isActive`, `lastSeenAt`, `removedAt`, `source`, `statusReasonCode`) via migration `20260521135955_add_universe_membership_status`. Added a manually validated Nasdaq 100 static fallback source in `src/lib/market-data/nasdaq100-fallback-symbols.ts` with 100 unique symbols and explicit metadata (`source = static_fallback`, `compositionAsOf = 2026-01-20`, `lastVerifiedAt = 2026-05-21`); FMP and Finnhub live constituent endpoints were investigated but unavailable on the current plans, so FMP is used only for profile enrichment. Added `fetchFmpNasdaq100Constituents()` flow using the fallback symbols plus FMP profile enrichment, and added `syncNasdaq100UniverseAction()` to create missing stocks, create/reactivate/deactivate Nasdaq 100 memberships, persist `SyncRun`/`SyncRunItem` logs, and never delete stocks or modify watchlist/alerts. Created `src/lib/data/admin-universes.ts` with `getUniverseOverview()` and `getDbStockSummary()` loaders. Updated `/admin/sync` with DB Stock Summary, Universe Overview, static fallback source banner, and a `Sync Nasdaq 100 Universe` action. Manual QA confirmed the sync creates/maintains 100 active Nasdaq 100 members, preserves existing stocks/watchlist/alerts, stores `StockUniverseMember.source = static_fallback`, stores `SyncRun.provider = static_fallback`, and keeps profile enrichment separate from membership source. Added Admin Sync UX polish before commit: reorganized `/admin/sync` into four tabs (`Overview`, `Sync Actions`, `Provider Tests`, `Sync History`), added an in-progress panel for long-running write actions with elapsed timer and indeterminate progress bar, disabled duplicate submissions while sync is running, and kept all existing provider tests, sample syncs, review results, and sync history intact. Build passes, `tsc`, `prisma validate`, and `prisma migrate status` all clean. Approved by user.
 - Phase 9F completed (2026-05-22): Added controlled Nasdaq 100 quote snapshot batch sync. Added `open`, `dayHigh`, `dayLow`, `previousClose` to `StockQuote` via migration `20260522062445_add_quote_ohlc_fields`. Added `getNextNasdaq100QuoteBatch(limit=25)` selector in `admin-universes.ts` (missing quotes first, then oldest `lastSyncedAt`, then symbol ASC). Refactored quote sync into shared `syncQuotesForSymbols()` helper reused by both `syncQuotesSampleAction` and new `syncNasdaq100QuoteSnapshotsAction`. New action uses Finnhub as provider (sequential per-symbol calls, safe update behavior, 429 detection), persists `SyncRun` with `type=quotes-nasdaq100-batch` and `provider=finnhub`, and persists `SyncRunItem` per symbol. Added `quoteRefreshCycleSynced` field to `UniverseOverviewRow` using a SyncRun running-total cycle boundary algorithm (scans batch runs oldest→newest, accumulates successCount, resets when total reaches activeCount — correctly tracks 25→50→75→100 progression). Admin Sync Actions tab shows new button with inline in-progress panel (appears directly below button, no scrolling needed). Overview tab shows two-part Nasdaq 100 coverage: Part A (quote coverage count, always visible), Part B (current refresh cycle progress, visible only when missing=0). Fixed Finnhub Unix timestamp conversion (`raw.t * 1000`). Build passes, `tsc`, `prisma validate`, and `prisma migrate status` all clean. Approved by user.
+- Phase 9G completed (2026-05-22): Added Data Inventory tab to `/admin/sync`. Created `src/lib/data/admin-stock-data.ts` with `getAdminStockDataInventory()` — queries all stocks with `quote`, `score`, `universeMemberships` (including `universe.slug`), `watchlistItems`, and `alertRules` in a single Prisma query; derives `scannerEligible`, `missingReason`, `volumeSourceLabel`, and `quoteSourceLabel` server-side; formats all values as strings. Created `src/components/admin/DataInventoryTab.tsx` as a client component with: 6 summary cards (Total Stocks, With Quote, Missing Quote, With Score, Scanner Eligible, Nasdaq 100 Active); symbol/company text search; filter pills (All / Scanner Eligible / Missing Score / Missing Quote / Nasdaq 100); 24-column table with a two-row header (parameter name + source label). Columns cover Identity (Symbol, Company Name, Sector, Market Cap), Universe (Nasdaq 100, Univ. Source, Mbr Active, Mbr Last Seen), Quote (Has Quote, Price, Change %, Open, Day High, Day Low, Prev Close, Volume, Quote Source, Last Synced, Src Updated), and Internal (Has Score, Scanner Eligible, Missing Reason, In Watchlist, Active Alert). Volume is labeled `N/A` when null and `Mixed` when the quote source is Finnhub but a prior value exists — Finnhub is never incorrectly credited as the volume source. Tab order: Overview → Data Inventory → Sync Actions → Provider Tests → Sync History. No new Prisma models, no migrations. Build passes, `tsc`, `prisma validate`, and `prisma migrate status` all clean. Approved by user.
