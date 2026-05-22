@@ -101,6 +101,11 @@ model StockQuote {
   analystRating   String?
   updatedLabel    String    @default("Updated 2 min ago")
 
+  open            Decimal?
+  dayHigh         Decimal?
+  dayLow          Decimal?
+  previousClose   Decimal?
+
   source          String?
   lastSyncedAt    DateTime?
   sourceUpdatedAt DateTime?
