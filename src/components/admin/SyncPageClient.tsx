@@ -9,7 +9,7 @@ import {
   syncQuotesSampleAction,
   syncProfilesSampleAction,
   syncNasdaq100UniverseAction,
-  syncNasdaq100QuoteSnapshotsAction,
+  syncNasdaq100MarketDataAction,
 } from "@/src/actions/market-data-actions";
 import type {
   ProviderTestResult,
@@ -101,6 +101,10 @@ const SYNC_ACTION_META: Record<string, { label: string; durationNote: string }> 
   "sync-nasdaq100-quotes": {
     label: "Sync Nasdaq 100 Quote Snapshots",
     durationNote: "Quote batch sync typically takes 20–60 seconds for 25 symbols.",
+  },
+  "sync-nasdaq100-market-data": {
+    label: "Sync Nasdaq 100 Quotes + Metrics",
+    durationNote: "Market data batch sync (quotes + metrics) typically takes 30–90 seconds for 25 symbols.",
   },
   "sync-quotes": {
     label: "Sync Quotes Sample",
@@ -800,20 +804,14 @@ export default function SyncPageClient({
   // render tick after setActiveAction fires but before the server-action transition is registered.
   const isSyncRunning = activeSyncMeta !== null;
 
-  // Nasdaq 100 quote coverage + refresh cycle (derived from DB-backed overview data)
+  // Nasdaq 100 coverage (derived from DB-backed overview data)
   const nasdaq100Overview = universeOverview.find((r) => r.universeSlug === "nasdaq-100") ?? null;
-  const nasdaq100QuoteSynced = nasdaq100Overview
-    ? nasdaq100Overview.activeMembers - nasdaq100Overview.missingQuotes
+
+  const nasdaq100MetricSynced = nasdaq100Overview
+    ? nasdaq100Overview.activeMembers - nasdaq100Overview.missingMetrics
     : null;
-  const nasdaq100QuoteMissing = nasdaq100Overview?.missingQuotes ?? null;
-  const nasdaq100QuoteTotal = nasdaq100Overview?.activeMembers ?? null;
-  const nasdaq100CycleSynced = nasdaq100Overview?.quoteRefreshCycleSynced ?? null;
-  const nasdaq100CycleRemaining =
-    nasdaq100QuoteTotal !== null && nasdaq100CycleSynced !== null
-      ? nasdaq100QuoteTotal - nasdaq100CycleSynced
-      : null;
-  const nasdaq100CycleBatchesLeft =
-    nasdaq100CycleRemaining !== null ? Math.ceil(nasdaq100CycleRemaining / 25) : null;
+  const nasdaq100MetricMissing = nasdaq100Overview?.missingMetrics ?? null;
+  const nasdaq100MetricTotal = nasdaq100Overview?.activeMembers ?? null;
 
   const lastSyncResult =
     lastResult?.kind === "sync" || lastResult?.kind === "universe" ? lastResult : null;
@@ -944,32 +942,33 @@ export default function SyncPageClient({
             </div>
           </section>
 
-          {/* Nasdaq 100 Quote Sync */}
+          {/* Nasdaq 100 Market Data Sync (quotes + metrics) */}
           <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
             <div>
               <div className="flex items-center gap-2 mb-0.5">
                 <RefreshCw className="w-4 h-4 text-slate-400" />
-                <h2 className="text-sm font-semibold text-slate-200">Nasdaq 100 Quote Sync</h2>
+                <h2 className="text-sm font-semibold text-slate-200">Nasdaq 100 Market Data Sync</h2>
                 <span className="text-xs font-medium text-emerald-700 bg-emerald-900/40 border border-emerald-800/50 px-2 py-0.5 rounded ml-1">
                   Writes to DB
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Fetches quote snapshots for the next 25 active Nasdaq 100 members using Finnhub.
-                Reduces Missing Quotes and Stale Quotes in the Universe Overview.
+                Fetches both quote snapshots and basic financials for the next 25 active Nasdaq 100
+                members using Finnhub. Prioritises missing metrics, then missing quotes, then oldest
+                sync time. Uses 2 Finnhub calls per symbol (50 calls per batch).
               </p>
             </div>
             <ActionButton
               variant="sync"
               onClick={() =>
-                runSync("sync-nasdaq100-quotes", syncNasdaq100QuoteSnapshotsAction)
+                runSync("sync-nasdaq100-market-data", syncNasdaq100MarketDataAction)
               }
               disabled={isLoading}
-              loading={activeAction === "sync-nasdaq100-quotes"}
-              label="Sync Nasdaq 100 Quote Snapshots — Next 25"
-              description="Writes to DB. Uses Finnhub (60 calls/min, 25 sequential calls). Selects active Nasdaq 100 members with missing quotes first, then oldest quote sync time. Fixed batch size: 25."
+              loading={activeAction === "sync-nasdaq100-market-data"}
+              label="Sync Nasdaq 100 Quotes + Metrics — Next 25"
+              description="Writes StockQuote and StockMetric to DB. Uses Finnhub (60 calls/min, 2 calls per symbol, 500 ms inter-symbol delay). Selects active Nasdaq 100 members with missing metrics first, then missing quotes, then oldest sync time."
             />
-            {isSyncRunning && activeAction === "sync-nasdaq100-quotes" && activeSyncMeta && (
+            {isSyncRunning && activeAction === "sync-nasdaq100-market-data" && activeSyncMeta && (
               <SyncInProgressPanel
                 actionLabel={activeSyncMeta.label}
                 elapsedSeconds={elapsedSeconds}
@@ -980,123 +979,34 @@ export default function SyncPageClient({
               <Info className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
               <p className="text-xs text-slate-500 leading-relaxed">
                 <span className="text-slate-400 font-medium">Selection priority: </span>
-                Active Nasdaq 100 members with no quote first, then oldest{" "}
-                <span className="font-mono">lastSyncedAt</span>. Tie-breaker: symbol A–Z.
-                Run multiple times to cover all 100 members in batches of 25.
+                Missing metrics first, then missing quotes, then oldest metric sync, then oldest
+                quote sync. Tie-breaker: symbol A–Z. Run 4× to cover all 100 members.
               </p>
             </div>
 
-            {nasdaq100QuoteTotal !== null && (
+            {nasdaq100MetricTotal !== null && (
               <div className="rounded bg-slate-900/60 border border-slate-700/60 px-3 py-2.5 space-y-3">
-                {/* A. Quote coverage */}
                 <div className="space-y-1.5">
                   <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    Quote coverage
+                    Metrics coverage
                   </p>
                   <div className="grid grid-cols-2 gap-3 text-xs">
                     <div>
-                      <p className="text-slate-500 mb-0.5">Have quotes</p>
-                      <p className={`font-mono font-semibold ${nasdaq100QuoteSynced === nasdaq100QuoteTotal ? "text-emerald-400" : "text-slate-200"}`}>
-                        {nasdaq100QuoteSynced} / {nasdaq100QuoteTotal}
+                      <p className="text-slate-500 mb-0.5">Have metrics</p>
+                      <p className={`font-mono font-semibold ${nasdaq100MetricSynced === nasdaq100MetricTotal ? "text-emerald-400" : "text-slate-200"}`}>
+                        {nasdaq100MetricSynced} / {nasdaq100MetricTotal}
                       </p>
                     </div>
                     <div>
-                      <p className="text-slate-500 mb-0.5">Missing quotes</p>
-                      <p className={`font-mono font-semibold ${nasdaq100QuoteMissing! > 0 ? "text-red-400" : "text-slate-600"}`}>
-                        {nasdaq100QuoteMissing}
+                      <p className="text-slate-500 mb-0.5">Missing metrics</p>
+                      <p className={`font-mono font-semibold ${nasdaq100MetricMissing! > 0 ? "text-amber-400" : "text-slate-600"}`}>
+                        {nasdaq100MetricMissing}
                       </p>
                     </div>
                   </div>
                 </div>
-
-                {/* B. Current refresh cycle (only shown when all 100 have quotes) */}
-                {nasdaq100QuoteMissing === 0 && nasdaq100CycleSynced !== null && (
-                  <div className="space-y-1.5 border-t border-slate-700/60 pt-2.5">
-                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                      Current refresh cycle
-                    </p>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                      <div>
-                        <p className="text-slate-500 mb-0.5">Refreshed</p>
-                        <p className="font-mono font-semibold text-slate-200">
-                          {nasdaq100CycleSynced} / {nasdaq100QuoteTotal}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-slate-500 mb-0.5">Remaining in cycle</p>
-                        <p className={`font-mono font-semibold ${nasdaq100CycleRemaining! > 0 ? "text-amber-400" : "text-emerald-400"}`}>
-                          {nasdaq100CycleRemaining}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-slate-500 mb-0.5">Est. batches left</p>
-                        <p className="font-mono font-semibold text-amber-400">
-                          {nasdaq100CycleBatchesLeft}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-slate-500 mb-0.5">Batch size</p>
-                        <p className="font-mono font-semibold text-slate-400">25</p>
-                      </div>
-                    </div>
-                    <p className="text-[10px] text-slate-600 leading-relaxed">
-                      Cycle progress: members refreshed more recently than the oldest sync.
-                      Resets when the oldest member is synced again.
-                    </p>
-                  </div>
-                )}
               </div>
             )}
-          </section>
-
-          {/* Sample Sync */}
-          <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
-            <div>
-              <div className="flex items-center gap-2 mb-0.5">
-                <RefreshCw className="w-4 h-4 text-slate-400" />
-                <h2 className="text-sm font-semibold text-slate-200">Sample Sync</h2>
-                <span className="text-xs font-medium text-emerald-700 bg-emerald-900/40 border border-emerald-800/50 px-2 py-0.5 rounded ml-1">
-                  Writes to DB
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Each action fetches data for up to 5 existing DB symbols and updates only valid
-                fields. Symbols not in the database are skipped.
-              </p>
-            </div>
-            <div className="space-y-2.5">
-              <ActionButton
-                variant="sync"
-                onClick={() => runSync("sync-quotes", syncQuotesSampleAction)}
-                disabled={isLoading}
-                loading={activeAction === "sync-quotes"}
-                label="Sync Quotes Sample"
-                description="Updates StockQuote (price, changePercent, volume, source, lastSyncedAt) for up to 5 existing DB symbols via Twelve Data."
-              />
-              <ActionButton
-                variant="sync"
-                onClick={() => runSync("sync-profiles", syncProfilesSampleAction)}
-                disabled={isLoading}
-                loading={activeAction === "sync-profiles"}
-                label="Sync Profiles Sample"
-                description="Updates Stock (name, sector, marketCap) for up to 5 existing DB symbols via FMP."
-              />
-            </div>
-            {(isSyncRunning && (activeAction === "sync-quotes" || activeAction === "sync-profiles") && activeSyncMeta) && (
-              <SyncInProgressPanel
-                actionLabel={activeSyncMeta.label}
-                elapsedSeconds={elapsedSeconds}
-                durationNote={activeSyncMeta.durationNote}
-              />
-            )}
-            <div className="flex items-start gap-2 rounded bg-slate-900/60 border border-slate-700/60 px-3 py-2.5 mt-1">
-              <Info className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
-              <p className="text-xs text-slate-500 leading-relaxed">
-                <span className="text-slate-400 font-medium">DB safety: </span>
-                If provider data is missing, empty, invalid, or the API fails, existing DB values are
-                kept unchanged and the symbol is reported as skipped or failed.
-              </p>
-            </div>
           </section>
 
           {/* Review Results */}
@@ -1106,8 +1016,7 @@ export default function SyncPageClient({
               <div className="flex items-start gap-2.5 text-slate-500">
                 <Info className="w-4 h-4 shrink-0 mt-0.5" />
                 <p className="text-sm leading-relaxed">
-                  No sync action has run yet. Run a universe sync or sample sync above to see results
-                  here.
+                  No sync action has run yet. Run a sync above to see results here.
                 </p>
               </div>
             ) : lastSyncResult.kind === "sync" ? (
@@ -1220,6 +1129,73 @@ FINNHUB_API_KEY=`}
               </div>
             ) : (
               <TestResultViewer result={lastTestResult.result} />
+            )}
+          </section>
+
+          {/* Sample DB Writes */}
+          <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
+            <div>
+              <div className="flex items-center gap-2 mb-0.5">
+                <Database className="w-4 h-4 text-slate-400" />
+                <h2 className="text-sm font-semibold text-slate-200">Sample DB Writes</h2>
+                <span className="text-xs font-medium text-emerald-700 bg-emerald-900/40 border border-emerald-800/50 px-2 py-0.5 rounded ml-1">
+                  Writes to DB
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                Developer utility. Writes sample data for up to 5 existing DB symbols. Nothing is
+                created — only valid fields on existing stocks are updated.
+              </p>
+            </div>
+            <div className="space-y-2.5">
+              <ActionButton
+                variant="sync"
+                onClick={() => runSync("sync-quotes", syncQuotesSampleAction)}
+                disabled={isLoading}
+                loading={activeAction === "sync-quotes"}
+                label="Sync Quotes Sample"
+                description="Updates StockQuote (price, changePercent, volume, source, lastSyncedAt) for up to 5 existing DB symbols via Twelve Data."
+              />
+              <ActionButton
+                variant="sync"
+                onClick={() => runSync("sync-profiles", syncProfilesSampleAction)}
+                disabled={isLoading}
+                loading={activeAction === "sync-profiles"}
+                label="Sync Profiles Sample"
+                description="Updates Stock (name, sector, marketCap) for up to 5 existing DB symbols via FMP."
+              />
+            </div>
+            {isSyncRunning && (activeAction === "sync-quotes" || activeAction === "sync-profiles") && activeSyncMeta && (
+              <SyncInProgressPanel
+                actionLabel={activeSyncMeta.label}
+                elapsedSeconds={elapsedSeconds}
+                durationNote={activeSyncMeta.durationNote}
+              />
+            )}
+            <div className="flex items-start gap-2 rounded bg-slate-900/60 border border-slate-700/60 px-3 py-2.5">
+              <Info className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
+              <p className="text-xs text-slate-500 leading-relaxed">
+                <span className="text-slate-400 font-medium">DB safety: </span>
+                If provider data is missing, empty, invalid, or the API fails, existing DB values are
+                kept unchanged and the symbol is reported as skipped or failed.
+              </p>
+            </div>
+          </section>
+
+          {/* Sample DB Writes — Review Results */}
+          <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+            <h2 className="text-sm font-semibold text-slate-200 mb-3">Review Results</h2>
+            {lastSyncResult === null ? (
+              <div className="flex items-start gap-2.5 text-slate-500">
+                <Info className="w-4 h-4 shrink-0 mt-0.5" />
+                <p className="text-sm leading-relaxed">
+                  No sample sync has run yet. Run a sample action above to see results here.
+                </p>
+              </div>
+            ) : lastSyncResult.kind === "sync" ? (
+              <SyncResultViewer result={lastSyncResult.result} />
+            ) : (
+              <UniverseSyncResultViewer result={lastSyncResult.result} />
             )}
           </section>
         </div>

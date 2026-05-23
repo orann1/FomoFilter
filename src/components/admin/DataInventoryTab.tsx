@@ -5,13 +5,14 @@ import type { ReactNode } from "react";
 import { Search, CheckCircle, XCircle, List } from "lucide-react";
 import type { AdminStockDataInventoryRow } from "@/src/lib/data/admin-stock-data";
 
-type FilterId = "all" | "scanner-eligible" | "missing-score" | "missing-quote" | "nasdaq100";
+type FilterId = "all" | "scanner-eligible" | "missing-score" | "missing-quote" | "missing-metrics" | "nasdaq100";
 
 const FILTERS: Array<{ id: FilterId; label: string }> = [
   { id: "all", label: "All" },
   { id: "scanner-eligible", label: "Scanner Eligible" },
   { id: "missing-score", label: "Missing Score" },
   { id: "missing-quote", label: "Missing Quote" },
+  { id: "missing-metrics", label: "Missing Metrics" },
   { id: "nasdaq100", label: "Nasdaq 100" },
 ];
 
@@ -252,6 +253,266 @@ const COLUMNS: ColumnDef[] = [
         <NA />
       ),
   },
+  // ── Metrics ───────────────────────────────────────────────────────────────────
+  {
+    label: "Has Metrics",
+    sourceLabel: "DB",
+    align: "center",
+    minWidth: "90px",
+    render: (r) => <YesNoBadge value={r.hasMetric} />,
+  },
+  {
+    label: "Metrics Source",
+    sourceLabel: "DB",
+    align: "left",
+    minWidth: "90px",
+    render: (r) =>
+      r.metricProvider ? (
+        <span className="font-mono text-[10px] text-slate-400">{r.metricProvider}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "Metrics Synced",
+    sourceLabel: "DB",
+    align: "left",
+    minWidth: "120px",
+    render: (r) =>
+      r.metricLastSyncedAt ? (
+        <span className="text-xs text-slate-400">{r.metricLastSyncedAt}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "Rev Growth TTM",
+    sourceLabel: "Finnhub",
+    align: "right",
+    minWidth: "100px",
+    render: (r) =>
+      r.revenueGrowthTTMYoy ? (
+        <span className="font-mono text-xs text-slate-300">{r.revenueGrowthTTMYoy}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "EPS Growth TTM",
+    sourceLabel: "Finnhub",
+    align: "right",
+    minWidth: "100px",
+    render: (r) =>
+      r.epsGrowthTTMYoy ? (
+        <span className="font-mono text-xs text-slate-300">{r.epsGrowthTTMYoy}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "Rev Growth 3Y",
+    sourceLabel: "Finnhub",
+    align: "right",
+    minWidth: "95px",
+    render: (r) =>
+      r.revenueGrowth3Y ? (
+        <span className="font-mono text-xs text-slate-300">{r.revenueGrowth3Y}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "Gross Margin",
+    sourceLabel: "Finnhub",
+    align: "right",
+    minWidth: "90px",
+    render: (r) =>
+      r.grossMarginTTM ? (
+        <span className="font-mono text-xs text-slate-300">{r.grossMarginTTM}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "Op Margin",
+    sourceLabel: "Finnhub",
+    align: "right",
+    minWidth: "85px",
+    render: (r) =>
+      r.operatingMarginTTM ? (
+        <span className="font-mono text-xs text-slate-300">{r.operatingMarginTTM}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "Net Margin",
+    sourceLabel: "Finnhub",
+    align: "right",
+    minWidth: "85px",
+    render: (r) =>
+      r.netProfitMarginTTM ? (
+        <span className="font-mono text-xs text-slate-300">{r.netProfitMarginTTM}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "ROE",
+    sourceLabel: "Finnhub",
+    align: "right",
+    minWidth: "70px",
+    render: (r) =>
+      r.roeTTM ? (
+        <span className="font-mono text-xs text-slate-300">{r.roeTTM}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "ROA",
+    sourceLabel: "Finnhub",
+    align: "right",
+    minWidth: "70px",
+    render: (r) =>
+      r.roaTTM ? (
+        <span className="font-mono text-xs text-slate-300">{r.roaTTM}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "D/E",
+    sourceLabel: "Finnhub",
+    align: "right",
+    minWidth: "60px",
+    render: (r) =>
+      r.totalDebtToEquityAnnual ? (
+        <span className="font-mono text-xs text-slate-300">{r.totalDebtToEquityAnnual}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "Current Ratio",
+    sourceLabel: "Finnhub",
+    align: "right",
+    minWidth: "90px",
+    render: (r) =>
+      r.currentRatioAnnual ? (
+        <span className="font-mono text-xs text-slate-300">{r.currentRatioAnnual}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "P/E TTM",
+    sourceLabel: "Finnhub",
+    align: "right",
+    minWidth: "70px",
+    render: (r) =>
+      r.peBasicExclExtraTTM ? (
+        <span className="font-mono text-xs text-slate-300">{r.peBasicExclExtraTTM}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "Fwd P/E",
+    sourceLabel: "Finnhub",
+    align: "right",
+    minWidth: "70px",
+    render: (r) =>
+      r.forwardPE ? (
+        <span className="font-mono text-xs text-slate-300">{r.forwardPE}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "PEG",
+    sourceLabel: "Finnhub",
+    align: "right",
+    minWidth: "60px",
+    render: (r) =>
+      r.pegTTM ? (
+        <span className="font-mono text-xs text-slate-300">{r.pegTTM}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "P/S",
+    sourceLabel: "Finnhub",
+    align: "right",
+    minWidth: "60px",
+    render: (r) =>
+      r.psTTM ? (
+        <span className="font-mono text-xs text-slate-300">{r.psTTM}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "EV/EBITDA",
+    sourceLabel: "Finnhub",
+    align: "right",
+    minWidth: "80px",
+    render: (r) =>
+      r.evEbitdaTTM ? (
+        <span className="font-mono text-xs text-slate-300">{r.evEbitdaTTM}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "Beta",
+    sourceLabel: "Finnhub",
+    align: "right",
+    minWidth: "60px",
+    render: (r) =>
+      r.beta ? (
+        <span className="font-mono text-xs text-slate-300">{r.beta}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "Mkt Cap (Metric)",
+    sourceLabel: "Finnhub",
+    align: "right",
+    minWidth: "100px",
+    render: (r) =>
+      r.marketCapitalizationMetric ? (
+        <span className="font-mono text-xs text-slate-300">{r.marketCapitalizationMetric}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "52W High",
+    sourceLabel: "Finnhub",
+    align: "right",
+    minWidth: "70px",
+    render: (r) =>
+      r.week52High ? (
+        <span className="font-mono text-xs text-slate-300">{r.week52High}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "52W Low",
+    sourceLabel: "Finnhub",
+    align: "right",
+    minWidth: "70px",
+    render: (r) =>
+      r.week52Low ? (
+        <span className="font-mono text-xs text-slate-300">{r.week52Low}</span>
+      ) : (
+        <NA />
+      ),
+  },
   // ── Scanner / Internal ────────────────────────────────────────────────────────
   {
     label: "Has Score",
@@ -312,6 +573,8 @@ export default function DataInventoryTab({ rows }: DataInventoryTabProps) {
       totalStocks: rows.length,
       withQuote: rows.filter((r) => r.hasQuote).length,
       missingQuote: rows.filter((r) => !r.hasQuote).length,
+      withMetric: rows.filter((r) => r.hasMetric).length,
+      missingMetric: rows.filter((r) => !r.hasMetric).length,
       withScore: rows.filter((r) => r.hasScore).length,
       scannerEligible: rows.filter((r) => r.scannerEligible).length,
       nasdaq100Active: rows.filter((r) => r.inNasdaq100 && r.membershipActive).length,
@@ -341,6 +604,9 @@ export default function DataInventoryTab({ rows }: DataInventoryTabProps) {
       case "missing-quote":
         result = result.filter((r) => !r.hasQuote);
         break;
+      case "missing-metrics":
+        result = result.filter((r) => !r.hasMetric);
+        break;
       case "nasdaq100":
         result = result.filter((r) => r.inNasdaq100 && r.membershipActive);
         break;
@@ -359,33 +625,27 @@ export default function DataInventoryTab({ rows }: DataInventoryTabProps) {
           <h2 className="text-sm font-semibold text-slate-200">Stock Data Inventory</h2>
           <span className="text-xs text-slate-500 ml-1">DB-only snapshot</span>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
           <SummaryCard label="Total Stocks" value={summary.totalStocks} />
-          <SummaryCard
-            label="With Quote"
-            value={summary.withQuote}
-            color="text-emerald-400"
-          />
+          <SummaryCard label="With Quote" value={summary.withQuote} color="text-emerald-400" />
           <SummaryCard
             label="Missing Quote"
             value={summary.missingQuote}
             color={summary.missingQuote > 0 ? "text-red-400" : "text-slate-400"}
           />
+          <SummaryCard label="With Metrics" value={summary.withMetric} color="text-emerald-400" />
           <SummaryCard
-            label="With Score"
-            value={summary.withScore}
-            color="text-emerald-400"
+            label="Missing Metrics"
+            value={summary.missingMetric}
+            color={summary.missingMetric > 0 ? "text-amber-400" : "text-slate-400"}
           />
+          <SummaryCard label="With Score" value={summary.withScore} color="text-emerald-400" />
           <SummaryCard
             label="Scanner Eligible"
             value={summary.scannerEligible}
             color={summary.scannerEligible > 0 ? "text-emerald-400" : "text-amber-400"}
           />
-          <SummaryCard
-            label="Nasdaq 100 Active"
-            value={summary.nasdaq100Active}
-            color="text-blue-400"
-          />
+          <SummaryCard label="Nasdaq 100 Active" value={summary.nasdaq100Active} color="text-blue-400" />
         </div>
       </section>
 
