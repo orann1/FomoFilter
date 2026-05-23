@@ -10,6 +10,7 @@ import {
   syncProfilesSampleAction,
   syncNasdaq100UniverseAction,
   syncNasdaq100MarketDataAction,
+  calculateFundamentalScoresAction,
 } from "@/src/actions/market-data-actions";
 import type {
   ProviderTestResult,
@@ -17,10 +18,11 @@ import type {
   SyncRunStatus,
   SyncSymbolResult,
 } from "@/src/lib/market-data/types";
-import type { UniverseSyncActionResult } from "@/src/actions/market-data-actions";
+import type { UniverseSyncActionResult, ScoreCalcResult } from "@/src/actions/market-data-actions";
 import type { UniverseOverviewRow, DbStockSummary } from "@/src/lib/data/admin-universes";
 import type { AdminStockDataInventoryRow } from "@/src/lib/data/admin-stock-data";
 import DataInventoryTab from "@/src/components/admin/DataInventoryTab";
+import ScoreMethodologyTab from "@/src/components/admin/ScoreMethodologyTab";
 import {
   CheckCircle,
   XCircle,
@@ -38,6 +40,8 @@ import {
   BarChart3,
   History,
   List,
+  BookOpen,
+  Calculator,
 } from "lucide-react";
 
 // ── Serialised types from the server ─────────────────────────────────────────
@@ -87,9 +91,67 @@ type LastResult =
   | { kind: "test"; result: ProviderTestResult }
   | { kind: "sync"; result: SyncActionResult }
   | { kind: "universe"; result: UniverseSyncActionResult }
+  | { kind: "score-calc"; result: ScoreCalcResult }
   | null;
 
-type TabId = "overview" | "data-inventory" | "sync-actions" | "provider-tests" | "sync-history";
+type TabId = "overview" | "data-inventory" | "sync-actions" | "provider-tests" | "sync-history" | "score-methodology";
+
+// ── Score calc result viewer ──────────────────────────────────────────────────
+
+function ScoreCalcResultViewer({ result }: { result: ScoreCalcResult }) {
+  const [showItems, setShowItems] = useState(false);
+  const startedDate = new Date(result.startedAt);
+  const finishedDate = new Date(result.finishedAt);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-4">
+        <InlineSyncStatusBadge status={result.status} />
+        <span className="text-xs text-slate-400">{result.message}</span>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+        <MetaRow label="Provider" value={result.provider} />
+        <MetaRow label="Action" value={result.action} />
+        <MetaRow label="Requested" value={result.requestedCount} />
+        <MetaRow label="Calculated" value={<span className="text-emerald-400">{result.calculatedCount}</span>} />
+        <MetaRow label="Skipped" value={<span className="text-amber-400">{result.skippedCount}</span>} />
+        <MetaRow label="Failed" value={<span className="text-red-400">{result.failedCount}</span>} />
+        <MetaRow label="Started" value={startedDate.toLocaleTimeString()} />
+        <MetaRow label="Finished" value={finishedDate.toLocaleTimeString()} />
+        <MetaRow label="Duration" value={`${result.durationMs} ms`} />
+        <MetaRow
+          label="Persisted"
+          value={result.persisted ? <span className="text-emerald-400">Yes</span> : <span className="text-slate-400">No</span>}
+        />
+      </div>
+      {result.items.length > 0 && (
+        <div>
+          <button
+            className="text-xs text-slate-400 hover:text-slate-200 flex items-center gap-1.5 mb-2"
+            onClick={() => setShowItems((v) => !v)}
+          >
+            {showItems ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+            {showItems ? "Hide" : "Show"} symbol details ({result.items.length})
+          </button>
+          {showItems && (
+            <div className="space-y-0.5 max-h-72 overflow-y-auto">
+              {result.items.map((item, i) => (
+                <div key={i} className="flex items-start gap-2 text-xs">
+                  <ItemStatusIcon status={item.status} />
+                  <span className="font-mono font-semibold text-slate-200 w-14 shrink-0">{item.symbol}</span>
+                  <span className={item.status === "success" ? "text-emerald-400" : item.status === "skipped" ? "text-amber-400" : "text-red-400"}>
+                    {item.dbAction}
+                  </span>
+                  {item.reason && <span className="text-slate-500">— {item.reason}</span>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Sync action metadata (write actions only) ─────────────────────────────────
 
@@ -113,6 +175,10 @@ const SYNC_ACTION_META: Record<string, { label: string; durationNote: string }> 
   "sync-profiles": {
     label: "Sync Profiles Sample",
     durationNote: "Profile sample sync typically takes 10–25 seconds.",
+  },
+  "calc-fundamental-scores": {
+    label: "Calculate Fundamental Scores",
+    durationNote: "Score calculation is internal — typically completes in a few seconds for 100 stocks.",
   },
 };
 
@@ -695,6 +761,7 @@ const TABS: Array<{ id: TabId; label: string; icon: React.ReactNode }> = [
   { id: "sync-actions", label: "Sync Actions", icon: <RefreshCw className="w-3.5 h-3.5" /> },
   { id: "provider-tests", label: "Provider Tests", icon: <FlaskConical className="w-3.5 h-3.5" /> },
   { id: "sync-history", label: "Sync History", icon: <History className="w-3.5 h-3.5" /> },
+  { id: "score-methodology", label: "Score Methodology", icon: <BookOpen className="w-3.5 h-3.5" /> },
 ];
 
 function TabBar({
@@ -795,6 +862,18 @@ export default function SyncPageClient({
     });
   }
 
+  function runScoreCalc(label: string, fn: () => Promise<ScoreCalcResult>) {
+    setActiveAction(label);
+    startTimer();
+    startTransition(async () => {
+      const result = await fn();
+      stopTimer();
+      setLastResult({ kind: "score-calc", result });
+      setActiveAction(null);
+      router.refresh();
+    });
+  }
+
   const isLoading = isPending;
   const allConfigured = providerStatus.fmp && providerStatus.twelveData && providerStatus.finnhub;
 
@@ -814,7 +893,9 @@ export default function SyncPageClient({
   const nasdaq100MetricTotal = nasdaq100Overview?.activeMembers ?? null;
 
   const lastSyncResult =
-    lastResult?.kind === "sync" || lastResult?.kind === "universe" ? lastResult : null;
+    lastResult?.kind === "sync" || lastResult?.kind === "universe" || lastResult?.kind === "score-calc"
+      ? lastResult
+      : null;
   const lastTestResult = lastResult?.kind === "test" ? lastResult : null;
 
   return (
@@ -1009,6 +1090,47 @@ export default function SyncPageClient({
             )}
           </section>
 
+          {/* Score Calculation */}
+          <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
+            <div>
+              <div className="flex items-center gap-2 mb-0.5">
+                <Calculator className="w-4 h-4 text-slate-400" />
+                <h2 className="text-sm font-semibold text-slate-200">Score Calculation</h2>
+                <span className="text-xs font-medium text-blue-700 bg-blue-900/40 border border-blue-800/50 px-2 py-0.5 rounded ml-1">
+                  Internal
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                Calculates internal Fundamental Score v1 for stocks with synced Finnhub metrics. Does not call external APIs.
+              </p>
+            </div>
+            <ActionButton
+              variant="sync"
+              onClick={() => runScoreCalc("calc-fundamental-scores", calculateFundamentalScoresAction)}
+              disabled={isLoading}
+              loading={activeAction === "calc-fundamental-scores"}
+              label="Calculate Fundamental Scores"
+              description="Reads existing StockMetric rows and writes Fundamental Score to StockScore. No external API calls. Stocks with a score + quote become scanner-eligible."
+            />
+            {isSyncRunning && activeAction === "calc-fundamental-scores" && activeSyncMeta && (
+              <SyncInProgressPanel
+                actionLabel={activeSyncMeta.label}
+                elapsedSeconds={elapsedSeconds}
+                durationNote={activeSyncMeta.durationNote}
+              />
+            )}
+            <div className="flex items-start gap-2 rounded bg-slate-900/60 border border-slate-700/60 px-3 py-2.5">
+              <Info className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
+              <p className="text-xs text-slate-500 leading-relaxed">
+                <span className="text-slate-400 font-medium">Safe: </span>
+                Updates only <span className="font-mono text-slate-400">fundamentalScore</span> and related category fields on existing
+                score rows. Does not overwrite <span className="font-mono text-slate-400">hotScore</span> or{" "}
+                <span className="font-mono text-slate-400">opportunityScore</span>. Creates a minimal score row for stocks that
+                have metrics but no existing score yet.
+              </p>
+            </div>
+          </section>
+
           {/* Review Results */}
           <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
             <h2 className="text-sm font-semibold text-slate-200 mb-3">Review Results</h2>
@@ -1021,8 +1143,10 @@ export default function SyncPageClient({
               </div>
             ) : lastSyncResult.kind === "sync" ? (
               <SyncResultViewer result={lastSyncResult.result} />
-            ) : (
+            ) : lastSyncResult.kind === "universe" ? (
               <UniverseSyncResultViewer result={lastSyncResult.result} />
+            ) : (
+              <ScoreCalcResultViewer result={lastSyncResult.result} />
             )}
           </section>
         </div>
@@ -1194,8 +1318,10 @@ FINNHUB_API_KEY=`}
               </div>
             ) : lastSyncResult.kind === "sync" ? (
               <SyncResultViewer result={lastSyncResult.result} />
-            ) : (
+            ) : lastSyncResult.kind === "universe" ? (
               <UniverseSyncResultViewer result={lastSyncResult.result} />
+            ) : (
+              <ScoreCalcResultViewer result={lastSyncResult.result} />
             )}
           </section>
         </div>
@@ -1214,6 +1340,20 @@ FINNHUB_API_KEY=`}
             </div>
             <RecentSyncRunsTable runs={recentSyncRuns} />
           </section>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════ */}
+      {/* Tab 6 — Score Methodology                                         */}
+      {/* ══════════════════════════════════════════════════════════════════ */}
+      {activeTab === "score-methodology" && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <BookOpen className="w-4 h-4 text-slate-400" />
+            <h2 className="text-sm font-semibold text-slate-200">Score Methodology</h2>
+            <span className="text-xs text-slate-500 ml-1">How Fundamental Score v1 is calculated</span>
+          </div>
+          <ScoreMethodologyTab />
         </div>
       )}
 

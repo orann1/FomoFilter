@@ -27,6 +27,14 @@ export type AdminStockDataInventoryRow = {
   quoteSourceUpdatedAt: string | null;
 
   hasScore: boolean;
+  fundamentalScore: string | null;
+  growthScore: string | null;
+  profitabilityScore: string | null;
+  valuationScore: string | null;
+  financialHealthScore: string | null;
+  riskContextScore: string | null;
+  scoreVersion: string | null;
+  scoreLastCalculatedAt: string | null;
   scannerEligible: boolean;
   missingReason: string;
 
@@ -171,6 +179,14 @@ export async function getAdminStockDataInventory(): Promise<AdminStockDataInvent
       quoteSourceUpdatedAt: formatShortDate(quote?.sourceUpdatedAt),
 
       hasScore: score !== null,
+      fundamentalScore: score?.fundamentalScore != null ? fmtDecimal(score.fundamentalScore, 1) : null,
+      growthScore: score?.growthScore != null ? fmtDecimal(score.growthScore, 1) : null,
+      profitabilityScore: score?.profitabilityScore != null ? fmtDecimal(score.profitabilityScore, 1) : null,
+      valuationScore: score?.valuationScore != null ? fmtDecimal(score.valuationScore, 1) : null,
+      financialHealthScore: score?.financialHealthScore != null ? fmtDecimal(score.financialHealthScore, 1) : null,
+      riskContextScore: score?.riskContextScore != null ? fmtDecimal(score.riskContextScore, 1) : null,
+      scoreVersion: score?.scoreVersion ?? null,
+      scoreLastCalculatedAt: formatShortDate(score?.lastCalculatedAt),
       scannerEligible,
       missingReason,
 

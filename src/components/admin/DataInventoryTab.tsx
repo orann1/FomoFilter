@@ -513,13 +513,109 @@ const COLUMNS: ColumnDef[] = [
         <NA />
       ),
   },
-  // ── Scanner / Internal ────────────────────────────────────────────────────────
+  // ── Score / Internal ─────────────────────────────────────────────────────────
   {
     label: "Has Score",
     sourceLabel: "Internal",
     align: "center",
     minWidth: "80px",
     render: (r) => <YesNoBadge value={r.hasScore} />,
+  },
+  {
+    label: "Fund. Score",
+    sourceLabel: "Internal",
+    align: "right",
+    minWidth: "90px",
+    render: (r) =>
+      r.fundamentalScore ? (
+        <span className="font-mono font-semibold text-emerald-300">{r.fundamentalScore}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "Growth Scr",
+    sourceLabel: "Internal",
+    align: "right",
+    minWidth: "80px",
+    render: (r) =>
+      r.growthScore ? (
+        <span className="font-mono text-xs text-slate-300">{r.growthScore}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "Profit Scr",
+    sourceLabel: "Internal",
+    align: "right",
+    minWidth: "80px",
+    render: (r) =>
+      r.profitabilityScore ? (
+        <span className="font-mono text-xs text-slate-300">{r.profitabilityScore}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "Valuation Scr",
+    sourceLabel: "Internal",
+    align: "right",
+    minWidth: "90px",
+    render: (r) =>
+      r.valuationScore ? (
+        <span className="font-mono text-xs text-slate-300">{r.valuationScore}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "Fin Health Scr",
+    sourceLabel: "Internal",
+    align: "right",
+    minWidth: "95px",
+    render: (r) =>
+      r.financialHealthScore ? (
+        <span className="font-mono text-xs text-slate-300">{r.financialHealthScore}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "Risk Scr",
+    sourceLabel: "Internal",
+    align: "right",
+    minWidth: "70px",
+    render: (r) =>
+      r.riskContextScore ? (
+        <span className="font-mono text-xs text-slate-300">{r.riskContextScore}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "Score Ver.",
+    sourceLabel: "Internal",
+    align: "left",
+    minWidth: "100px",
+    render: (r) =>
+      r.scoreVersion ? (
+        <span className="font-mono text-[10px] text-slate-500">{r.scoreVersion}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "Score Calc At",
+    sourceLabel: "Internal",
+    align: "left",
+    minWidth: "120px",
+    render: (r) =>
+      r.scoreLastCalculatedAt ? (
+        <span className="text-xs text-slate-400">{r.scoreLastCalculatedAt}</span>
+      ) : (
+        <NA />
+      ),
   },
   {
     label: "Scanner Eligible",
