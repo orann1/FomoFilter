@@ -10,6 +10,7 @@ export type UniverseOverviewRow = {
   missingQuotes: number;
   staleQuotes: number;
   withProfile: number;
+  missingMetrics: number;
   lastUniverseSync: string | null;
   lastQuoteSync: string | null;
   // Refresh cycle: count of active members with lastSyncedAt strictly newer than the oldest
@@ -35,6 +36,7 @@ export async function getUniverseOverview(): Promise<UniverseOverviewRow[]> {
           stock: {
             include: {
               quote: true,
+              metric: { select: { lastSyncedAt: true } },
             },
           },
         },
@@ -76,6 +78,7 @@ export async function getUniverseOverview(): Promise<UniverseOverviewRow[]> {
     const inactiveMembers = universe.members.filter((m) => !m.isActive);
 
     const missingQuotes = activeMembers.filter((m) => !m.stock.quote).length;
+    const missingMetrics = activeMembers.filter((m) => !m.stock.metric).length;
 
     const staleQuotes = activeMembers.filter((m) => {
       const q = m.stock.quote;
@@ -135,6 +138,7 @@ export async function getUniverseOverview(): Promise<UniverseOverviewRow[]> {
       missingQuotes,
       staleQuotes,
       withProfile,
+      missingMetrics,
       lastUniverseSync: latestUniverseSync?.toISOString() ?? null,
       lastQuoteSync: latestQuoteSync?.toISOString() ?? null,
       quoteRefreshCycleSynced,
@@ -166,6 +170,51 @@ export async function getNextNasdaq100QuoteBatch(limit = 25): Promise<string[]> 
     const aTime = a.stock.quote?.lastSyncedAt?.getTime() ?? -1;
     const bTime = b.stock.quote?.lastSyncedAt?.getTime() ?? -1;
     if (aTime !== bTime) return aTime - bTime;
+    return a.stock.symbol.localeCompare(b.stock.symbol);
+  });
+
+  return members.slice(0, limit).map((m) => m.stock.symbol);
+}
+
+// Priority: missing metrics first, then missing quotes, then oldest metric sync, then oldest quote sync, then symbol ASC
+export async function getNextNasdaq100MarketDataBatch(limit = 25): Promise<string[]> {
+  const universe = await prisma.stockUniverse.findUnique({
+    where: { slug: "nasdaq-100" },
+  });
+
+  if (!universe) return [];
+
+  const members = await prisma.stockUniverseMember.findMany({
+    where: { universeId: universe.id, isActive: true },
+    include: {
+      stock: {
+        select: {
+          symbol: true,
+          quote: { select: { lastSyncedAt: true } },
+          metric: { select: { lastSyncedAt: true } },
+        },
+      },
+    },
+  });
+
+  members.sort((a, b) => {
+    const aMetric = a.stock.metric?.lastSyncedAt?.getTime() ?? -1;
+    const bMetric = b.stock.metric?.lastSyncedAt?.getTime() ?? -1;
+    const aQuote = a.stock.quote?.lastSyncedAt?.getTime() ?? -1;
+    const bQuote = b.stock.quote?.lastSyncedAt?.getTime() ?? -1;
+
+    // Missing metric always first
+    if (aMetric === -1 && bMetric !== -1) return -1;
+    if (bMetric === -1 && aMetric !== -1) return 1;
+    // Both missing metric — missing quote comes next
+    if (aMetric === -1 && bMetric === -1) {
+      if (aQuote === -1 && bQuote !== -1) return -1;
+      if (bQuote === -1 && aQuote !== -1) return 1;
+      return a.stock.symbol.localeCompare(b.stock.symbol);
+    }
+    // Both have metrics — sort by oldest metric sync, then oldest quote sync
+    if (aMetric !== bMetric) return aMetric - bMetric;
+    if (aQuote !== bQuote) return aQuote - bQuote;
     return a.stock.symbol.localeCompare(b.stock.symbol);
   });
 

@@ -35,6 +35,7 @@ model Stock {
   updatedAt           DateTime           @updatedAt
 
   quote               StockQuote?
+  metric              StockMetric?
   score               StockScore?
   drawerDetail        StockDrawerDetail?
   watchlistItems      WatchlistItem[]
@@ -302,6 +303,58 @@ model RecentAlert {
   isNew      Boolean  @default(false)
   icon       String
   createdAt  DateTime @default(now())
+}
+
+model StockMetric {
+  id      String @id @default(cuid())
+  stockId String @unique
+  stock   Stock  @relation(fields: [stockId], references: [id], onDelete: Cascade)
+
+  provider String @default("finnhub")
+
+  // Growth (% scale — e.g. 12.76 = 12.76%)
+  revenueGrowthTTMYoy       Decimal?
+  epsGrowthTTMYoy           Decimal?
+  revenueGrowthQuarterlyYoy Decimal?
+  epsGrowthQuarterlyYoy     Decimal?
+  revenueGrowth3Y           Decimal?
+  epsGrowth3Y               Decimal?
+
+  // Profitability (% scale)
+  grossMarginTTM     Decimal?
+  operatingMarginTTM Decimal?
+  netProfitMarginTTM Decimal?
+  roeTTM             Decimal?
+  roaTTM             Decimal?
+
+  // Financial strength (ratio scale)
+  totalDebtToEquityAnnual   Decimal?
+  currentRatioAnnual        Decimal?
+  quickRatioAnnual          Decimal?
+  netInterestCoverageAnnual Decimal?
+
+  // Valuation (ratio/multiple scale)
+  peBasicExclExtraTTM Decimal?
+  forwardPE           Decimal?
+  pegTTM              Decimal?
+  forwardPEG          Decimal?
+  psTTM               Decimal?
+  pbAnnual            Decimal?
+  evEbitdaTTM         Decimal?
+  epsTTM              Decimal?
+
+  // Market / risk context
+  beta                         Decimal?
+  marketCapitalization         Decimal? // full USD (Finnhub millions * 1,000,000)
+  week52High                   Decimal?
+  week52Low                    Decimal?
+  dividendYieldIndicatedAnnual Decimal? // % scale (e.g. 0.35 = 0.35%)
+
+  // Metadata
+  rawMetricCount Int?
+  lastSyncedAt   DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 }
 
 model SyncRun {

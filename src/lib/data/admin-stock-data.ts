@@ -30,6 +30,38 @@ export type AdminStockDataInventoryRow = {
   scannerEligible: boolean;
   missingReason: string;
 
+  hasMetric: boolean;
+  metricProvider: string | null;
+  metricLastSyncedAt: string | null;
+  // Growth (% scale)
+  revenueGrowthTTMYoy: string | null;
+  epsGrowthTTMYoy: string | null;
+  revenueGrowth3Y: string | null;
+  epsGrowth3Y: string | null;
+  // Profitability
+  grossMarginTTM: string | null;
+  operatingMarginTTM: string | null;
+  netProfitMarginTTM: string | null;
+  roeTTM: string | null;
+  roaTTM: string | null;
+  // Financial strength
+  totalDebtToEquityAnnual: string | null;
+  currentRatioAnnual: string | null;
+  // Valuation
+  peBasicExclExtraTTM: string | null;
+  forwardPE: string | null;
+  pegTTM: string | null;
+  psTTM: string | null;
+  pbAnnual: string | null;
+  evEbitdaTTM: string | null;
+  epsTTM: string | null;
+  // Market / risk
+  beta: string | null;
+  marketCapitalizationMetric: string | null;
+  week52High: string | null;
+  week52Low: string | null;
+  dividendYieldIndicatedAnnual: string | null;
+
   inWatchlist: boolean;
   hasActiveAlert: boolean;
 };
@@ -67,6 +99,7 @@ export async function getAdminStockDataInventory(): Promise<AdminStockDataInvent
     include: {
       quote: true,
       score: true,
+      metric: true,
       universeMemberships: {
         include: {
           universe: { select: { slug: true } },
@@ -84,6 +117,7 @@ export async function getAdminStockDataInventory(): Promise<AdminStockDataInvent
 
     const quote = stock.quote;
     const score = stock.score;
+    const metric = stock.metric;
 
     const quoteSourceRaw = quote?.source ?? null;
     const quoteSourceLabel = normalizeSource(quoteSourceRaw);
@@ -139,6 +173,37 @@ export async function getAdminStockDataInventory(): Promise<AdminStockDataInvent
       hasScore: score !== null,
       scannerEligible,
       missingReason,
+
+      hasMetric: metric !== null,
+      metricProvider: metric?.provider ?? null,
+      metricLastSyncedAt: formatShortDate(metric?.lastSyncedAt),
+      revenueGrowthTTMYoy: metric?.revenueGrowthTTMYoy != null ? `${fmtDecimal(metric.revenueGrowthTTMYoy)}%` : null,
+      epsGrowthTTMYoy: metric?.epsGrowthTTMYoy != null ? `${fmtDecimal(metric.epsGrowthTTMYoy)}%` : null,
+      revenueGrowth3Y: metric?.revenueGrowth3Y != null ? `${fmtDecimal(metric.revenueGrowth3Y)}%` : null,
+      epsGrowth3Y: metric?.epsGrowth3Y != null ? `${fmtDecimal(metric.epsGrowth3Y)}%` : null,
+      grossMarginTTM: metric?.grossMarginTTM != null ? `${fmtDecimal(metric.grossMarginTTM)}%` : null,
+      operatingMarginTTM: metric?.operatingMarginTTM != null ? `${fmtDecimal(metric.operatingMarginTTM)}%` : null,
+      netProfitMarginTTM: metric?.netProfitMarginTTM != null ? `${fmtDecimal(metric.netProfitMarginTTM)}%` : null,
+      roeTTM: metric?.roeTTM != null ? `${fmtDecimal(metric.roeTTM)}%` : null,
+      roaTTM: metric?.roaTTM != null ? `${fmtDecimal(metric.roaTTM)}%` : null,
+      totalDebtToEquityAnnual: fmtDecimal(metric?.totalDebtToEquityAnnual),
+      currentRatioAnnual: fmtDecimal(metric?.currentRatioAnnual),
+      peBasicExclExtraTTM: fmtDecimal(metric?.peBasicExclExtraTTM),
+      forwardPE: fmtDecimal(metric?.forwardPE),
+      pegTTM: fmtDecimal(metric?.pegTTM),
+      psTTM: fmtDecimal(metric?.psTTM),
+      pbAnnual: fmtDecimal(metric?.pbAnnual),
+      evEbitdaTTM: fmtDecimal(metric?.evEbitdaTTM),
+      epsTTM: fmtDecimal(metric?.epsTTM),
+      beta: fmtDecimal(metric?.beta),
+      marketCapitalizationMetric: metric?.marketCapitalization != null
+        ? `$${(parseFloat(metric.marketCapitalization.toString()) / 1e9).toFixed(2)}B`
+        : null,
+      week52High: fmtDecimal(metric?.week52High),
+      week52Low: fmtDecimal(metric?.week52Low),
+      dividendYieldIndicatedAnnual: metric?.dividendYieldIndicatedAnnual != null
+        ? `${fmtDecimal(metric.dividendYieldIndicatedAnnual)}%`
+        : null,
 
       inWatchlist: stock.watchlistItems.length > 0,
       hasActiveAlert: stock.alertRules.some((r) => r.isActive),
