@@ -24,6 +24,11 @@ import type {
   SyncRunStatus,
   SyncSymbolResult,
 } from "@/src/lib/market-data/types";
+import {
+  calculateFundamentalScore,
+  SCORE_VERSION,
+  type FundamentalScoreInput,
+} from "@/src/lib/scoring/fundamental-score";
 
 export type UniverseSyncActionResult = {
   status: SyncRunStatus;
@@ -1216,6 +1221,239 @@ export async function syncNasdaq100UniverseAction(): Promise<UniverseSyncActionR
     finishedAt: finishedAt.toISOString(),
     durationMs,
     persisted,
+    items,
+  };
+}
+
+// ── Fundamental Score Calculation ─────────────────────────────────────────────
+
+export type ScoreCalcResult = {
+  status: SyncRunStatus;
+  provider: string;
+  action: string;
+  requestedCount: number;
+  calculatedCount: number;
+  skippedCount: number;
+  failedCount: number;
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+  persisted: boolean;
+  message: string;
+  items: Array<{ symbol: string; status: string; reason: string; dbAction: string }>;
+};
+
+export async function calculateFundamentalScoresAction(): Promise<ScoreCalcResult> {
+  const startedAt = new Date();
+  const SYNC_TYPE = "fundamental-score-calculation";
+  const PROVIDER = "internal";
+
+  type ItemRow = { symbol: string; status: string; reason: string; dbAction: string };
+  const items: ItemRow[] = [];
+  let calculatedCount = 0;
+  let skippedCount = 0;
+  let failedCount = 0;
+
+  const stocks = await prisma.stock.findMany({
+    where: { isActive: true },
+    include: { metric: true, score: true },
+    orderBy: { symbol: "asc" },
+  });
+
+  for (const stock of stocks) {
+    if (!stock.metric) {
+      skippedCount++;
+      items.push({
+        symbol: stock.symbol,
+        status: "skipped",
+        reason: "Missing StockMetric — run market data sync first",
+        dbAction: "kept_existing",
+      });
+      continue;
+    }
+    const metric = stock.metric;
+
+    const toNum = (v: { toString(): string } | null | undefined): number | null => {
+      if (v == null) return null;
+      const n = parseFloat(v.toString());
+      return isNaN(n) ? null : n;
+    };
+
+    const input: FundamentalScoreInput = {
+      revenueGrowthTTMYoy: toNum(metric.revenueGrowthTTMYoy),
+      epsGrowthTTMYoy: toNum(metric.epsGrowthTTMYoy),
+      revenueGrowth3Y: toNum(metric.revenueGrowth3Y),
+      epsGrowth3Y: toNum(metric.epsGrowth3Y),
+      grossMarginTTM: toNum(metric.grossMarginTTM),
+      operatingMarginTTM: toNum(metric.operatingMarginTTM),
+      netProfitMarginTTM: toNum(metric.netProfitMarginTTM),
+      roeTTM: toNum(metric.roeTTM),
+      roaTTM: toNum(metric.roaTTM),
+      totalDebtToEquityAnnual: toNum(metric.totalDebtToEquityAnnual),
+      currentRatioAnnual: toNum(metric.currentRatioAnnual),
+      quickRatioAnnual: toNum(metric.quickRatioAnnual),
+      netInterestCoverageAnnual: toNum(metric.netInterestCoverageAnnual),
+      peBasicExclExtraTTM: toNum(metric.peBasicExclExtraTTM),
+      forwardPE: toNum(metric.forwardPE),
+      pegTTM: toNum(metric.pegTTM),
+      forwardPEG: toNum(metric.forwardPEG),
+      psTTM: toNum(metric.psTTM),
+      evEbitdaTTM: toNum(metric.evEbitdaTTM),
+      beta: toNum(metric.beta),
+      marketCapitalization: toNum(metric.marketCapitalization),
+    };
+
+    let result;
+    try {
+      result = calculateFundamentalScore(input);
+    } catch (err) {
+      failedCount++;
+      items.push({
+        symbol: stock.symbol,
+        status: "failed",
+        reason: err instanceof Error ? err.message : "Scoring function error",
+        dbAction: "kept_existing",
+      });
+      continue;
+    }
+
+    if (!result) {
+      skippedCount++;
+      items.push({
+        symbol: stock.symbol,
+        status: "skipped",
+        reason: "Insufficient metrics to calculate score",
+        dbAction: "kept_existing",
+      });
+      continue;
+    }
+
+    try {
+      const existing = stock.score;
+      const now = new Date();
+
+      if (existing) {
+        await prisma.stockScore.update({
+          where: { stockId: stock.id },
+          data: {
+            fundamentalScore: result.fundamentalScore,
+            growthScore: result.growthScore,
+            profitabilityScore: result.profitabilityScore,
+            valuationScore: result.valuationScore,
+            financialHealthScore: result.financialHealthScore,
+            riskContextScore: result.riskContextScore,
+            scoreVersion: result.scoreVersion,
+            lastCalculatedAt: now,
+          },
+        });
+        calculatedCount++;
+        items.push({
+          symbol: stock.symbol,
+          status: "success",
+          reason: `Calculated ${SCORE_VERSION} score: ${result.fundamentalScore}`,
+          dbAction: "updated_score",
+        });
+      } else {
+        // No existing StockScore — create one with sensible defaults for required fields
+        await prisma.stockScore.create({
+          data: {
+            stockId: stock.id,
+            hotScore: 0,
+            hotScoreChange: 0,
+            opportunityScore: 0,
+            opportunityChange: 0,
+            riskLevel: "MEDIUM",
+            setupStatus: "Unknown",
+            catalyst: "—",
+            fundamentalScore: result.fundamentalScore,
+            growthScore: result.growthScore,
+            profitabilityScore: result.profitabilityScore,
+            valuationScore: result.valuationScore,
+            financialHealthScore: result.financialHealthScore,
+            riskContextScore: result.riskContextScore,
+            scoreVersion: result.scoreVersion,
+            lastCalculatedAt: now,
+          },
+        });
+        calculatedCount++;
+        items.push({
+          symbol: stock.symbol,
+          status: "success",
+          reason: `Created ${SCORE_VERSION} score: ${result.fundamentalScore}`,
+          dbAction: "created_score",
+        });
+      }
+    } catch (err) {
+      failedCount++;
+      items.push({
+        symbol: stock.symbol,
+        status: "failed",
+        reason: err instanceof Error ? err.message : "Database error",
+        dbAction: "kept_existing",
+      });
+    }
+  }
+
+  const finishedAt = new Date();
+  const durationMs = finishedAt.getTime() - startedAt.getTime();
+  const requestedCount = stocks.length;
+  const status: SyncRunStatus =
+    calculatedCount === 0 && failedCount > 0
+      ? "failed"
+      : failedCount > 0 || skippedCount > 0
+      ? "partial_success"
+      : calculatedCount > 0
+      ? "success"
+      : "failed";
+  const persisted = calculatedCount > 0;
+
+  const messageParts = [`${calculatedCount} calculated`];
+  if (skippedCount > 0) messageParts.push(`${skippedCount} skipped`);
+  if (failedCount > 0) messageParts.push(`${failedCount} failed`);
+  const message = messageParts.join(", ");
+
+  const syncRun = await prisma.syncRun.create({
+    data: {
+      type: SYNC_TYPE,
+      provider: PROVIDER,
+      status,
+      requestedCount,
+      successCount: calculatedCount,
+      skippedCount,
+      failedCount,
+      persisted,
+      message,
+      startedAt,
+      finishedAt,
+      durationMs,
+    },
+  });
+
+  if (items.length > 0) {
+    await prisma.syncRunItem.createMany({
+      data: items.map((item) => ({
+        syncRunId: syncRun.id,
+        symbol: item.symbol,
+        status: item.status,
+        reason: item.reason,
+        dbAction: item.dbAction,
+      })),
+    });
+  }
+
+  return {
+    status,
+    provider: PROVIDER,
+    action: SYNC_TYPE,
+    requestedCount,
+    calculatedCount,
+    skippedCount,
+    failedCount,
+    startedAt: startedAt.toISOString(),
+    finishedAt: finishedAt.toISOString(),
+    durationMs,
+    persisted,
+    message,
     items,
   };
 }

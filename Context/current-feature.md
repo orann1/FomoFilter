@@ -1,4 +1,4 @@
-# Phase 9H-B — Nasdaq 100 Quote + Basic Financials Sync
+# Phase 9I — Fundamental Score Foundation + Score Methodology Tab
 
 ## Status
 
@@ -8,857 +8,847 @@ Completed (2026-05-23)
 
 ## Goal
 
-Extend the existing Nasdaq 100 sync flow so that the same controlled `Next 25` batch can populate both:
+Build the first version of FomoFilter's **Fundamental Score**.
 
-1. Quote snapshot data.
-2. Finnhub basic financial / valuation metrics.
+The score should rate the quality of a company based on the financial metrics already synced from Finnhub into `StockMetric`.
 
-The goal is to move from quote-only coverage to real stock data coverage for all 100 Nasdaq 100 members, while keeping the process controlled, visible, and safe.
+This phase should also add an Admin documentation tab that explains how the score is calculated, which metrics are used, what each metric means, and how a sample score is derived.
 
-This phase should make the Admin `Data Inventory` tab much more useful by showing the current values for the fundamental, profitability, valuation, and financial-strength parameters discovered during Phase 9H-A research.
+The goal is not to create the final perfect scoring system. The goal is to create a transparent, deterministic, explainable v1 score that makes Nasdaq 100 stocks eligible for the Scanner once they have both:
+
+```txt
+StockQuote
+StockScore
+```
 
 ---
 
-## Product Decision
+## Why This Phase Is Needed
 
-Phase 9H-A research confirmed that Finnhub is suitable as the primary provider for broad basic financial metrics.
+The Scanner currently requires:
 
-Key research findings:
+```ts
+quote: { isNot: null }
+score: { isNot: null }
+```
 
-- Finnhub `/stock/metric?metric=all` works on the current free plan.
-- It returns around 130+ fields per symbol.
-- It provides most fields needed for the first scoring model.
-- It requires one call per symbol.
-- 100 Nasdaq 100 symbols can be refreshed in controlled batches under the 60 calls/minute limit.
-- Analyst target price is not available on Finnhub free plan and should remain an FMP/future-provider gap.
+After the previous phases, Nasdaq 100 stocks have:
 
-Therefore, this phase should implement a real DB-backed sync for these metrics.
+- Universe membership.
+- Quote snapshot.
+- Basic financial metrics.
+- Data Inventory visibility.
+
+But many stocks still do not have `StockScore`.
+
+Therefore, they are not visible in `/scanner`.
+
+This phase should create the first real `StockScore` rows based on available fundamentals.
+
+---
+
+## Product Direction
+
+The first score should be:
+
+```txt
+Fundamental Score
+```
+
+It should answer:
+
+```txt
+How fundamentally strong is this company?
+```
+
+It should not yet answer:
+
+```txt
+Is this stock a perfect buy today?
+Is this stock technically breaking out?
+Is this stock cheap relative to analyst target?
+Is there a news catalyst?
+```
+
+Those can be separate future scores.
 
 ---
 
 ## Important Scope Decision
 
-Do not build a separate scanner.
+This phase should focus on a **fundamentals-first deterministic score**.
 
-Do not change `/scanner`.
+Use only fields already available in `StockMetric`.
 
-The data flow remains:
+Do not use:
 
-```txt
-Finnhub
-  ↓
-Admin Sync action
-  ↓
-Database
-  ↓
-Data Inventory
-  ↓
-Scanner later, after StockScore exists
-```
-
-The Scanner still requires `StockScore` and should remain unchanged in this phase.
-
----
-
-## Existing Button / Action Direction
-
-The existing Admin action currently syncs quote snapshots for the next 25 Nasdaq 100 members.
-
-Current button:
-
-```txt
-Sync Nasdaq 100 Quote Snapshots — Next 25
-```
-
-This phase should expand that controlled batch action to also sync basic financial metrics for the same selected symbols.
-
-Recommended updated label:
-
-```txt
-Sync Nasdaq 100 Quote + Metrics — Next 25
-```
-
-If keeping the existing label is preferred for continuity, the helper text must clearly say that the action now syncs both quote snapshots and basic financial metrics.
-
-Recommended helper text:
-
-```txt
-Writes to DB. Uses Finnhub. Selects active Nasdaq 100 members by missing/stale quote or metrics coverage. Syncs quote snapshot plus basic financial/valuation metrics for the next 25 symbols.
-```
-
----
-
-## What "Next 25" Means After This Phase
-
-The batch should select the next 25 active Nasdaq 100 members that need quote and/or metrics refresh.
-
-The action should not blindly sync all 100 in one click.
-
-Reason:
-
-- Controlled batches are safer.
-- Finnhub quote and metric calls are sequential.
-- 25 symbols may require up to 50 Finnhub calls if both quote and metric are refreshed.
-- This stays under the 60 calls/minute free-plan limit with careful pacing.
-- Four successful runs should cover all 100 active Nasdaq 100 members.
-
-Expected workflow:
-
-```txt
-Run 1 → 25 stocks receive quote + metrics
-Run 2 → next 25 stocks receive quote + metrics
-Run 3 → next 25 stocks receive quote + metrics
-Run 4 → final 25 stocks receive quote + metrics
-```
-
-After all 100 are covered, additional runs should start a new refresh cycle using the oldest refreshed records first.
-
----
-
-## Core Requirements
-
-Build:
-
-1. A new DB model/table for basic financial metrics.
-2. A Finnhub provider function for `/stock/metric?metric=all`.
-3. A safe mapper from Finnhub raw metric fields to app fields.
-4. A controlled Nasdaq 100 `Next 25` sync that updates quote + metrics.
-5. Admin `SyncRun` / `SyncRunItem` logging.
-6. Admin Review Results for quote + metrics updates.
-7. Data Inventory columns for the new metrics.
-8. Data Inventory source labels for the new metrics.
-9. Metrics coverage and refresh-cycle visibility if practical.
-10. No scoring yet.
-11. No Scanner changes.
-
----
-
-## Non-Scope
-
-Do not build:
-
-- StockScore calculation.
-- Scanner eligibility changes.
-- Scanner redesign.
-- New scanner route.
-- Full 100 all-at-once sync.
-- Cron/scheduled jobs.
-- Background queue.
-- Historical candles.
+- AI.
+- News.
+- Analyst target price.
+- Analyst upside.
 - Technical indicators.
-- Alert evaluation.
-- AI-generated analysis.
-- Analyst target sync from FMP.
-- Analyst upside calculation.
-- Earnings surprise sync.
-- News/catalyst sync.
-
-This phase only stores and displays basic financial/valuation metrics.
+- Historical candles.
+- Sector-relative Z-score.
+- Peer ranking.
+- FCF/ROIC/moat fields not currently available.
+- External provider calls.
 
 ---
 
-## Provider
+## User's Full Scoring Vision
 
-Use Finnhub.
-
-Endpoint:
-
-```txt
-/stock/metric?symbol={symbol}&metric=all
-```
-
-Use existing Finnhub API key handling.
-
-Do not create:
-
-- A new Finnhub client.
-- A new env var.
-- Duplicate request helper logic.
-
-Add to the existing Finnhub provider file if appropriate:
-
-```ts
-fetchFinnhubBasicFinancials(symbol)
-```
-
-or a similar name consistent with project conventions.
-
----
-
-## DB Model
-
-Add a new Prisma model.
-
-Recommended name:
-
-```txt
-StockMetric
-```
-
-Alternative acceptable names:
-
-```txt
-StockFundamental
-StockFinancialMetric
-```
-
-Recommended model shape:
-
-```prisma
-model StockMetric {
-  id        String   @id @default(cuid())
-  stockId   String   @unique
-  stock     Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
-
-  provider  String
-  source    String?
-
-  // Growth
-  revenueGrowthTTMYoy Decimal?
-  epsGrowthTTMYoy     Decimal?
-  revenueGrowthQuarterlyYoy Decimal?
-  epsGrowthQuarterlyYoy     Decimal?
-  revenueGrowth3Y     Decimal?
-  epsGrowth3Y         Decimal?
-
-  // Profitability
-  grossMarginTTM       Decimal?
-  operatingMarginTTM   Decimal?
-  netProfitMarginTTM   Decimal?
-  roeTTM               Decimal?
-  roaTTM               Decimal?
-
-  // Financial strength
-  totalDebtToEquityAnnual Decimal?
-  currentRatioAnnual      Decimal?
-  quickRatioAnnual        Decimal?
-  netInterestCoverageAnnual Decimal?
-
-  // Valuation
-  peBasicExclExtraTTM Decimal?
-  forwardPE          Decimal?
-  pegTTM             Decimal?
-  forwardPEG         Decimal?
-  psTTM              Decimal?
-  pbAnnual           Decimal?
-  evEbitdaTTM        Decimal?
-  epsTTM             Decimal?
-
-  // Market / risk context
-  beta                        Decimal?
-  marketCapitalization        Decimal?
-  week52High                  Decimal?
-  week52Low                   Decimal?
-  dividendYieldIndicatedAnnual Decimal?
-
-  // Metadata
-  rawMetricCount  Int?
-  lastSyncedAt    DateTime?
-  sourceUpdatedAt DateTime?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-}
-```
-
-Adjust field names to project conventions, but keep them explicit and readable.
-
----
-
-## Field Mapping From Finnhub
-
-Map the confirmed Finnhub fields:
-
-### Growth
-
-| DB Field | Finnhub Field |
-| --- | --- |
-| revenueGrowthTTMYoy | `revenueGrowthTTMYoy` |
-| epsGrowthTTMYoy | `epsGrowthTTMYoy` |
-| revenueGrowthQuarterlyYoy | `revenueGrowthQuarterlyYoy` |
-| epsGrowthQuarterlyYoy | `epsGrowthQuarterlyYoy` |
-| revenueGrowth3Y | `revenueGrowth3Y` |
-| epsGrowth3Y | `epsGrowth3Y` |
+The long-term desired model includes:
 
 ### Profitability
 
-| DB Field | Finnhub Field |
-| --- | --- |
-| grossMarginTTM | `grossMarginTTM` |
-| operatingMarginTTM | `operatingMarginTTM` |
-| netProfitMarginTTM | `netProfitMarginTTM` |
-| roeTTM | `roeTTM` |
-| roaTTM | `roaTTM` |
+- ROE.
+- ROA.
+- ROIC.
+- Gross Margin.
+- Operating Margin.
+- Net Margin.
+- EPS Growth.
 
-### Financial Strength
+### Financial Health
 
-| DB Field | Finnhub Field |
-| --- | --- |
-| totalDebtToEquityAnnual | `totalDebt/totalEquityAnnual` |
-| currentRatioAnnual | `currentRatioAnnual` |
-| quickRatioAnnual | `quickRatioAnnual` |
-| netInterestCoverageAnnual | `netInterestCoverageAnnual` |
+- Debt/Equity.
+- Current Ratio.
+- Quick Ratio.
+- Interest Coverage Ratio.
+- Free Cash Flow.
+- FCF Margin.
 
-Important:
+### Growth
 
-Finnhub field key contains a slash:
-
-```txt
-totalDebt/totalEquityAnnual
-```
-
-Do not try to access it with dot notation.
-
-Use bracket notation:
-
-```ts
-metric["totalDebt/totalEquityAnnual"]
-```
+- Revenue Growth YoY.
+- Revenue Growth 3Y CAGR.
+- EPS Growth.
+- FCF Growth.
+- Book Value Growth.
 
 ### Valuation
 
-| DB Field | Finnhub Field |
+- P/E.
+- P/B.
+- P/FCF.
+- EV/EBITDA.
+- PEG Ratio.
+
+### Efficiency
+
+- Asset Turnover.
+- Inventory Turnover.
+- Days Sales Outstanding.
+- Operating Leverage.
+
+### Moat Indicators
+
+- Margin consistency over time.
+- Market share stability/growth.
+- R&D as % of revenue.
+- Brand strength.
+- Customer loyalty.
+
+### Desired Future Scoring Method
+
+Long term, the ideal score may use:
+
+- Peer comparison by sector.
+- Normalized 0–10 metric scores.
+- Sector-specific weights.
+- Different emphasis per sector.
+
+Examples:
+
+| Sector | Possible Emphasis |
 | --- | --- |
-| peBasicExclExtraTTM | `peBasicExclExtraTTM` |
-| forwardPE | `forwardPE` |
-| pegTTM | `pegTTM` |
-| forwardPEG | `forwardPEG` |
-| psTTM | `psTTM` |
-| pbAnnual | `pbAnnual` |
-| evEbitdaTTM | `evEbitdaTTM` |
-| epsTTM | `epsTTM` |
+| Technology | Growth + FCF |
+| Financials | ROE + P/B |
+| Utilities | Liquidity + debt |
+| Consumer | Margins + consistency |
 
-### Market / Risk Context
-
-| DB Field | Finnhub Field |
-| --- | --- |
-| beta | `beta` |
-| marketCapitalization | `marketCapitalization` |
-| week52High | `52WeekHigh` |
-| week52Low | `52WeekLow` |
-| dividendYieldIndicatedAnnual | `dividendYieldIndicatedAnnual` |
-
-Important:
-
-Finnhub field keys for 52-week values start with a number:
-
-```txt
-52WeekHigh
-52WeekLow
-```
-
-Use bracket notation:
-
-```ts
-metric["52WeekHigh"]
-metric["52WeekLow"]
-```
+This long-term vision is valid, but it is too large for v1.
 
 ---
 
-## Units / Scale Rules
+## Challenge / Design Constraint
 
-Use the scale discovered in Phase 9H-A research.
+Not all desired metrics are currently available.
 
-### Percent Values
+Current Finnhub metrics cover many useful fields, but not all long-term fields.
 
-These are already percentages:
+### Available Now From `StockMetric`
 
-```txt
-revenueGrowthTTMYoy
-epsGrowthTTMYoy
-grossMarginTTM
-operatingMarginTTM
-netProfitMarginTTM
-roeTTM
-roaTTM
-dividendYieldIndicatedAnnual
-```
-
-Example:
-
-```txt
-47.86 = 47.86%
-```
-
-Store as-is.
-
-Do not divide by 100.
-
-### Ratios / Multiples
-
-Store as-is:
-
-```txt
-peBasicExclExtraTTM
-forwardPE
-pegTTM
-forwardPEG
-psTTM
-pbAnnual
-evEbitdaTTM
-epsTTM
-beta
-currentRatioAnnual
-quickRatioAnnual
-totalDebtToEquityAnnual
-```
-
-### Market Cap
-
-Finnhub `marketCapitalization` is in **millions USD**.
-
-Decide and document one storage convention.
-
-Recommended:
-
-```txt
-Store marketCapitalization in full USD by multiplying Finnhub value by 1,000,000.
-```
-
-Example:
-
-```txt
-4477661 → 4,477,661,000,000
-```
-
-If choosing to store raw Finnhub millions, the field name or documentation must make this clear.
-
-Preferred DB field name if storing full USD:
-
-```txt
-marketCapitalization
-```
-
-Preferred DB field name if storing raw millions:
-
-```txt
-marketCapitalizationMillions
-```
-
-Do not mix the two.
-
-### Extreme Values
-
-Do not cap or normalize values in this phase.
-
-Store raw provider values.
-
-Scoring caps will be handled in a later phase.
-
-Examples to note for future scoring:
-
-- ROE can exceed 100% because of buybacks.
-- Interest coverage can be extremely high for cash-rich firms.
-
----
-
-## Safe Update Rules
-
-Provider data must not blindly overwrite existing valid values with invalid values.
-
-Rules:
-
-- Do not overwrite valid existing values with `null`.
-- Do not overwrite valid existing values with `undefined`.
-- Do not overwrite valid existing values with empty strings.
-- Do not overwrite valid existing numbers with `NaN`.
-- If a metric is missing for one symbol, preserve existing value if it exists.
-- If the provider response is invalid for a symbol, mark that symbol as skipped/failed.
-- Continue with other symbols.
-- Partial success should be persisted.
-
-Use existing helpers if available:
-
-```txt
-isValidNumber
-keepExistingIfInvalid
-```
-
-or extend them consistently.
-
----
-
-## Sync Action Behavior
-
-Update or extend the existing Nasdaq 100 quote sync action.
-
-Current action:
-
-```txt
-syncNasdaq100QuoteSnapshotsAction
-```
-
-This phase can either:
-
-### Option A — Expand Existing Action
-
-Expand the existing action so it syncs both quote and metrics.
-
-Recommended visible label:
-
-```txt
-Sync Nasdaq 100 Quote + Metrics — Next 25
-```
-
-### Option B — Add a New Action
-
-Add a new action if keeping quote-only sync separate is cleaner:
-
-```txt
-Sync Nasdaq 100 Basic Financials — Next 25
-```
-
-However, the product preference is to have the existing Nasdaq 100 sync bring all parameters for the selected batch.
-
-Recommended implementation:
-
-```txt
-Option A — Expand existing action
-```
-
-The report must explain which option was chosen and why.
-
----
-
-## Batch Selection Logic
-
-The action should select the next 25 active Nasdaq 100 members that need sync.
-
-The selector should consider both quote and metrics coverage.
-
-Recommended priority:
-
-```txt
-1. Active Nasdaq 100 members missing StockMetric
-2. Active Nasdaq 100 members missing StockQuote
-3. Active Nasdaq 100 members with oldest metric lastSyncedAt
-4. Active Nasdaq 100 members with oldest quote lastSyncedAt
-5. symbol ASC
-6. limit 25
-```
-
-This ensures new metric coverage is filled first.
-
-If a stock has quote but no metrics, it should be prioritized.
-
-If a stock has metrics but no quote, it should also be prioritized.
-
-If all stocks have both quote and metrics, select the 25 with the oldest metric/quote freshness.
-
-The exact ordering can be refined, but it must be deterministic and DB-backed.
-
----
-
-## Calls Per Symbol
-
-For each selected symbol, the action should run:
-
-1. Finnhub quote call.
-2. Finnhub basic financials call.
-
-Potential calls per 25-symbol batch:
-
-```txt
-25 quote calls
-25 metric calls
-= 50 Finnhub calls
-```
-
-This fits under Finnhub's 60 calls/minute limit if executed carefully.
-
-Do not add recommendation or earnings calls to this same action in this phase, because that would likely exceed 60 calls/minute.
-
-Recommendation and earnings should be separate future actions or separate batches.
-
----
-
-## Rate Limit Behavior
-
-Finnhub free plan allows 60 calls/minute.
-
-For 25 symbols with quote + metric calls:
-
-```txt
-50 calls
-```
-
-This is close to the limit.
-
-Requirements:
-
-- Add a small delay between calls if needed.
-- Do not run all 100 automatically.
-- Do not add infinite retries.
-- Do not wait 60 seconds inside the server action.
-- If rate limit is reached:
-  - keep already successful updates
-  - stop or safely skip remaining symbols
-  - save partial success
-  - show a clear message
-  - do not expose API keys
-  - do not store raw payloads
-
-Suggested message:
-
-```txt
-Finnhub rate limit reached. Wait and run again.
-```
-
----
-
-## SyncRun / SyncRunItem Logging
-
-Current quote batch run:
-
-```txt
-type = quotes-nasdaq100-batch
-provider = finnhub
-```
-
-Because this action will now sync quote + metrics, update type/name if appropriate.
-
-Recommended:
-
-```txt
-type = market-data-nasdaq100-batch
-provider = finnhub
-```
-
-or keep the existing type for backwards compatibility and update the message.
-
-Preferred for clarity:
-
-```txt
-type = market-data-nasdaq100-batch
-```
-
-SyncRun should include counts for requested, success, skipped, failed.
-
-A symbol should be considered success if either quote or metrics were successfully updated.
-
-SyncRunItem reason should clearly show what happened per symbol.
-
-Suggested per-symbol message format:
-
-```txt
-Quote: updated, Metrics: updated
-Quote: updated, Metrics: skipped — missing metric response
-Quote: failed — rate limit, Metrics: not attempted
-```
-
-Suggested dbAction values:
-
-```txt
-created_quote_created_metrics
-updated_quote_created_metrics
-updated_quote_updated_metrics
-created_metrics
-updated_metrics
-partial_update
-kept_existing
-failed
-skipped
-```
-
-Use project conventions if simpler.
-
----
-
-## Admin UI Updates
-
-Update the Sync Actions tab.
-
-Recommended section title:
-
-```txt
-Nasdaq 100 Market Data Sync
-```
-
-Recommended button label:
-
-```txt
-Sync Nasdaq 100 Quote + Metrics — Next 25
-```
-
-Recommended helper text:
-
-```txt
-Writes to DB. Uses Finnhub. Selects active Nasdaq 100 members missing quote or metrics first, then oldest synced records. Fixed batch size: 25.
-```
-
-Recommended note:
-
-```txt
-Each batch may use up to 50 Finnhub calls: 25 quote calls + 25 metrics calls.
-```
-
-Progress panel should continue to work inline under the button.
-
-Quote coverage summary should be expanded or renamed to market data coverage.
-
-Recommended coverage fields:
-
-```txt
-Quote coverage: X / 100
-Metrics coverage: Y / 100
-Current refresh cycle: Z / 100
-Batch size: 25
-Estimated batches left
-```
-
-If adding a combined refresh cycle is complex, at minimum show:
-
-```txt
-Quote coverage
-Metrics coverage
-Missing metrics
-Batch size
-Estimated metric batches left
-```
-
----
-
-## Data Inventory Updates
-
-Update the `Data Inventory` tab to include the new metric columns.
-
-Add source row labels under each new parameter.
-
-Source label:
-
-```txt
-Finnhub
-```
-
-Recommended new columns:
-
-### Growth
+Available and suitable for v1:
 
 - Revenue Growth TTM YoY.
 - EPS Growth TTM YoY.
-- Revenue Growth Quarterly YoY.
-- EPS Growth Quarterly YoY.
-
-### Profitability
-
+- Revenue Growth 3Y.
+- EPS Growth 3Y.
 - Gross Margin TTM.
 - Operating Margin TTM.
 - Net Profit Margin TTM.
 - ROE TTM.
 - ROA TTM.
-
-### Financial Strength
-
 - Debt / Equity.
 - Current Ratio.
 - Quick Ratio.
 - Interest Coverage.
-
-### Valuation
-
 - P/E TTM.
 - Forward P/E.
 - PEG TTM.
 - Forward PEG.
-- Price / Sales.
-- Price / Book.
-- EV / EBITDA.
+- P/S.
+- P/B.
+- EV/EBITDA.
 - EPS TTM.
-
-### Market / Risk
-
 - Beta.
 - Market Cap.
 - 52W High.
 - 52W Low.
 - Dividend Yield.
 
-Also add:
+### Not Available / Not In v1
 
-```txt
-Has Metrics
-Metrics Source
-Metrics Last Synced
-```
+Do not include in v1:
 
-Keep the table readable with horizontal scroll.
+- ROIC.
+- Free Cash Flow.
+- FCF Margin.
+- FCF Growth.
+- Book Value Growth.
+- P/FCF.
+- Asset Turnover.
+- Inventory Turnover.
+- DSO.
+- Operating Leverage.
+- Margin consistency over time.
+- Market share.
+- R&D as % of revenue.
+- Brand strength.
+- Customer loyalty.
+- Sector-relative peer comparison.
+- Z-score normalization.
 
-Do not remove existing quote/profile/scanner columns.
+These can be future phases once data is available and the model is stable.
 
 ---
 
-## Data Inventory Source Row
+## Scoring Method v1
 
-For the new columns, use:
+Use deterministic threshold scoring.
 
-```txt
-Finnhub
-```
-
-For metadata columns:
+Each metric should be converted into a normalized score from:
 
 ```txt
-DB
+0 to 10
 ```
 
-Examples:
+Then each category score should be calculated from its metric scores.
 
-| Parameter | Source |
+Then the final Fundamental Score should be a weighted average from category scores.
+
+Do not use Z-score in v1.
+
+Do not use relative ranking in v1.
+
+Reason:
+
+- Nasdaq 100 is too small for stable sector-relative distributions.
+- Outliers can distort Z-scores.
+- Deterministic thresholds are easier to debug.
+- The scoring method should be explainable in the Admin `Score Methodology` tab.
+
+---
+
+## v1 Category Weights
+
+Use these initial category weights:
+
+| Category | Weight |
+| --- | ---: |
+| Growth | 30% |
+| Profitability | 30% |
+| Valuation | 20% |
+| Financial Health | 15% |
+| Risk / Context | 5% |
+
+Total:
+
+```txt
+100%
+```
+
+These weights can be adjusted later.
+
+---
+
+## v1 Categories and Metrics
+
+### 1. Growth — 30%
+
+Use:
+
+| Metric | Source Field |
 | --- | --- |
-| Revenue Growth TTM YoY | Finnhub |
-| Gross Margin TTM | Finnhub |
-| P/E TTM | Finnhub |
-| Market Cap | Finnhub / FMP / Mixed depending on field |
-| Has Metrics | DB |
-| Metrics Last Synced | DB |
+| Revenue Growth TTM YoY | `StockMetric.revenueGrowthTTMYoy` |
+| EPS Growth TTM YoY | `StockMetric.epsGrowthTTMYoy` |
+| Revenue Growth 3Y | `StockMetric.revenueGrowth3Y` |
+| EPS Growth 3Y | `StockMetric.epsGrowth3Y` |
 
-If a field can exist from both FMP profile and Finnhub metrics, label carefully:
+Optional future metric:
+
+- Quarterly growth, but do not use it heavily in v1 because it is more volatile.
+
+### 2. Profitability — 30%
+
+Use:
+
+| Metric | Source Field |
+| --- | --- |
+| Gross Margin TTM | `StockMetric.grossMarginTTM` |
+| Operating Margin TTM | `StockMetric.operatingMarginTTM` |
+| Net Profit Margin TTM | `StockMetric.netProfitMarginTTM` |
+| ROE TTM | `StockMetric.roeTTM` |
+| ROA TTM | `StockMetric.roaTTM` |
+
+Important:
+
+ROE should be capped for scoring because buyback-heavy companies can show extreme values.
+
+Do not change the stored raw value.
+
+Only cap the value inside the scoring function.
+
+Recommended scoring cap:
 
 ```txt
-Mixed
+ROE values above 60% should be treated as 60% for scoring.
 ```
 
-or show the more specific source if the field comes from `StockMetric`.
+### 3. Financial Health — 15%
+
+Use:
+
+| Metric | Source Field |
+| --- | --- |
+| Debt / Equity | `StockMetric.totalDebtToEquityAnnual` |
+| Current Ratio | `StockMetric.currentRatioAnnual` |
+| Quick Ratio | `StockMetric.quickRatioAnnual` |
+| Interest Coverage | `StockMetric.netInterestCoverageAnnual` |
+
+Important:
+
+Interest Coverage should be capped for scoring.
+
+Recommended scoring cap:
+
+```txt
+Interest Coverage values above 30x should be treated as 30x for scoring.
+```
+
+### 4. Valuation — 20%
+
+Use:
+
+| Metric | Source Field |
+| --- | --- |
+| P/E TTM | `StockMetric.peBasicExclExtraTTM` |
+| Forward P/E | `StockMetric.forwardPE` |
+| PEG TTM | `StockMetric.pegTTM` |
+| Forward PEG | `StockMetric.forwardPEG` |
+| P/S | `StockMetric.psTTM` |
+| EV/EBITDA | `StockMetric.evEbitdaTTM` |
+
+Important:
+
+Lower valuation is not always automatically better.
+
+Avoid giving maximum score to suspiciously low values.
+
+Use bounded ranges.
+
+### 5. Risk / Context — 5%
+
+Use:
+
+| Metric | Source Field |
+| --- | --- |
+| Beta | `StockMetric.beta` |
+| Market Cap | `StockMetric.marketCapitalization` |
+
+This category should have low weight.
+
+Purpose:
+
+- Slightly penalize extreme beta.
+- Slightly reward stability/scale.
+- Avoid over-weighting size.
+
+Do not use 52W high/low in this score yet.
+
+52W high/low may be useful later for technical/contextual timing, but this phase is fundamentals-first.
 
 ---
 
-## No Scanner Changes
+## Metric Scoring Rules
 
-Do not change `/scanner`.
+Implement simple helper functions.
 
-Do not remove:
+Suggested examples:
+
+### Higher Is Better
+
+Use for:
+
+- Revenue growth.
+- EPS growth.
+- Margins.
+- ROA.
+- Current ratio up to an ideal range.
+- Interest coverage up to cap.
+
+Example:
+
+```txt
+>= 25% → 10
+15% to 25% → 8
+8% to 15% → 6
+0% to 8% → 4
+< 0% → 1
+missing → null
+```
+
+### Lower Is Better
+
+Use for:
+
+- Debt / Equity.
+- PEG.
+- P/E after sensible bounds.
+- EV/EBITDA after sensible bounds.
+
+Example for Debt / Equity:
+
+```txt
+0 to 0.5 → 10
+0.5 to 1.0 → 8
+1.0 to 2.0 → 5
+2.0 to 4.0 → 2
+> 4.0 → 0
+missing → null
+```
+
+### Ideal Range
+
+Use for:
+
+- Current Ratio.
+- Quick Ratio.
+- P/E.
+- Beta.
+
+Example for Current Ratio:
+
+```txt
+1.5 to 3.0 → 10
+1.0 to 1.5 → 7
+3.0 to 5.0 → 6
+0.7 to 1.0 → 3
+< 0.7 → 0
+> 5.0 → 5
+missing → null
+```
+
+Example for Beta:
+
+```txt
+0.8 to 1.4 → 10
+0.5 to 0.8 → 8
+1.4 to 1.8 → 6
+1.8 to 2.5 → 3
+> 2.5 → 1
+< 0.5 → 6
+missing → null
+```
+
+### Cap Extreme Values
+
+Use caps inside the scoring function:
+
+```txt
+ROE cap: 60%
+Interest Coverage cap: 30x
+```
+
+Do not cap stored raw values.
+
+---
+
+## Missing Metric Handling
+
+If a metric is missing:
+
+- Do not give it 0 automatically.
+- Exclude it from that category's average.
+- If all metrics in a category are missing, category score should be null.
+- If a category score is null, exclude it from the final weighted average.
+- Final score should be calculated from available category weights only, re-normalized.
+
+Example:
+
+If Risk/Context is missing but all other categories exist, calculate the final score from the other 95% of weights normalized to 100%.
+
+This prevents one missing optional metric from unfairly destroying the score.
+
+---
+
+## Output Score Scale
+
+Store and display scores from:
+
+```txt
+0 to 100
+```
+
+Internal metric score:
+
+```txt
+0 to 10
+```
+
+Category scores:
+
+```txt
+0 to 100
+```
+
+Final Fundamental Score:
+
+```txt
+0 to 100
+```
+
+Example:
+
+```txt
+Growth metric average: 7.5 / 10 → Growth Score: 75
+```
+
+---
+
+## DB / StockScore Model
+
+Use the existing `StockScore` model if it already exists.
+
+Do not create a new score table unless the current model cannot support the required fields.
+
+Inspect current Prisma schema before implementation.
+
+The score should store at least:
+
+- Total fundamental score.
+- Growth score.
+- Profitability score.
+- Valuation score.
+- Financial health score.
+- Risk/context score.
+- Last calculated timestamp.
+- Method/version if possible.
+
+If the existing `StockScore` model has different field names, map to the closest existing fields.
+
+If fields are missing and a migration is needed, add only the required fields.
+
+Possible fields:
+
+```txt
+fundamentalScore
+growthScore
+profitabilityScore
+valuationScore
+financialHealthScore
+riskContextScore
+scoreVersion
+lastCalculatedAt
+```
+
+Do not add unrelated score fields.
+
+---
+
+## Score Version
+
+Use a version label:
+
+```txt
+fundamental-v1
+```
+
+Store it if the schema supports it or if a migration is added.
+
+If not stored in DB, at minimum include it in code constants and methodology documentation.
+
+---
+
+## Score Calculation Target
+
+Add an Admin action to calculate scores for stocks with metrics.
+
+Recommended button:
+
+```txt
+Calculate Fundamental Scores
+```
+
+Recommended section:
+
+```txt
+Score Calculation
+```
+
+Recommended location:
+
+```txt
+/admin/sync → Sync Actions
+```
+
+or a new tab if the existing page is too crowded.
+
+This action should:
+
+1. Find stocks with `StockMetric`.
+2. Calculate Fundamental Score.
+3. Upsert `StockScore`.
+4. Persist a `SyncRun` / `SyncRunItem` or a similar log if the existing sync log system supports internal calculations.
+5. Return counts:
+   - requested
+   - calculated
+   - skipped
+   - failed
+
+The action should not call external APIs.
+
+---
+
+## SyncRun Logging
+
+Even though this is not an external provider sync, it should be logged.
+
+Recommended:
+
+```txt
+SyncRun.type = fundamental-score-calculation
+SyncRun.provider = internal
+```
+
+Per-symbol item examples:
+
+```txt
+Calculated fundamental-v1 score
+Skipped — missing StockMetric
+Failed — invalid data
+```
+
+---
+
+## Admin UI Updates
+
+### Sync Actions Tab
+
+Add a section:
+
+```txt
+Score Calculation
+```
+
+Button:
+
+```txt
+Calculate Fundamental Scores
+```
+
+Helper text:
+
+```txt
+Calculates internal Fundamental Score v1 for stocks with synced Finnhub metrics. Does not call external APIs.
+```
+
+Badge:
+
+```txt
+Internal
+```
+
+or:
+
+```txt
+Writes to DB
+```
+
+The existing progress panel pattern should be used.
+
+---
+
+## Data Inventory Updates
+
+Update the Data Inventory tab to show score fields.
+
+Recommended new columns:
+
+| Column | Source Label |
+| --- | --- |
+| Fundamental Score | Internal |
+| Growth Score | Internal |
+| Profitability Score | Internal |
+| Valuation Score | Internal |
+| Financial Health Score | Internal |
+| Risk / Context Score | Internal |
+| Score Version | Internal |
+| Score Last Calculated | DB / Internal |
+| Has Score | Internal |
+| Scanner Eligible | Internal |
+| Missing Reason | Internal |
+
+`Has Score`, `Scanner Eligible`, and `Missing Reason` already exist, but must reflect the new `StockScore` rows.
+
+Expected after calculation:
+
+- Stocks with quote + metrics + score should become Scanner Eligible.
+- Stocks missing quote remain not eligible.
+- Stocks missing metrics remain not eligible.
+- Stocks with metrics but failed score calculation should show a clear missing/failure reason if available.
+
+---
+
+## Score Methodology Tab
+
+Add a new Admin tab:
+
+```txt
+Score Methodology
+```
+
+Purpose:
+
+Provide live documentation for how the Fundamental Score is calculated.
+
+This tab should help the user understand and later adjust the model.
+
+It should include:
+
+1. Short overview of Fundamental Score.
+2. Category weights table.
+3. Category explanations.
+4. Metric explanations.
+5. Source field names.
+6. Direction:
+   - higher is better
+   - lower is better
+   - ideal range
+7. Scoring examples.
+8. Caps / warnings.
+9. Future improvements.
+
+---
+
+## Score Methodology Content
+
+### Overview Section
+
+Explain:
+
+```txt
+Fundamental Score v1 rates company quality from 0 to 100 using available Finnhub basic financial metrics.
+It is deterministic, transparent, and does not use AI or external calls during calculation.
+```
+
+### Category Weight Table
+
+Include:
+
+| Category | Weight | Main Idea |
+| --- | ---: | --- |
+| Growth | 30% | Revenue and EPS expansion |
+| Profitability | 30% | Margins and returns |
+| Valuation | 20% | Price paid relative to earnings/sales/EBITDA/growth |
+| Financial Health | 15% | Debt, liquidity, and interest coverage |
+| Risk / Context | 5% | Beta and company size context |
+
+### Metric Table
+
+For each metric, show:
+
+| Metric | Category | Source | Direction | Example Rule | Notes |
+| --- | --- | --- | --- | --- | --- |
+
+Example row:
+
+| ROE | Profitability | Finnhub `roeTTM` | Higher is better, capped | 30%+ = strong | Capped at 60% for scoring because buybacks can distort ROE |
+
+### Example Calculation
+
+Add one simple illustrative example.
+
+Example:
+
+```txt
+Example Company
+Growth Score: 80
+Profitability Score: 75
+Valuation Score: 60
+Financial Health Score: 70
+Risk / Context Score: 65
+
+Final Score =
+80 * 0.30 +
+75 * 0.30 +
+60 * 0.20 +
+70 * 0.15 +
+65 * 0.05
+= 72.25
+```
+
+This example does not need to use a real stock.
+
+---
+
+## Do Not Build Yet
+
+Do not build in this phase:
+
+- Sector-relative scoring.
+- Z-score.
+- Peer comparison.
+- AI-generated scores.
+- Moat score.
+- FCF score.
+- ROIC score.
+- Efficiency score.
+- Analyst target/upside score.
+- News/catalyst score.
+- Technical score.
+- Stock recommendation engine.
+- Buy/sell/hold advice.
+
+The methodology tab may list these as future improvements, but they should not affect the score.
+
+---
+
+## Scanner Behavior
+
+Do not directly change Scanner filters or UI.
+
+After `StockScore` rows are created, the existing Scanner may start showing Nasdaq 100 stocks because the existing condition is satisfied:
 
 ```ts
-score: { isNot: null }
+quote exists
+score exists
 ```
 
-Do not make Nasdaq 100 stocks visible in Scanner yet.
+This is acceptable.
 
-That will happen after a future scoring phase creates `StockScore`.
-
----
-
-## Migration
-
-A Prisma migration is expected in this phase because a new metrics table is required.
-
-Migration should only add:
-
-```txt
-StockMetric
-```
-
-or the chosen equivalent model.
-
-Do not modify unrelated schema.
-
-Run:
-
-```txt
-npx prisma migrate dev --name add_stock_metrics
-```
-
-Use a clear migration name.
+But do not edit Scanner logic in this phase unless a clear bug is discovered and approved.
 
 ---
 
@@ -873,64 +863,87 @@ npx prisma validate
 npx prisma migrate status
 ```
 
+If a migration is needed, use a clear migration name, such as:
+
+```txt
+add_fundamental_score_fields
+```
+
 ---
 
 ## Browser QA
 
+### Score Calculation
+
 Open:
 
 ```txt
-/admin/sync
+/admin/sync → Sync Actions
 ```
 
-### Sync Actions Tab
+Run:
+
+```txt
+Calculate Fundamental Scores
+```
 
 Confirm:
 
-1. The Nasdaq 100 market data sync section appears.
-2. The button label clearly says quote + metrics, or helper text makes this clear.
-3. Coverage shows quote coverage and metrics coverage.
-4. Click the button.
-5. Progress panel appears inline under the button.
-6. Elapsed timer updates.
-7. No fake percentage.
-8. No fake remaining time.
-9. Action completes.
-10. Review Results shows quote + metrics outcome.
-11. Sync History records the run.
-12. Metrics coverage increases by successful new metric rows.
-13. Repeated runs select the next missing metrics batch.
+1. Button appears.
+2. Helper text says internal calculation and no external APIs.
+3. Progress panel appears.
+4. Result shows calculated/skipped/failed counts.
+5. Sync History records the run with provider `internal`.
+6. No external API call happens.
 
-### Data Inventory Tab
+### Data Inventory
 
-Confirm:
+Open:
 
-1. New metrics columns appear.
-2. Source row labels show Finnhub under metric fields.
-3. For synced stocks, metric values appear.
-4. For unsynced stocks, metric values show `N/A`.
-5. Has Metrics shows Yes/No correctly.
-6. Metrics Source shows Finnhub.
-7. Metrics Last Synced is populated.
-8. Existing quote fields still display correctly.
-9. Volume is still not incorrectly attributed to Finnhub.
-10. Scanner Eligible remains No for stocks missing score.
-11. No external API calls happen when opening Data Inventory.
-
-### Regression
+```txt
+/admin/sync → Data Inventory
+```
 
 Confirm:
 
-1. Overview tab still works.
-2. Sync Actions tab still works.
-3. Provider Tests tab still works.
-4. Sync History tab still works.
-5. Existing quote sample sync still works if retained.
-6. Existing profile sample sync still works.
-7. Nasdaq 100 Universe sync still works.
-8. Dashboard still loads.
-9. Scanner still loads.
-10. No provider calls happen from Scanner render.
+1. Fundamental Score columns are visible.
+2. Score source row labels show `Internal`.
+3. Stocks with metrics now show score values.
+4. Has Score changes to Yes.
+5. Scanner Eligible changes to Yes for stocks with quote + score.
+6. Missing Reason changes to Ready for scanner for eligible stocks.
+
+### Score Methodology
+
+Open:
+
+```txt
+/admin/sync → Score Methodology
+```
+
+Confirm:
+
+1. Tab appears.
+2. Category weights are shown.
+3. Metric explanations are shown.
+4. Example calculation is shown.
+5. Caps and known limitations are documented.
+6. Future improvements are listed.
+
+### Scanner Smoke Test
+
+Open:
+
+```txt
+/scanner
+```
+
+Confirm:
+
+1. Page loads.
+2. Nasdaq 100 stocks with quote + score may now appear.
+3. No external provider API calls happen from Scanner render.
+4. Existing scanner layout does not break.
 
 ---
 
@@ -940,42 +953,40 @@ Return a concise report in English only with:
 
 1. Files created.
 2. Files changed.
-3. Prisma migration name.
-4. DB model added.
-5. Finnhub provider function added.
-6. Finnhub fields mapped.
-7. Scale/units decisions, especially market cap.
-8. Safe update logic.
-9. Batch selection logic.
-10. Calls per symbol and rate-limit behavior.
-11. SyncRun / SyncRunItem logging.
-12. Admin UI changes.
-13. Data Inventory columns added.
-14. Browser QA results.
-15. Automated check results.
-16. Known issues.
-17. Ready for commit or not.
+3. Whether a migration was needed.
+4. If migration was added, migration name and fields.
+5. StockScore model fields used/added.
+6. Score calculation helpers created.
+7. Category weights.
+8. Metric scoring rules implemented.
+9. Missing metric behavior.
+10. Caps implemented.
+11. Score methodology tab content.
+12. Admin action added.
+13. SyncRun logging summary.
+14. Data Inventory updates.
+15. Browser QA results.
+16. Scanner smoke test result.
+17. Automated check results.
+18. Known issues.
+19. Ready for commit or not.
 
 ---
 
 ## Acceptance Criteria
 
-Phase 9H-B is complete when:
+Phase 9I is complete when:
 
-- A DB model exists for basic financial metrics.
-- Finnhub `/stock/metric?metric=all` is mapped safely.
-- The Nasdaq 100 `Next 25` action syncs quote + metrics for selected symbols.
-- Batch size remains 25.
-- The action does not exceed safe Finnhub behavior.
-- Metrics are persisted for selected symbols.
-- Four successful runs can cover all 100 Nasdaq 100 members.
-- Data Inventory shows the new metric columns.
-- Metric source labels show Finnhub.
-- Metric coverage is visible.
-- Scanner is unchanged.
-- No scoring is added.
-- No candles are added.
-- No cron is added.
+- Fundamental Score v1 is calculated from existing `StockMetric` data.
+- Score is deterministic and explainable.
+- No external API calls are made during score calculation.
+- `StockScore` rows are created or updated.
+- Data Inventory shows score columns.
+- `Score Methodology` tab explains the model.
+- SyncRun logs the internal score calculation.
+- Missing metrics do not automatically become zero.
+- Extreme values are capped only during scoring, not in raw stored data.
+- Scanner is not directly modified.
 - Build passes.
 - TypeScript passes.
 - Prisma validates.
@@ -1003,4 +1014,5 @@ Phase 9H-B is complete when:
 - Phase 9F completed (2026-05-22): Added controlled Nasdaq 100 quote snapshot batch sync. Added `open`, `dayHigh`, `dayLow`, `previousClose` to `StockQuote` via migration `20260522062445_add_quote_ohlc_fields`. Added `getNextNasdaq100QuoteBatch(limit=25)` selector in `admin-universes.ts` (missing quotes first, then oldest `lastSyncedAt`, then symbol ASC). Refactored quote sync into shared `syncQuotesForSymbols()` helper reused by both `syncQuotesSampleAction` and new `syncNasdaq100QuoteSnapshotsAction`. New action uses Finnhub as provider (sequential per-symbol calls, safe update behavior, 429 detection), persists `SyncRun` with `type=quotes-nasdaq100-batch` and `provider=finnhub`, and persists `SyncRunItem` per symbol. Added `quoteRefreshCycleSynced` field to `UniverseOverviewRow` using a SyncRun running-total cycle boundary algorithm (scans batch runs oldest→newest, accumulates successCount, resets when total reaches activeCount — correctly tracks 25→50→75→100 progression). Admin Sync Actions tab shows new button with inline in-progress panel (appears directly below button, no scrolling needed). Overview tab shows two-part Nasdaq 100 coverage: Part A (quote coverage count, always visible), Part B (current refresh cycle progress, visible only when missing=0). Fixed Finnhub Unix timestamp conversion (`raw.t * 1000`). Build passes, `tsc`, `prisma validate`, and `prisma migrate status` all clean. Approved by user.
 - Phase 9G completed (2026-05-22): Added Data Inventory tab to `/admin/sync`. Created `src/lib/data/admin-stock-data.ts` with `getAdminStockDataInventory()` — queries all stocks with `quote`, `score`, `universeMemberships` (including `universe.slug`), `watchlistItems`, and `alertRules` in a single Prisma query; derives `scannerEligible`, `missingReason`, `volumeSourceLabel`, and `quoteSourceLabel` server-side; formats all values as strings. Created `src/components/admin/DataInventoryTab.tsx` as a client component with: 6 summary cards (Total Stocks, With Quote, Missing Quote, With Score, Scanner Eligible, Nasdaq 100 Active); symbol/company text search; filter pills (All / Scanner Eligible / Missing Score / Missing Quote / Nasdaq 100); 24-column table with a two-row header (parameter name + source label). Columns cover Identity (Symbol, Company Name, Sector, Market Cap), Universe (Nasdaq 100, Univ. Source, Mbr Active, Mbr Last Seen), Quote (Has Quote, Price, Change %, Open, Day High, Day Low, Prev Close, Volume, Quote Source, Last Synced, Src Updated), and Internal (Has Score, Scanner Eligible, Missing Reason, In Watchlist, Active Alert). Volume is labeled `N/A` when null and `Mixed` when the quote source is Finnhub but a prior value exists — Finnhub is never incorrectly credited as the volume source. Tab order: Overview → Data Inventory → Sync Actions → Provider Tests → Sync History. No new Prisma models, no migrations. Build passes, `tsc`, `prisma validate`, and `prisma migrate status` all clean. Approved by user.
 - Phase 9H-A completed (2026-05-22): Finnhub Basic Financials Research. Inspected `src/lib/market-data/providers/finnhub.ts`. Created and deleted a temporary script `tmp_research_finnhub.mjs`. No production code was changed. Tested endpoints `/stock/metric`, `/stock/price-target`, `/stock/recommendation`, `/calendar/earnings`, `/stock/profile2` on symbols AAPL, MSFT, NVDA, AMD, TSLA. Full findings below. No DB schema changes, no sync actions, no Scanner changes, no commits.
-- Phase 9H-B completed (2026-05-23): Nasdaq 100 Quote + Basic Financials Sync. Added `StockMetric` Prisma model (28 Decimal? fields: growth, profitability, financial strength, valuation, market/risk context; `stockId @unique`; `provider`, `rawMetricCount`, `lastSyncedAt`, `createdAt`, `updatedAt`) via migration `20260522154752_add_stock_metrics`. Added `fetchFinnhubBasicFinancials(symbol)` to `src/lib/market-data/providers/finnhub.ts` mapping 28 Finnhub metric fields with bracket notation for `totalDebt/totalEquityAnnual`, `52WeekHigh`, `52WeekLow`; Finnhub `marketCapitalization` (millions) multiplied by 1,000,000 before storing; percentage fields stored as-is (47.86 = 47.86%). Added `getNextNasdaq100MarketDataBatch(limit=25)` selector in `src/lib/data/admin-universes.ts` (priority: missing metrics → missing quotes → oldest metric sync → oldest quote sync → symbol ASC). Added `syncNasdaq100MarketDataAction()` to `src/actions/market-data-actions.ts` (type=`market-data-nasdaq100-batch`, provider=`finnhub`; 2 Finnhub calls per symbol — quote + metric; 500ms delay between symbols; stops on 429 rate-limit with partial-success persistence; safe-update pattern: create uses `safeNum() ?? undefined`, update uses `safeNum() ?? existingMetric?.field ?? null`; non-null assertion on required `price` field confirmed valid by preceding `isValidNumber` guard; persists `SyncRun` + `SyncRunItem` per symbol with per-field outcome messages). Extended `AdminStockDataInventoryRow` type and `getAdminStockDataInventory()` in `src/lib/data/admin-stock-data.ts` with 30+ metric fields (metric relation included in Prisma query; percentage fields suffixed with `%`; market cap formatted as `$X.XXB`). Updated `src/components/admin/DataInventoryTab.tsx`: added 20+ metric columns across Growth, Profitability, Financial Strength, and Valuation/Market sections with `Finnhub` source labels; added `Missing Metrics` filter pill; expanded summary cards from 6 to 8 (added With Metrics, Missing Metrics). Updated `src/components/admin/SyncPageClient.tsx`: added `Nasdaq 100 Market Data Sync` section in Sync Actions tab with metrics coverage panel; UX cleanup — removed old quote-only Nasdaq batch button from Sync Actions, removed Sample Sync from Sync Actions, added `Sample DB Writes` section to Provider Tests tab with inline progress panel. `syncNasdaq100QuoteSnapshotsAction` retained in `market-data-actions.ts` (internal use, not exposed in UI). Build passes, `tsc --noEmit` zero errors, `prisma validate` valid, `prisma migrate status` clean. Not yet committed — awaiting user approval.
+- Phase 9H-B completed (2026-05-23): Nasdaq 100 Quote + Basic Financials Sync. Added `StockMetric` Prisma model (28 Decimal? fields: growth, profitability, financial strength, valuation, market/risk context; `stockId @unique`; `provider`, `rawMetricCount`, `lastSyncedAt`, `createdAt`, `updatedAt`) via migration `20260522154752_add_stock_metrics`. Added `fetchFinnhubBasicFinancials(symbol)` to `src/lib/market-data/providers/finnhub.ts` mapping 28 Finnhub metric fields with bracket notation for `totalDebt/totalEquityAnnual`, `52WeekHigh`, `52WeekLow`; Finnhub `marketCapitalization` (millions) multiplied by 1,000,000 before storing; percentage fields stored as-is (47.86 = 47.86%). Added `getNextNasdaq100MarketDataBatch(limit=25)` selector in `src/lib/data/admin-universes.ts` (priority: missing metrics → missing quotes → oldest metric sync → oldest quote sync → symbol ASC). Added `syncNasdaq100MarketDataAction()` to `src/actions/market-data-actions.ts` (type=`market-data-nasdaq100-batch`, provider=`finnhub`; 2 Finnhub calls per symbol — quote + metric; 500ms delay between symbols; stops on 429 rate-limit with partial-success persistence; safe-update pattern: create uses `safeNum() ?? undefined`, update uses `safeNum() ?? existingMetric?.field ?? null`; non-null assertion on required `price` field confirmed valid by preceding `isValidNumber` guard; persists `SyncRun` + `SyncRunItem` per symbol with per-field outcome messages). Extended `AdminStockDataInventoryRow` type and `getAdminStockDataInventory()` in `src/lib/data/admin-stock-data.ts` with 30+ metric fields (metric relation included in Prisma query; percentage fields suffixed with `%`; market cap formatted as `$X.XXB`). Updated `src/components/admin/DataInventoryTab.tsx`: added 20+ metric columns across Growth, Profitability, Financial Strength, and Valuation/Market sections with `Finnhub` source labels; added `Missing Metrics` filter pill; expanded summary cards from 6 to 8 (added With Metrics, Missing Metrics). Updated `src/components/admin/SyncPageClient.tsx`: added `Nasdaq 100 Market Data Sync` section in Sync Actions tab with metrics coverage panel; UX cleanup — removed old quote-only Nasdaq batch button from Sync Actions, removed Sample Sync from Sync Actions, added `Sample DB Writes` section to Provider Tests tab with inline progress panel. `syncNasdaq100QuoteSnapshotsAction` retained in `market-data-actions.ts` (internal use, not exposed in UI). Build passes, `tsc --noEmit` zero errors, `prisma validate` valid, `prisma migrate status` clean. Approved by user.
+- Phase 9I completed (2026-05-23): Fundamental Score Foundation + Score Methodology Tab. Added 8 nullable fields to `StockScore` via migration `20260523153618_add_fundamental_score_fields` (`fundamentalScore`, `growthScore`, `profitabilityScore`, `valuationScore`, `financialHealthScore`, `riskContextScore`, `scoreVersion`, `lastCalculatedAt`). Created `src/lib/scoring/fundamental-score.ts` — deterministic scoring engine with 16 metric helper functions, `categoryAverage()` excluding nulls, weight re-normalization for missing categories, ROE cap at 60% and Interest Coverage cap at 30x (scoring only, raw values untouched), version constant `SCORE_VERSION = "fundamental-v1"`. Added `calculateFundamentalScoresAction()` to `src/actions/market-data-actions.ts` — no external API calls, skips stocks without `StockMetric`, upserts `StockScore` preserving existing `hotScore`/`opportunityScore`, persists `SyncRun` (`type=fundamental-score-calculation`, `provider=internal`) + `SyncRunItem` per symbol. Created `src/components/admin/ScoreMethodologyTab.tsx` — 6 sections: overview, category weights, 21-metric scoring rules table, caps/limitations, example calculation (score=72), future improvements. Updated `src/lib/data/admin-stock-data.ts` and `DataInventoryTab.tsx` to include 8 score columns with `Internal` source labels. Updated `SyncPageClient.tsx` to add Score Calculation section (Sync Actions tab) and Score Methodology tab (tab 6). Bug found and fixed during QA: Turbopack dev server had stale Prisma client cache from before `prisma generate` — fixed by clearing `.next/` and re-running `prisma generate`. Result: 100 stocks scored, 0 failed, 101 scanner-eligible, no duplicates, all scores in [0,100]. Build passes, `tsc --noEmit` zero errors, `prisma validate` valid, `prisma migrate status` clean. Approved by user.
