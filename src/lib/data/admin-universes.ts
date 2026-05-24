@@ -221,6 +221,22 @@ export async function getNextNasdaq100MarketDataBatch(limit = 25): Promise<strin
   return members.slice(0, limit).map((m) => m.stock.symbol);
 }
 
+export async function getAllActiveNasdaq100Symbols(): Promise<string[]> {
+  const universe = await prisma.stockUniverse.findUnique({
+    where: { slug: "nasdaq-100" },
+  });
+
+  if (!universe) return [];
+
+  const members = await prisma.stockUniverseMember.findMany({
+    where: { universeId: universe.id, isActive: true },
+    include: { stock: { select: { symbol: true } } },
+    orderBy: { stock: { symbol: "asc" } },
+  });
+
+  return members.map((m) => m.stock.symbol);
+}
+
 export async function getDbStockSummary(): Promise<DbStockSummary> {
   const [
     totalStocks,

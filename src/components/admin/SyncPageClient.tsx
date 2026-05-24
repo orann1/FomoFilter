@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useRef, useEffect } from "react";
+import { useState, useTransition, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   testFmpProfileAction,
@@ -9,7 +9,6 @@ import {
   syncQuotesSampleAction,
   syncProfilesSampleAction,
   syncNasdaq100UniverseAction,
-  syncNasdaq100MarketDataAction,
   calculateFundamentalScoresAction,
 } from "@/src/actions/market-data-actions";
 import type {
@@ -18,7 +17,10 @@ import type {
   SyncRunStatus,
   SyncSymbolResult,
 } from "@/src/lib/market-data/types";
-import type { UniverseSyncActionResult, ScoreCalcResult } from "@/src/actions/market-data-actions";
+import type {
+  UniverseSyncActionResult,
+  ScoreCalcResult,
+} from "@/src/actions/market-data-actions";
 import type { UniverseOverviewRow, DbStockSummary } from "@/src/lib/data/admin-universes";
 import type { AdminStockDataInventoryRow } from "@/src/lib/data/admin-stock-data";
 import DataInventoryTab from "@/src/components/admin/DataInventoryTab";
@@ -42,6 +44,9 @@ import {
   List,
   BookOpen,
   Calculator,
+  Play,
+  SkipForward,
+  RotateCcw,
 } from "lucide-react";
 
 // ── Serialised types from the server ─────────────────────────────────────────
@@ -73,6 +78,23 @@ interface SyncRunData {
   items: SyncRunItemData[];
 }
 
+type ChunkedSyncProgress = {
+  id: string;
+  type: string;
+  provider: string;
+  status: string;
+  requestedCount: number;
+  processedCount: number;
+  currentSymbol: string | null;
+  successCount: number;
+  skippedCount: number;
+  failedCount: number;
+  startedAt: string;
+  finishedAt: string | null;
+  durationMs: number | null;
+  message: string | null;
+};
+
 interface ProviderStatus {
   fmp: boolean;
   twelveData: boolean;
@@ -85,6 +107,7 @@ interface SyncPageClientProps {
   universeOverview: UniverseOverviewRow[];
   dbStockSummary: DbStockSummary;
   stockInventory: AdminStockDataInventoryRow[];
+  initialChunkedSync: ChunkedSyncProgress | null;
 }
 
 type LastResult =
@@ -95,6 +118,31 @@ type LastResult =
   | null;
 
 type TabId = "overview" | "data-inventory" | "sync-actions" | "provider-tests" | "sync-history" | "score-methodology";
+
+// ── Helper — is this run continuable? ────────────────────────────────────────
+
+function isIncomplete(p: ChunkedSyncProgress | null): boolean {
+  if (!p) return false;
+  return (
+    (p.status === "running" || p.status === "partial_success") &&
+    p.processedCount < p.requestedCount
+  );
+}
+
+function isTerminal(p: ChunkedSyncProgress | null): boolean {
+  if (!p) return false;
+  return p.status === "success" || p.status === "failed" ||
+    (p.status === "partial_success" && p.processedCount >= p.requestedCount);
+}
+
+// ── ETA formatter ─────────────────────────────────────────────────────────────
+
+function formatDuration(ms: number): string {
+  const totalSec = Math.round(ms / 1000);
+  const mins = Math.floor(totalSec / 60).toString().padStart(2, "0");
+  const secs = (totalSec % 60).toString().padStart(2, "0");
+  return `${mins}:${secs}`;
+}
 
 // ── Score calc result viewer ──────────────────────────────────────────────────
 
@@ -153,20 +201,12 @@ function ScoreCalcResultViewer({ result }: { result: ScoreCalcResult }) {
   );
 }
 
-// ── Sync action metadata (write actions only) ─────────────────────────────────
+// ── Sync action metadata ───────────────────────────────────────────────────────
 
 const SYNC_ACTION_META: Record<string, { label: string; durationNote: string }> = {
   "sync-nasdaq100": {
     label: "Sync Nasdaq 100 Universe",
     durationNote: "Nasdaq 100 universe sync may take around 45–75 seconds.",
-  },
-  "sync-nasdaq100-quotes": {
-    label: "Sync Nasdaq 100 Quote Snapshots",
-    durationNote: "Quote batch sync typically takes 20–60 seconds for 25 symbols.",
-  },
-  "sync-nasdaq100-market-data": {
-    label: "Sync Nasdaq 100 Quotes + Metrics",
-    durationNote: "Market data batch sync (quotes + metrics) typically takes 30–90 seconds for 25 symbols.",
   },
   "sync-quotes": {
     label: "Sync Quotes Sample",
@@ -212,6 +252,14 @@ function SyncStatusBadge({ status }: { status: SyncRunStatus | string }) {
       <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-amber-400 bg-amber-900/30 border border-amber-800/50 px-2 py-0.5 rounded">
         <AlertTriangle className="w-3 h-3" />
         Partial
+      </span>
+    );
+  }
+  if (status === "running") {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-400 bg-blue-900/30 border border-blue-800/50 px-2 py-0.5 rounded">
+        <Loader2 className="w-3 h-3 animate-spin" />
+        Running
       </span>
     );
   }
@@ -266,9 +314,10 @@ interface ActionButtonProps {
   label: string;
   description: string;
   variant: "test" | "sync";
+  icon?: React.ReactNode;
 }
 
-function ActionButton({ onClick, disabled, loading, label, description, variant }: ActionButtonProps) {
+function ActionButton({ onClick, disabled, loading, label, description, variant, icon }: ActionButtonProps) {
   const btnBase =
     "inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap shrink-0";
   const btnStyle =
@@ -279,7 +328,7 @@ function ActionButton({ onClick, disabled, loading, label, description, variant 
   return (
     <div className="flex items-start gap-3">
       <button className={`${btnBase} ${btnStyle} mt-0.5`} onClick={onClick} disabled={disabled}>
-        {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
+        {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : icon ?? null}
         {label}
       </button>
       <p className="text-xs text-slate-500 leading-relaxed pt-0.5">{description}</p>
@@ -287,7 +336,260 @@ function ActionButton({ onClick, disabled, loading, label, description, variant 
   );
 }
 
-// ── Sync in progress panel ────────────────────────────────────────────────────
+// ── Chunked sync progress panel ───────────────────────────────────────────────
+
+function ChunkedSyncProgressPanel({
+  progress,
+  autoRunning,
+  chunkError,
+  elapsedMs,
+}: {
+  progress: ChunkedSyncProgress;
+  autoRunning: boolean;
+  chunkError: string | null;
+  elapsedMs: number;
+}) {
+  const processedCount = progress.processedCount;
+  const requestedCount = progress.requestedCount;
+  const progressPercent =
+    requestedCount > 0 ? Math.min(100, Math.round((processedCount / requestedCount) * 100)) : 0;
+
+  // ETA calculation — only show after 2+ processed to avoid absurd early estimates
+  let etaStr = "Estimating…";
+  if (processedCount >= 2 && elapsedMs > 0) {
+    const avgMsPerStock = elapsedMs / processedCount;
+    const remaining = requestedCount - processedCount;
+    const etaMs = remaining * avgMsPerStock;
+    etaStr = `~${formatDuration(etaMs)} remaining`;
+  }
+
+  const elapsedStr = formatDuration(elapsedMs);
+
+  return (
+    <div className="rounded-lg bg-slate-900/80 border border-emerald-800/60 p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        {autoRunning ? (
+          <Loader2 className="w-4 h-4 text-emerald-400 animate-spin shrink-0" />
+        ) : (
+          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+        )}
+        <span className="text-sm font-semibold text-emerald-300">
+          {autoRunning ? "Sync in progress" : "Sync paused"}
+        </span>
+      </div>
+
+      {progress.currentSymbol && (
+        <p className="text-xs text-slate-400">
+          Current symbol:{" "}
+          <span className="font-mono font-semibold text-slate-200">{progress.currentSymbol}</span>
+        </p>
+      )}
+
+      <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="text-slate-500">Processed</span>
+          <span className="font-mono text-slate-200">
+            {processedCount} / {requestedCount}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-slate-500">Succeeded</span>
+          <span className="font-mono text-emerald-400">{progress.successCount}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-slate-500">Skipped</span>
+          <span className="font-mono text-amber-400">{progress.skippedCount}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-slate-500">Failed</span>
+          <span className="font-mono text-red-400">{progress.failedCount}</span>
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        <div className="flex items-center justify-between text-xs text-slate-400">
+          <span>Progress</span>
+          <span className="font-mono">{progressPercent}%</span>
+        </div>
+        <div className="w-full h-2 bg-slate-700 rounded overflow-hidden">
+          <div
+            className="h-full bg-emerald-500 rounded transition-all duration-700"
+            style={{ width: `${progressPercent}%` }}
+          />
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between text-xs text-slate-400">
+        <span className="font-mono">Elapsed: {elapsedStr}</span>
+        {autoRunning && processedCount >= 2 && (
+          <span className="font-mono">{etaStr}</span>
+        )}
+      </div>
+
+      {chunkError && (
+        <p className="text-xs text-red-400 bg-red-900/20 border border-red-800/40 rounded px-2 py-1.5">
+          {chunkError}
+        </p>
+      )}
+
+      {progress.message && (
+        <p className="text-xs text-amber-400">{progress.message}</p>
+      )}
+
+      {autoRunning && (
+        <p className="text-xs text-slate-500">
+          Processing chunk by chunk. Please keep this page open.
+        </p>
+      )}
+    </div>
+  );
+}
+
+// ── Paused sync panel ─────────────────────────────────────────────────────────
+
+function PausedSyncPanel({
+  progress,
+  chunkError,
+}: {
+  progress: ChunkedSyncProgress;
+  chunkError: string | null;
+}) {
+  const processedCount = progress.processedCount;
+  const requestedCount = progress.requestedCount;
+  const progressPercent =
+    requestedCount > 0 ? Math.min(100, Math.round((processedCount / requestedCount) * 100)) : 0;
+
+  const pausedAt = progress.finishedAt
+    ? new Date(progress.finishedAt).toLocaleString([], {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : null;
+
+  const reason = progress.message ?? "Sync was interrupted before completion.";
+
+  return (
+    <div className="rounded-lg bg-slate-900/80 border border-amber-800/60 p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+        <span className="text-sm font-semibold text-amber-300">Sync paused</span>
+      </div>
+
+      {pausedAt && (
+        <p className="text-xs text-slate-400">
+          Paused at: <span className="text-slate-200">{pausedAt}</span>
+        </p>
+      )}
+
+      <p className="text-xs text-slate-400">
+        Reason: <span className="text-slate-300">{reason}</span>
+      </p>
+
+      {progress.currentSymbol && (
+        <p className="text-xs text-slate-400">
+          Last symbol:{" "}
+          <span className="font-mono font-semibold text-slate-200">{progress.currentSymbol}</span>
+        </p>
+      )}
+
+      <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="text-slate-500">Processed</span>
+          <span className="font-mono text-slate-200">
+            {processedCount} / {requestedCount}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-slate-500">Succeeded</span>
+          <span className="font-mono text-emerald-400">{progress.successCount}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-slate-500">Skipped</span>
+          <span className="font-mono text-amber-400">{progress.skippedCount}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-slate-500">Failed</span>
+          <span className="font-mono text-red-400">{progress.failedCount}</span>
+        </div>
+      </div>
+
+      <div className="space-y-1">
+        <div className="flex items-center justify-between text-xs text-slate-400">
+          <span>Progress</span>
+          <span className="font-mono">{progressPercent}%</span>
+        </div>
+        <div className="w-full h-2 bg-slate-700 rounded overflow-hidden">
+          <div
+            className="h-full bg-amber-500 rounded"
+            style={{ width: `${progressPercent}%` }}
+          />
+        </div>
+      </div>
+
+      {chunkError && (
+        <p className="text-xs text-red-400 bg-red-900/20 border border-red-800/40 rounded px-2 py-1.5">
+          {chunkError}
+        </p>
+      )}
+
+      <p className="text-xs text-slate-500">
+        You can continue from the last saved progress, or restart to rescan all active Nasdaq 100 stocks.
+      </p>
+    </div>
+  );
+}
+
+// ── Chunked sync result panel ─────────────────────────────────────────────────
+
+function ChunkedSyncResultPanel({ progress }: { progress: ChunkedSyncProgress }) {
+  const isSuccess = progress.status === "success";
+  const isPartial =
+    progress.status === "partial_success" && progress.processedCount >= progress.requestedCount;
+  const isFailed = progress.status === "failed";
+
+  return (
+    <div className="rounded-lg bg-slate-900/80 border border-slate-700/60 p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        {isSuccess && <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />}
+        {isPartial && <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />}
+        {isFailed && <XCircle className="w-4 h-4 text-red-400 shrink-0" />}
+        <span className={`text-sm font-semibold ${isSuccess ? "text-emerald-300" : isPartial ? "text-amber-300" : "text-red-300"}`}>
+          {isSuccess
+            ? `Success — all ${progress.requestedCount} stocks synced.`
+            : isPartial
+            ? `Partial success — ${progress.successCount} updated, ${progress.skippedCount} skipped, ${progress.failedCount} failed.`
+            : `Sync failed — ${progress.successCount} updated before failure.`}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs">
+        <MetaRow label="Requested" value={progress.requestedCount} />
+        <MetaRow label="Processed" value={progress.processedCount} />
+        <MetaRow label="Succeeded" value={<span className="text-emerald-400">{progress.successCount}</span>} />
+        <MetaRow label="Skipped" value={<span className="text-amber-400">{progress.skippedCount}</span>} />
+        <MetaRow label="Failed" value={<span className="text-red-400">{progress.failedCount}</span>} />
+        {progress.durationMs !== null && (
+          <MetaRow label="Duration" value={formatDuration(progress.durationMs)} />
+        )}
+      </div>
+
+      {progress.message && (
+        <p className="text-xs text-slate-400">{progress.message}</p>
+      )}
+
+      <p className="text-xs text-slate-500">
+        Check the Sync History tab for a full record. Run{" "}
+        <span className="text-slate-400 font-medium">Calculate Fundamental Scores</span>{" "}
+        to refresh scores.
+      </p>
+    </div>
+  );
+}
+
+// ── Sync in progress panel (for non-chunked actions) ─────────────────────────
 
 function SyncInProgressPanel({
   actionLabel,
@@ -799,35 +1101,174 @@ export default function SyncPageClient({
   universeOverview,
   dbStockSummary,
   stockInventory,
+  initialChunkedSync,
 }: SyncPageClientProps) {
   const router = useRouter();
   const [lastResult, setLastResult] = useState<LastResult>(null);
   const [activeAction, setActiveAction] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [activeTab, setActiveTab] = useState<TabId>("overview");
-  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Chunked sync state
+  const [chunkedSync, setChunkedSync] = useState<ChunkedSyncProgress | null>(initialChunkedSync);
+  const [autoRunning, setAutoRunning] = useState(false);
+  const [chunkError, setChunkError] = useState<string | null>(null);
+  const autoRunRef = useRef(false);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const syncStartedAtRef = useRef<number>(0);
+  const [elapsedMs, setElapsedMs] = useState(0);
 
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
+      if (pollRef.current) clearInterval(pollRef.current);
+      autoRunRef.current = false;
     };
   }, []);
 
-  function startTimer() {
-    setElapsedSeconds(0);
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = setInterval(() => {
-      setElapsedSeconds((s) => s + 1);
-    }, 1000);
+  // ── Polling for chunked sync progress ──────────────────────────────────────
+
+  function startPolling() {
+    if (pollRef.current) return;
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch("/api/admin/sync-runs/latest", { cache: "no-store" });
+        if (res.ok) {
+          const progress: ChunkedSyncProgress | null = await res.json();
+          if (progress) setChunkedSync(progress);
+        }
+      } catch {
+        // network error — keep polling
+      }
+    }, 2000);
   }
 
-  function stopTimer() {
+  function stopPolling() {
+    if (pollRef.current) {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+    }
+  }
+
+  // ── Elapsed timer for chunked sync ─────────────────────────────────────────
+
+  function startElapsedTimer() {
+    syncStartedAtRef.current = Date.now();
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = setInterval(() => {
+      setElapsedMs(Date.now() - syncStartedAtRef.current);
+    }, 500);
+  }
+
+  function stopElapsedTimer() {
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
   }
+
+  // ── Elapsed timer for other sync actions ───────────────────────────────────
+
+  const [elapsedSeconds2, setElapsedSeconds2] = useState(0);
+  const timerRef2 = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  function startTimer() {
+    setElapsedSeconds2(0);
+    if (timerRef2.current) clearInterval(timerRef2.current);
+    timerRef2.current = setInterval(() => setElapsedSeconds2((s) => s + 1), 1000);
+  }
+
+  function stopTimer() {
+    if (timerRef2.current) { clearInterval(timerRef2.current); timerRef2.current = null; }
+  }
+
+  // ── Chunked sync auto-run loop ─────────────────────────────────────────────
+
+  const startAutoRun = useCallback(async () => {
+    autoRunRef.current = true;
+    setAutoRunning(true);
+    setChunkError(null);
+    startPolling();
+    startElapsedTimer();
+
+    try {
+      while (autoRunRef.current) {
+        const res = await fetch("/api/admin/sync-runs/process-next", { method: "POST" });
+        const data = await res.json();
+
+        if (!res.ok) {
+          setChunkError(data.error ?? "Chunk processing failed.");
+          break;
+        }
+
+        if (data.progress) setChunkedSync(data.progress);
+
+        if (data.done || !autoRunRef.current) break;
+        if (data.progress?.status !== "running") break;
+      }
+    } catch (err) {
+      setChunkError(err instanceof Error ? err.message : "Network error during chunk.");
+    }
+
+    stopPolling();
+    stopElapsedTimer();
+    autoRunRef.current = false;
+    setAutoRunning(false);
+
+    // Final poll for latest state
+    try {
+      const finalRes = await fetch("/api/admin/sync-runs/latest", { cache: "no-store" });
+      if (finalRes.ok) {
+        const finalProgress = await finalRes.json();
+        if (finalProgress) setChunkedSync(finalProgress);
+      }
+    } catch {
+      // ignore
+    }
+
+    router.refresh();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router]);
+
+  async function handleStartSync() {
+    setChunkError(null);
+    const res = await fetch("/api/admin/sync-runs/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "start" }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setChunkError(data.error ?? "Failed to start sync.");
+      return;
+    }
+    setChunkedSync(data);
+    await startAutoRun();
+  }
+
+  async function handleContinue() {
+    setChunkError(null);
+    await startAutoRun();
+  }
+
+  async function handleRestart() {
+    setChunkError(null);
+    const res = await fetch("/api/admin/sync-runs/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "restart" }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setChunkError(data.error ?? "Failed to restart sync.");
+      return;
+    }
+    setChunkedSync(data);
+    await startAutoRun();
+  }
+
+  // ── Other sync/test helpers ────────────────────────────────────────────────
 
   function runTest(label: string, fn: () => Promise<ProviderTestResult>) {
     setActiveAction(label);
@@ -874,18 +1315,16 @@ export default function SyncPageClient({
     });
   }
 
+  // ── Derived state ──────────────────────────────────────────────────────────
+
   const isLoading = isPending;
   const allConfigured = providerStatus.fmp && providerStatus.twelveData && providerStatus.finnhub;
 
   const activeSyncMeta =
     activeAction && activeAction in SYNC_ACTION_META ? SYNC_ACTION_META[activeAction] : null;
-  // Drive panel visibility from activeAction alone — isPending can briefly be false in the first
-  // render tick after setActiveAction fires but before the server-action transition is registered.
   const isSyncRunning = activeSyncMeta !== null;
 
-  // Nasdaq 100 coverage (derived from DB-backed overview data)
   const nasdaq100Overview = universeOverview.find((r) => r.universeSlug === "nasdaq-100") ?? null;
-
   const nasdaq100MetricSynced = nasdaq100Overview
     ? nasdaq100Overview.activeMembers - nasdaq100Overview.missingMetrics
     : null;
@@ -893,10 +1332,19 @@ export default function SyncPageClient({
   const nasdaq100MetricTotal = nasdaq100Overview?.activeMembers ?? null;
 
   const lastSyncResult =
-    lastResult?.kind === "sync" || lastResult?.kind === "universe" || lastResult?.kind === "score-calc"
+    lastResult?.kind === "sync" ||
+    lastResult?.kind === "universe" ||
+    lastResult?.kind === "score-calc"
       ? lastResult
       : null;
   const lastTestResult = lastResult?.kind === "test" ? lastResult : null;
+
+  const showProgress = autoRunning;
+  const showPaused = !autoRunning && isIncomplete(chunkedSync);
+  const showResult = !autoRunning && chunkedSync && isTerminal(chunkedSync);
+  const showContinue = !autoRunning && isIncomplete(chunkedSync);
+  const showRestart = !autoRunning && chunkedSync !== null;
+  const anyChunkedRunning = autoRunning;
 
   return (
     <div className="max-w-4xl mx-auto space-y-5">
@@ -911,8 +1359,8 @@ export default function SyncPageClient({
         </div>
         <h1 className="text-xl font-bold text-white">Market Data Sync</h1>
         <p className="text-sm text-slate-400 mt-1">
-          Internal tool for managing universe membership, testing data providers, and manually
-          syncing a small sample of stock data.
+          Internal tool for managing universe membership, testing data providers, and syncing
+          stock data in resumable chunks.
         </p>
       </div>
 
@@ -957,7 +1405,7 @@ export default function SyncPageClient({
       {activeTab === "sync-actions" && (
         <div className="space-y-5">
 
-          {/* Universe Management */}
+          {/* 1 — Universe Management */}
           <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
             <div>
               <div className="flex items-center gap-2 mb-0.5">
@@ -975,7 +1423,7 @@ export default function SyncPageClient({
             <ActionButton
               variant="sync"
               onClick={() => runUniverseSync("sync-nasdaq100", syncNasdaq100UniverseAction)}
-              disabled={isLoading}
+              disabled={isLoading || anyChunkedRunning}
               loading={activeAction === "sync-nasdaq100"}
               label="Sync Nasdaq 100 Universe"
               description="Syncs Nasdaq 100 membership from static fallback list. FMP is used only for profile enrichment. No quote sync."
@@ -983,7 +1431,7 @@ export default function SyncPageClient({
             {isSyncRunning && activeAction === "sync-nasdaq100" && activeSyncMeta && (
               <SyncInProgressPanel
                 actionLabel={activeSyncMeta.label}
-                elapsedSeconds={elapsedSeconds}
+                elapsedSeconds={elapsedSeconds2}
                 durationNote={activeSyncMeta.durationNote}
               />
             )}
@@ -999,15 +1447,9 @@ export default function SyncPageClient({
                     constituents require a paid endpoint.
                   </p>
                   <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1.5 text-slate-500 font-mono">
-                    <span>
-                      compositionAsOf: <span className="text-slate-400">2026-01-20</span>
-                    </span>
-                    <span>
-                      lastVerifiedAt: <span className="text-slate-400">2026-05-21</span>
-                    </span>
-                    <span>
-                      symbolCount: <span className="text-slate-400">100</span>
-                    </span>
+                    <span>compositionAsOf: <span className="text-slate-400">2026-01-20</span></span>
+                    <span>lastVerifiedAt: <span className="text-slate-400">2026-05-21</span></span>
+                    <span>symbolCount: <span className="text-slate-400">100</span></span>
                   </div>
                 </div>
               </div>
@@ -1023,7 +1465,7 @@ export default function SyncPageClient({
             </div>
           </section>
 
-          {/* Nasdaq 100 Market Data Sync (quotes + metrics) */}
+          {/* 2 — Nasdaq 100 Market Data Sync (chunked) */}
           <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
             <div>
               <div className="flex items-center gap-2 mb-0.5">
@@ -1034,63 +1476,136 @@ export default function SyncPageClient({
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Fetches both quote snapshots and basic financials for the next 25 active Nasdaq 100
-                members using Finnhub. Prioritises missing metrics, then missing quotes, then oldest
-                sync time. Uses 2 Finnhub calls per symbol (50 calls per batch).
-              </p>
-            </div>
-            <ActionButton
-              variant="sync"
-              onClick={() =>
-                runSync("sync-nasdaq100-market-data", syncNasdaq100MarketDataAction)
-              }
-              disabled={isLoading}
-              loading={activeAction === "sync-nasdaq100-market-data"}
-              label="Sync Nasdaq 100 Quotes + Metrics — Next 25"
-              description="Writes StockQuote and StockMetric to DB. Uses Finnhub (60 calls/min, 2 calls per symbol, 500 ms inter-symbol delay). Selects active Nasdaq 100 members with missing metrics first, then missing quotes, then oldest sync time."
-            />
-            {isSyncRunning && activeAction === "sync-nasdaq100-market-data" && activeSyncMeta && (
-              <SyncInProgressPanel
-                actionLabel={activeSyncMeta.label}
-                elapsedSeconds={elapsedSeconds}
-                durationNote={activeSyncMeta.durationNote}
-              />
-            )}
-            <div className="flex items-start gap-2 rounded bg-slate-900/60 border border-slate-700/60 px-3 py-2.5">
-              <Info className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
-              <p className="text-xs text-slate-500 leading-relaxed">
-                <span className="text-slate-400 font-medium">Selection priority: </span>
-                Missing metrics first, then missing quotes, then oldest metric sync, then oldest
-                quote sync. Tie-breaker: symbol A–Z. Run 4× to cover all 100 members.
+                Syncs quote snapshots and Finnhub basic financial metrics for all active Nasdaq 100
+                stocks. Runs in chunks of 10 stocks — progress is saved after each stock so the
+                sync can be continued if interrupted.
               </p>
             </div>
 
+            {/* Action buttons */}
+            <div className="flex flex-wrap gap-2">
+              {!chunkedSync || isTerminal(chunkedSync) ? (
+                <button
+                  onClick={handleStartSync}
+                  disabled={isLoading || anyChunkedRunning}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {anyChunkedRunning ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Play className="w-3.5 h-3.5" />
+                  )}
+                  Sync All Nasdaq 100 Market Data
+                </button>
+              ) : null}
+
+              {showContinue && (
+                <button
+                  onClick={handleContinue}
+                  disabled={isLoading || anyChunkedRunning}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium bg-blue-700 hover:bg-blue-600 text-white border border-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <SkipForward className="w-3.5 h-3.5" />
+                  Continue Sync
+                </button>
+              )}
+
+              {showRestart && !autoRunning && (
+                <button
+                  onClick={handleRestart}
+                  disabled={isLoading || anyChunkedRunning}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium bg-slate-700 hover:bg-slate-600 text-slate-200 border border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Restart Full Sync
+                </button>
+              )}
+            </div>
+
+            {/* Progress panel — while auto-running */}
+            {showProgress && chunkedSync && (
+              <ChunkedSyncProgressPanel
+                progress={chunkedSync}
+                autoRunning={autoRunning}
+                chunkError={chunkError}
+                elapsedMs={elapsedMs}
+              />
+            )}
+
+            {/* Paused panel — interrupted and continuable */}
+            {showPaused && chunkedSync && (
+              <PausedSyncPanel progress={chunkedSync} chunkError={chunkError} />
+            )}
+
+            {/* Chunk error when no run is active yet */}
+            {chunkError && !chunkedSync && (
+              <p className="text-xs text-red-400 bg-red-900/20 border border-red-800/40 rounded px-3 py-2">
+                {chunkError}
+              </p>
+            )}
+
+            {/* Result panel after completion */}
+            {showResult && chunkedSync && (
+              <ChunkedSyncResultPanel progress={chunkedSync} />
+            )}
+
+            {/* Explanation panel */}
+            <div className="rounded bg-slate-900/60 border border-slate-700/60 px-3 py-2.5 space-y-2">
+              <div className="flex items-start gap-2">
+                <Info className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
+                <div className="text-xs space-y-0.5 text-slate-500">
+                  <p>Uses Finnhub. Syncs 2 calls per stock: quote + metrics. Chunk size: 10.</p>
+                  {nasdaq100MetricTotal !== null && (
+                    <>
+                      <p>
+                        Active Nasdaq 100 stocks:{" "}
+                        <span className="text-slate-300 font-mono">{nasdaq100MetricTotal}</span>
+                      </p>
+                      <p>
+                        Estimated Finnhub calls:{" "}
+                        <span className="text-slate-300 font-mono">{nasdaq100MetricTotal * 2}</span>
+                      </p>
+                    </>
+                  )}
+                  <p>Estimated duration: ~3–5 minutes for 100 stocks.</p>
+                  <p>Rate limited to ~54 calls/minute (≥1.1s between calls).</p>
+                  <p className="text-amber-500">Please keep this page open while the sync runs.</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-2 border-t border-slate-700/60 pt-2">
+                <Info className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  After market data sync finishes, run{" "}
+                  <span className="text-slate-400 font-medium">Calculate Fundamental Scores</span>{" "}
+                  to refresh scores.
+                </p>
+              </div>
+            </div>
+
             {nasdaq100MetricTotal !== null && (
-              <div className="rounded bg-slate-900/60 border border-slate-700/60 px-3 py-2.5 space-y-3">
-                <div className="space-y-1.5">
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    Metrics coverage
-                  </p>
-                  <div className="grid grid-cols-2 gap-3 text-xs">
-                    <div>
-                      <p className="text-slate-500 mb-0.5">Have metrics</p>
-                      <p className={`font-mono font-semibold ${nasdaq100MetricSynced === nasdaq100MetricTotal ? "text-emerald-400" : "text-slate-200"}`}>
-                        {nasdaq100MetricSynced} / {nasdaq100MetricTotal}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-slate-500 mb-0.5">Missing metrics</p>
-                      <p className={`font-mono font-semibold ${nasdaq100MetricMissing! > 0 ? "text-amber-400" : "text-slate-600"}`}>
-                        {nasdaq100MetricMissing}
-                      </p>
-                    </div>
+              <div className="rounded bg-slate-900/60 border border-slate-700/60 px-3 py-2.5 space-y-1.5">
+                <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                  Metrics coverage
+                </p>
+                <div className="grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <p className="text-slate-500 mb-0.5">Have metrics</p>
+                    <p className={`font-mono font-semibold ${nasdaq100MetricSynced === nasdaq100MetricTotal ? "text-emerald-400" : "text-slate-200"}`}>
+                      {nasdaq100MetricSynced} / {nasdaq100MetricTotal}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-slate-500 mb-0.5">Missing metrics</p>
+                    <p className={`font-mono font-semibold ${nasdaq100MetricMissing! > 0 ? "text-amber-400" : "text-slate-600"}`}>
+                      {nasdaq100MetricMissing}
+                    </p>
                   </div>
                 </div>
               </div>
             )}
           </section>
 
-          {/* Score Calculation */}
+          {/* 3 — Score Calculation */}
           <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
             <div>
               <div className="flex items-center gap-2 mb-0.5">
@@ -1107,7 +1622,7 @@ export default function SyncPageClient({
             <ActionButton
               variant="sync"
               onClick={() => runScoreCalc("calc-fundamental-scores", calculateFundamentalScoresAction)}
-              disabled={isLoading}
+              disabled={isLoading || anyChunkedRunning}
               loading={activeAction === "calc-fundamental-scores"}
               label="Calculate Fundamental Scores"
               description="Reads existing StockMetric rows and writes Fundamental Score to StockScore. No external API calls. Stocks with a score + quote become scanner-eligible."
@@ -1115,7 +1630,7 @@ export default function SyncPageClient({
             {isSyncRunning && activeAction === "calc-fundamental-scores" && activeSyncMeta && (
               <SyncInProgressPanel
                 actionLabel={activeSyncMeta.label}
-                elapsedSeconds={elapsedSeconds}
+                elapsedSeconds={elapsedSeconds2}
                 durationNote={activeSyncMeta.durationNote}
               />
             )}
@@ -1131,29 +1646,24 @@ export default function SyncPageClient({
             </div>
           </section>
 
-          {/* Review Results */}
-          <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
-            <h2 className="text-sm font-semibold text-slate-200 mb-3">Review Results</h2>
-            {lastSyncResult === null ? (
-              <div className="flex items-start gap-2.5 text-slate-500">
-                <Info className="w-4 h-4 shrink-0 mt-0.5" />
-                <p className="text-sm leading-relaxed">
-                  No sync action has run yet. Run a sync above to see results here.
-                </p>
-              </div>
-            ) : lastSyncResult.kind === "sync" ? (
-              <SyncResultViewer result={lastSyncResult.result} />
-            ) : lastSyncResult.kind === "universe" ? (
-              <UniverseSyncResultViewer result={lastSyncResult.result} />
-            ) : (
-              <ScoreCalcResultViewer result={lastSyncResult.result} />
-            )}
-          </section>
+          {/* Review Results (for universe sync and score calc) */}
+          {lastSyncResult !== null && (
+            <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+              <h2 className="text-sm font-semibold text-slate-200 mb-3">Review Results</h2>
+              {lastSyncResult.kind === "sync" ? (
+                <SyncResultViewer result={lastSyncResult.result} />
+              ) : lastSyncResult.kind === "universe" ? (
+                <UniverseSyncResultViewer result={lastSyncResult.result} />
+              ) : (
+                <ScoreCalcResultViewer result={(lastSyncResult as { kind: "score-calc"; result: ScoreCalcResult }).result} />
+              )}
+            </section>
+          )}
         </div>
       )}
 
       {/* ══════════════════════════════════════════════════════════════════ */}
-      {/* Tab 3 — Provider Tests                                            */}
+      {/* Tab 4 — Provider Tests                                            */}
       {/* ══════════════════════════════════════════════════════════════════ */}
       {activeTab === "provider-tests" && (
         <div className="space-y-5">
@@ -1292,7 +1802,7 @@ FINNHUB_API_KEY=`}
             {isSyncRunning && (activeAction === "sync-quotes" || activeAction === "sync-profiles") && activeSyncMeta && (
               <SyncInProgressPanel
                 actionLabel={activeSyncMeta.label}
-                elapsedSeconds={elapsedSeconds}
+                elapsedSeconds={elapsedSeconds2}
                 durationNote={activeSyncMeta.durationNote}
               />
             )}
@@ -1307,28 +1817,17 @@ FINNHUB_API_KEY=`}
           </section>
 
           {/* Sample DB Writes — Review Results */}
-          <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
-            <h2 className="text-sm font-semibold text-slate-200 mb-3">Review Results</h2>
-            {lastSyncResult === null ? (
-              <div className="flex items-start gap-2.5 text-slate-500">
-                <Info className="w-4 h-4 shrink-0 mt-0.5" />
-                <p className="text-sm leading-relaxed">
-                  No sample sync has run yet. Run a sample action above to see results here.
-                </p>
-              </div>
-            ) : lastSyncResult.kind === "sync" ? (
+          {lastSyncResult !== null && lastSyncResult.kind === "sync" && (
+            <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+              <h2 className="text-sm font-semibold text-slate-200 mb-3">Review Results</h2>
               <SyncResultViewer result={lastSyncResult.result} />
-            ) : lastSyncResult.kind === "universe" ? (
-              <UniverseSyncResultViewer result={lastSyncResult.result} />
-            ) : (
-              <ScoreCalcResultViewer result={lastSyncResult.result} />
-            )}
-          </section>
+            </section>
+          )}
         </div>
       )}
 
       {/* ══════════════════════════════════════════════════════════════════ */}
-      {/* Tab 4 — Sync History                                              */}
+      {/* Tab 5 — Sync History                                              */}
       {/* ══════════════════════════════════════════════════════════════════ */}
       {activeTab === "sync-history" && (
         <div className="space-y-5">
