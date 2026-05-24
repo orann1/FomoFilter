@@ -374,6 +374,8 @@ model SyncRun {
   provider       String
   status         String
   requestedCount Int
+  processedCount Int           @default(0)
+  currentSymbol  String?
   successCount   Int
   skippedCount   Int
   failedCount    Int
