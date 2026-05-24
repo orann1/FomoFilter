@@ -6,8 +6,13 @@ export type SortKey =
   | "profitability-score"
   | "valuation-score"
   | "health-score"
+  | "risk-score"
   | "daily-change"
   | "market-cap"
+  | "pe-ratio"
+  | "peg-ratio"
+  | "roe"
+  | "revenue-growth"
   | "symbol";
 
 const sortOptions: { value: SortKey; label: string }[] = [
@@ -16,8 +21,13 @@ const sortOptions: { value: SortKey; label: string }[] = [
   { value: "profitability-score", label: "Profitability Score" },
   { value: "valuation-score", label: "Valuation Score" },
   { value: "health-score", label: "Financial Health Score" },
+  { value: "risk-score", label: "Risk / Context Score" },
   { value: "daily-change", label: "Day % Change" },
   { value: "market-cap", label: "Market Cap" },
+  { value: "pe-ratio", label: "P/E Ratio" },
+  { value: "peg-ratio", label: "PEG Ratio" },
+  { value: "roe", label: "ROE" },
+  { value: "revenue-growth", label: "Revenue Growth" },
   { value: "symbol", label: "Symbol (A–Z)" },
 ];
 
@@ -40,7 +50,6 @@ export default function ScannerControls({
 }: ScannerControlsProps) {
   return (
     <div className="flex flex-col sm:flex-row gap-3 mb-4">
-      {/* Search */}
       <div className="relative flex-1">
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
         <input
@@ -52,7 +61,6 @@ export default function ScannerControls({
         />
       </div>
 
-      {/* Sort */}
       <div className="flex items-center gap-2 shrink-0">
         <ArrowUpDown size={14} className="text-slate-500 shrink-0" />
         <select
@@ -68,7 +76,6 @@ export default function ScannerControls({
         </select>
       </div>
 
-      {/* Result count */}
       <div className="flex items-center shrink-0">
         <span className="text-xs text-slate-500">
           {resultCount === totalCount ? (
