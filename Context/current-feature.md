@@ -1,711 +1,769 @@
-# Phase 12 — Dashboard Real Data Cleanup
+# Phase 13 — Opportunity Score v1
 
 ## Status
 
-Completed
+Completed (2026-05-24)
 
 ---
 
 ## Goal
 
-Clean up the Dashboard so it reflects the real data model built in Phases 9F–11.
+Add the first version of **Opportunity Score**.
 
-The Dashboard should no longer present legacy/demo concepts as if they are real production data.
-
-It should become a clear overview of:
+The current app can already answer:
 
 ```txt
-Data coverage
-Top fundamental stocks
-Score distribution
-Sector breakdown
-Sync freshness
-Scanner readiness
+Which companies are fundamentally strong?
 ```
 
-The Dashboard should use DB-backed fields only.
+through:
+
+```txt
+Fundamental Score
+Growth Score
+Profitability Score
+Valuation Score
+Financial Health Score
+Risk / Context Score
+```
+
+Opportunity Score should answer a different question:
+
+```txt
+Which fundamentally strong stocks look attractive as investment opportunities right now, based on the data we already have?
+```
+
+The score should combine:
+
+```txt
+Company quality
+Valuation attractiveness
+Growth strength
+Risk/context
+Price position
+```
+
+This phase should not add new external provider calls.
 
 ---
 
 ## Why This Phase Is Needed
 
-After Phase 10 and Phase 11, the Scanner is now connected to real database data and focused on the Fundamental Score model.
+After Phases 9–12, the app has:
 
-However, the Dashboard still appears to show legacy/demo fields such as:
+- Nasdaq 100 universe.
+- Real quote data.
+- Finnhub basic financial metrics.
+- Fundamental Score.
+- Scanner connected to real data.
+- Dashboard connected to real data.
+- Admin sync and Data Inventory.
+
+However, **Fundamental Score alone is not enough**.
+
+A company can be excellent but still expensive.
+
+Example:
 
 ```txt
-Hot
-Opp
-Setup
-Catalyst
+High Fundamental Score
+High Growth
+High Profitability
+But very expensive valuation
 ```
 
-Many of these values appear as:
+Opportunity Score should help separate:
 
 ```txt
-0
-Unknown
--
+Great company
 ```
 
-These fields are not yet supported by real data.
+from:
 
-This creates confusion because the user may think the app has calculated momentum, opportunity, catalyst, setup, or hot-score data when it has not.
-
-Phase 12 should make the Dashboard truthful and aligned with the real data pipeline.
+```txt
+Great company at a reasonable or attractive setup
+```
 
 ---
 
 ## Product Direction
 
-The Dashboard should be an overview screen, not a second Scanner.
-
-It should answer:
+Opportunity Score v1 should be:
 
 ```txt
-How much data do we have?
-How fresh is the data?
-How many stocks are scanner-ready?
-Which stocks rank highest by Fundamental Score?
-Which sectors are strongest?
-What needs attention before the Scanner is reliable?
+Deterministic
+Explainable
+DB-backed
+Based only on existing data
+Useful for sorting and filtering in Scanner
 ```
 
-It should not yet answer:
+It should not be an AI recommendation or buy/sell signal.
 
-```txt
-Which stocks are hot today?
-Which stocks have catalysts?
-Which stocks have unusual volume?
-Which stocks have analyst upside?
-Which stocks have technical breakouts?
-```
-
-Those are future phases.
+It should be a ranking tool.
 
 ---
 
-## Scope
+## Important Scope Decision
 
-Phase 12 includes:
+Use only the data already stored in the DB.
 
-1. Dashboard audit.
-2. Replace legacy/demo fields with real fields.
-3. Update top summary cards.
-4. Replace old “Hot Stocks” table with real “Top Fundamental Stocks”.
-5. Add data coverage and freshness sections.
-6. Add sector summary if safe.
-7. Remove or mark unsupported future concepts.
-8. Keep Dashboard read-only.
-9. No new provider calls.
-10. No scoring formula changes.
-
----
-
-## Non-Scope
-
-Do not build:
-
-- New sync logic.
-- New external API calls.
-- New provider integrations.
-- New score formulas.
-- Opportunity Score.
-- Hot Score.
-- Momentum Score.
-- Technical indicators.
-- News/catalyst analysis.
-- Analyst target/upside.
-- Russell 1000 expansion.
-- AI insights.
-- Complex charting unless simple and safe.
-- Alerts/watchlist logic changes.
-
----
-
-# 1. Dashboard Audit
-
-Before changing the Dashboard, inspect and report:
-
-- Which files render `/`.
-- Which files load Dashboard data.
-- Which Prisma query or loader is used.
-- Which fields are real DB-backed.
-- Which fields are legacy/demo/seed-based.
-- Which fields are shown as fake zero/default.
-- Whether Dashboard imports from `mock-data.ts`.
-- Whether Dashboard still depends on:
-  - `hotScore`
-  - `opportunityScore`
-  - `riskScore`
-  - `setup`
-  - `catalyst`
-  - `relativeVolume`
-  - `upside`
-- Whether Dashboard can reuse Scanner data mapping or needs its own compact loader.
-
-Required audit output:
+Allowed:
 
 ```txt
-Dashboard files inspected:
-Current data source:
-Legacy/demo fields found:
-Real fields available:
-Fields to remove/replace:
-Recommended Dashboard v1 mapping:
-```
-
----
-
-# 2. Dashboard v1 Data Source
-
-Dashboard should read from the DB only.
-
-Allowed sources:
-
-```txt
-Prisma
-Internal server loader
-Existing DB tables
-```
-
-Required tables/relations as needed:
-
-```txt
-Stock
 StockQuote
 StockMetric
 StockScore
 StockUniverseMember
-StockUniverse
-SyncRun
+Stock
 ```
 
-Not allowed:
+Not allowed in this phase:
 
 ```txt
-Finnhub calls
-FMP calls
-Twelve Data calls
-Mock arrays as main data source
-Hardcoded stock rows
-Fake default values
+New provider calls
+Analyst target/upside
+News catalyst
+Technical indicators
+Historical candles
+Volume anomaly
+AI analysis
+New sync jobs
+Scanner provider calls
 ```
 
 ---
 
-# 3. Recommended Dashboard Loader
+## Difference Between Fundamental Score and Opportunity Score
 
-Use or update:
+### Fundamental Score
 
-```txt
-src/lib/data/dashboard.ts
-```
-
-Suggested loader output:
-
-```ts
-type DashboardData = {
-  summary: {
-    totalStocks: number;
-    scannerReadyStocks: number;
-    withQuotes: number;
-    withMetrics: number;
-    withScores: number;
-    activeNasdaq100: number;
-    averageFundamentalScore: number | null;
-    stocksAbove75: number;
-    stocksAbove80: number;
-  };
-
-  freshness: {
-    lastMarketDataSyncAt: string | null;
-    lastScoreCalculationAt: string | null;
-    quoteCoveragePercent: number;
-    metricCoveragePercent: number;
-    scoreCoveragePercent: number;
-  };
-
-  topFundamentalStocks: DashboardStockRow[];
-
-  sectorSummary: DashboardSectorRow[];
-
-  dataWarnings: DashboardWarning[];
-};
-```
-
-Adjust names to match project conventions.
-
----
-
-# 4. Top Summary Cards
-
-Replace legacy summary cards with real data.
-
-Recommended cards:
+Answers:
 
 ```txt
-Total Stocks
-Scanner Ready
-With Metrics
-With Scores
-Average Fundamental Score
-Stocks Above 75
-Last Market Data Sync
-Last Score Calculation
+How strong is the company?
 ```
 
-Optional if space is limited:
+Mainly based on:
 
 ```txt
-Quote Coverage
-Metrics Coverage
-Score Coverage
+Growth
+Profitability
+Valuation
+Financial Health
+Risk / Context
 ```
 
-Do not show cards based on unsupported concepts like Hot, Momentum, Catalyst, or Setup.
+### Opportunity Score
 
----
-
-## Card Definitions
-
-### Total Stocks
-
-Count of active stocks in the DB or active selected universe.
-
-### Scanner Ready
-
-Count of active stocks with:
+Answers:
 
 ```txt
-StockQuote exists
-StockScore exists
+How attractive is this stock as an opportunity right now, using available fundamentals, valuation, and price context?
 ```
 
-### With Metrics
-
-Count of stocks with `StockMetric`.
-
-### With Scores
-
-Count of stocks with `StockScore.fundamentalScore`.
-
-### Average Fundamental Score
-
-Average of non-null `fundamentalScore`.
-
-### Stocks Above 75
-
-Count of stocks with:
+It should give more importance to:
 
 ```txt
-fundamentalScore >= 75
-```
-
-### Last Market Data Sync
-
-Latest successful or partial successful market data sync run.
-
-Recommended types to check:
-
-```txt
-market-data-nasdaq100-chunked-sync
-market-data-nasdaq100-full-sync
-market-data-nasdaq100-batch
-```
-
-Prefer the newest relevant successful/partial run.
-
-### Last Score Calculation
-
-Latest successful score calculation run:
-
-```txt
-fundamental-score-calculation
+Valuation
+Growth-adjusted valuation
+Price position
+Risk-adjusted quality
 ```
 
 ---
 
-# 5. Main Dashboard Table
+## Opportunity Score v1 Formula
 
-Replace old “Hot Stocks Today” or equivalent table with:
+Recommended initial weights:
+
+| Component | Weight | Purpose |
+| --- | ---: | --- |
+| Fundamental Quality | 35% | Avoid ranking weak companies highly just because they are cheap |
+| Valuation Attractiveness | 30% | Reward reasonable pricing |
+| Growth Strength | 20% | Reward companies still growing |
+| Risk / Context | 10% | Penalize excessive risk |
+| Price Position / 52W Context | 5% | Small timing/context signal |
+
+Total:
 
 ```txt
-Top Fundamental Stocks
+100%
 ```
 
-Sort:
+---
+
+## Component Mapping
+
+### 1. Fundamental Quality — 35%
+
+Use existing:
 
 ```txt
-fundamentalScore desc
+StockScore.fundamentalScore
 ```
 
-Recommended columns:
+This is already a 0–100 score.
+
+Purpose:
+
+```txt
+The opportunity must be grounded in company quality.
+```
+
+### 2. Valuation Attractiveness — 30%
+
+Use existing:
+
+```txt
+StockScore.valuationScore
+```
+
+Optionally enrich with raw metrics if needed:
+
+```txt
+StockMetric.forwardPE
+StockMetric.peBasicExclExtraTTM
+StockMetric.pegTTM
+StockMetric.forwardPEG
+StockMetric.evEbitdaTTM
+```
+
+For v1, prefer using:
+
+```txt
+valuationScore
+```
+
+because it already summarizes valuation safely.
+
+### 3. Growth Strength — 20%
+
+Use existing:
+
+```txt
+StockScore.growthScore
+```
+
+Purpose:
+
+```txt
+A cheap stock with no growth may not be a good opportunity.
+```
+
+### 4. Risk / Context — 10%
+
+Use existing:
+
+```txt
+StockScore.riskContextScore
+```
+
+Purpose:
+
+```txt
+Avoid over-rewarding high-risk names.
+```
+
+### 5. Price Position / 52W Context — 5%
+
+Use:
+
+```txt
+StockQuote.price
+StockMetric.week52High
+StockMetric.week52Low
+```
+
+This should be a small score that rewards stocks not too close to extreme overextension, without punishing strong companies too aggressively.
+
+---
+
+## Price Position Scoring
+
+Calculate where the current price sits between 52-week low and 52-week high.
+
+Formula:
+
+```txt
+position = (price - week52Low) / (week52High - week52Low)
+```
+
+Interpretation:
+
+```txt
+0.00 = near 52-week low
+1.00 = near 52-week high
+```
+
+Suggested scoring:
+
+| Position | Score | Meaning |
+| --- | ---: | --- |
+| 0.20–0.60 | 100 | Attractive / not overextended |
+| 0.60–0.80 | 75 | Reasonable |
+| 0.80–0.95 | 50 | Extended |
+| > 0.95 | 30 | Very close to 52W high |
+| 0.00–0.20 | 60 | Cheap but possibly weak/downtrend |
+| Invalid/missing | null | Exclude from final weighted average |
+
+Why not give 100 near the low?
+
+Because a stock close to its 52-week low may be cheap, but it can also be structurally weak. Without technical/news context, avoid over-rewarding it.
+
+---
+
+## Score Calculation Rules
+
+### Output Scale
+
+Store Opportunity Score as:
+
+```txt
+0–100
+```
+
+### Missing Data Handling
+
+If a component is missing:
+
+- Do not treat it as zero.
+- Exclude it from the weighted average.
+- Re-normalize remaining weights.
+
+Example:
+
+If price position is missing, calculate from the other 95% of available weights.
+
+### Caps
+
+Do not cap raw data in DB.
+
+Any caps or ranges should apply only inside scoring helper functions.
+
+### No Fake Values
+
+Do not create opportunity values for stocks missing fundamental score.
+
+If there is no `fundamentalScore`, skip the stock.
+
+---
+
+## DB / StockScore Changes
+
+Use existing `StockScore` model.
+
+Add fields only if they do not already exist.
+
+Expected new fields:
+
+```txt
+opportunityScore
+opportunityScoreVersion
+opportunityCalculatedAt
+```
+
+Optional component fields if useful:
+
+```txt
+opportunityQualityComponent
+opportunityValuationComponent
+opportunityGrowthComponent
+opportunityRiskComponent
+opportunityPricePositionComponent
+```
+
+Recommendation:
+
+Add only:
+
+```txt
+opportunityScore
+opportunityScoreVersion
+opportunityCalculatedAt
+```
+
+Do not over-expand schema in v1.
+
+If component debugging is needed, it can be shown live from existing scores.
+
+Migration expected:
+
+```txt
+add_opportunity_score_fields
+```
+
+---
+
+## Score Version
+
+Use version:
+
+```txt
+opportunity-v1
+```
+
+Store in:
+
+```txt
+opportunityScoreVersion
+```
+
+---
+
+## Calculation Target
+
+Add an Admin action:
+
+```txt
+Calculate Opportunity Scores
+```
+
+Location:
+
+```txt
+/admin/sync → Sync Actions → Score Calculation
+```
+
+This action should:
+
+1. Find stocks with `StockScore.fundamentalScore`.
+2. Include quote and metrics needed for price position.
+3. Calculate Opportunity Score.
+4. Update existing `StockScore`.
+5. Persist SyncRun / SyncRunItem logging.
+6. Return counts:
+   - requested
+   - calculated
+   - skipped
+   - failed
+
+Provider:
+
+```txt
+internal
+```
+
+SyncRun type:
+
+```txt
+opportunity-score-calculation
+```
+
+No external API calls.
+
+---
+
+## Admin UI
+
+### Sync Actions
+
+Update the Score Calculation section.
+
+Current:
+
+```txt
+Calculate Fundamental Scores
+```
+
+Add:
+
+```txt
+Calculate Opportunity Scores
+```
+
+Helper text:
+
+```txt
+Calculates Opportunity Score v1 from stored Fundamental Score, valuation, growth, risk/context, and 52-week price position. No external APIs.
+```
+
+Badge:
+
+```txt
+Internal
+```
+
+or:
+
+```txt
+Writes to DB
+```
+
+Use existing progress/result patterns.
+
+---
+
+## Data Inventory Updates
+
+Add columns:
+
+| Column | Source |
+| --- | --- |
+| Opportunity Score | Internal |
+| Opportunity Version | Internal |
+| Opportunity Calculated | Internal |
+| 52W Position | Internal / Derived |
+
+Optional:
+
+```txt
+Price Position Score
+```
+
+Only add if useful and not too crowded.
+
+---
+
+## Scanner Updates
+
+Update `/scanner` to support Opportunity Score.
+
+### Add Column
+
+Add:
+
+```txt
+Opportunity
+```
+
+Recommended placement:
 
 ```txt
 Symbol
-Company
 Sector
 Price
 Day %
+Opportunity
 Fundamental
 Growth
 Profitability
 Valuation
 Health
 Risk
-Market Cap
+...
 ```
 
-Optional:
+### Add Sort
+
+Add sort option:
 
 ```txt
-P/E
-PEG
-ROE
-Revenue Growth
+Opportunity Score
 ```
 
-Keep it compact. The Dashboard should summarize, not duplicate the full Scanner table.
+Do not make it the default yet unless approved.
 
-Limit:
+Recommended default remains:
 
 ```txt
-Top 10
+Fundamental Score desc
 ```
 
-or:
+Alternative after QA:
 
 ```txt
-Top 15
+Opportunity Score desc
 ```
 
-Do not show 100+ rows on the Dashboard.
+For this phase, keep default as Fundamental Score unless explicitly changed.
 
-The full list belongs in `/scanner`.
+### Add Filter Pill
 
----
-
-# 6. Sector Summary
-
-Add a simple sector summary if safe.
-
-Recommended metrics per sector:
+Add real-data pill:
 
 ```txt
-Sector
-Stock count
-Average Fundamental Score
-Top stock
-Average Growth Score
-Average Profitability Score
+High Opportunity
 ```
 
-Optional:
+Suggested logic:
 
 ```txt
-Average Valuation Score
-Average Financial Health Score
+opportunityScore >= 75
 ```
 
-This helps quickly see sector-level strength.
+### Add Threshold Filter
 
-Do not overbuild charts in this phase.
-
-A simple table is enough.
-
----
-
-# 7. Data Coverage / Freshness Section
-
-Add a Dashboard section showing data coverage.
-
-Recommended display:
+Add dropdown:
 
 ```txt
-Data Coverage
-Quotes: 100 / 100
-Metrics: 100 / 100
-Scores: 100 / 100
-Scanner Ready: 100 / 100
+Min Opportunity
+Any / 50+ / 60+ / 70+ / 80+ / 90+
 ```
 
-Use DB counts.
+### Expandable Details
 
-Also show freshness:
+Add Opportunity Score to the score breakdown section.
 
-```txt
-Last market data sync: 24 May 2026 11:32
-Last score calculation: 24 May 2026 11:45
-```
-
-If data is stale or missing, show a warning:
+Show formula explanation briefly:
 
 ```txt
-Some stocks are missing metrics. Run Market Data Sync.
-Some stocks are missing scores. Run Calculate Fundamental Scores.
+Opportunity combines fundamental quality, valuation, growth, risk/context, and price position.
 ```
 
 ---
 
-# 8. Data Warnings
+## Dashboard Updates
 
-Add simple warnings if useful.
+Update Dashboard minimally.
 
-Examples:
+Add:
 
-```txt
-4 stocks are missing metrics.
-4 stocks are missing scores.
-Market data has not been synced yet.
-Scores are older than the latest market data sync.
-```
-
-For score freshness comparison:
-
-If:
-
-```txt
-lastScoreCalculationAt < lastMarketDataSyncAt
-```
-
-show:
-
-```txt
-Market data is newer than scores. Recalculate Fundamental Scores.
-```
-
-This is very useful and should be included if easy.
-
----
-
-# 9. Remove / Replace Unsupported Fields
-
-Remove or replace unsupported fields from Dashboard:
-
-```txt
-Hot
-Opp
-Setup
-Catalyst
-FOMO Risk
-Relative Volume
-Upside
-```
-
-If they remain visible, they must be clearly marked:
-
-```txt
-Coming soon
-N/A
-Requires future data
-```
-
-Do not show fake zeros.
+- Average Opportunity Score.
+- Stocks Above Opportunity 75.
+- Top Opportunities table or add Opportunity column to Top Fundamental Stocks.
 
 Recommended:
 
 ```txt
-Remove them from Dashboard v1.
+Do not replace Top Fundamental Stocks yet.
+Add Opportunity Score as an additional column.
 ```
+
+If adding a separate table, keep it compact:
+
+```txt
+Top Opportunities
+Top 10 by opportunityScore desc
+```
+
+Do not overbuild Dashboard.
 
 ---
 
-# 10. Dashboard Header / Copy
+## Score Methodology Tab Update
 
-Update Dashboard copy to match the current app state.
+Update Admin `Score Methodology` tab.
 
-Suggested title/subtitle:
-
-```txt
-Dashboard
-Overview of real market data, fundamental scores, and scanner readiness.
-```
-
-Optional note:
+Add section:
 
 ```txt
-Momentum, catalyst, and analyst-upside signals are planned for future phases.
+Opportunity Score v1
 ```
 
-Do not make the dashboard sound like it already has these features.
+Include:
+
+- What Opportunity Score means.
+- Difference from Fundamental Score.
+- Weights:
+  - Fundamental Quality 35%
+  - Valuation 30%
+  - Growth 20%
+  - Risk / Context 10%
+  - Price Position 5%
+- 52-week price position explanation.
+- Missing data handling.
+- Version:
+  ```txt
+  opportunity-v1
+  ```
+- Future improvements:
+  - Analyst target/upside.
+  - Technical trend.
+  - Relative volume.
+  - News/catalyst.
+  - Sector-relative valuation.
 
 ---
 
-# 11. Formatting Rules
+## Data Integrity Requirements
 
-### Scores
+Do not:
 
-Show as integer:
-
-```txt
-89
-81
-67
-```
-
-If missing:
-
-```txt
-N/A
-```
-
-### Percentages
-
-Show with sign if appropriate:
-
-```txt
-+2.4%
--1.1%
-```
-
-### Currency
-
-Prices:
-
-```txt
-$610.26
-```
-
-Market cap:
-
-```txt
-$1.55T
-$245B
-```
-
-### Dates
-
-Use readable date/time:
-
-```txt
-24 May 11:32
-```
-
-### Missing Values
-
-Use:
-
-```txt
-N/A
-```
-
-Never show missing values as zero unless the real DB value is actually zero.
+- Recalculate Fundamental Score.
+- Change Fundamental Score formula.
+- Create Opportunity Score for stocks missing fundamentalScore.
+- Use fake analyst upside.
+- Use mock catalyst data.
+- Treat missing components as zero.
+- Call providers from calculation.
+- Call providers from Scanner/Dashboard.
 
 ---
 
-# 12. Dashboard Links / Actions
+## Browser QA Checklist
 
-Add simple navigation links if useful:
-
-```txt
-Open Scanner
-Open Admin Sync
-Open Data Inventory
-```
-
-Do not add write actions directly to the Dashboard in this phase.
-
-Sync and score calculation should remain in Admin Sync.
-
----
-
-# 13. No Provider Calls From Dashboard
-
-Important:
-
-Dashboard must not call external providers.
-
-Allowed:
-
-```txt
-DB read
-Prisma query
-Internal loader
-```
-
-Not allowed:
-
-```txt
-Finnhub
-FMP
-Twelve Data
-Yahoo
-Apify
-```
-
----
-
-# 14. Performance
-
-Dashboard should use efficient queries.
-
-Avoid:
-
-- N+1 queries.
-- Loading unnecessary full payloads.
-- Client-side external fetches.
-- Overly large row lists.
-
-For Dashboard:
-
-```txt
-Top 10 / 15 stocks only
-Sector summary aggregated from loaded rows or DB query
-Coverage counts from DB
-```
-
----
-
-# 15. Dashboard QA Checklist
+### Admin Sync
 
 Open:
 
 ```txt
-/
+/admin/sync → Sync Actions
 ```
 
 Confirm:
 
-1. Dashboard loads.
-2. Title/subtitle reflect real data.
-3. Legacy fields are gone or clearly marked unavailable.
-4. No fake Hot/Opp/Setup/Catalyst values are shown.
-5. Summary cards use real DB data.
-6. Top Fundamental Stocks table appears.
-7. Top table is sorted by Fundamental Score desc.
-8. Top table rows match real stocks from Scanner.
-9. Coverage counts are correct.
-10. Last market data sync is displayed if available.
-11. Last score calculation is displayed if available.
-12. Warnings appear if metrics or scores are missing.
-13. If scores are older than market data, warning appears.
-14. Sector summary appears if implemented.
-15. Links to Scanner/Admin work if added.
-16. Missing values display as N/A.
-17. No external provider calls happen from Dashboard.
+1. Calculate Opportunity Scores button appears.
+2. Helper text says no external APIs.
+3. Run the action.
+4. Result shows requested/calculated/skipped/failed.
+5. Sync History records `opportunity-score-calculation`.
+6. Provider is `internal`.
 
----
-
-# 16. Regression QA
+### Data Inventory
 
 Confirm:
 
-- `/scanner` still loads.
-- Scanner filters/sorts still work.
+1. Opportunity Score column appears.
+2. Opportunity Version appears.
+3. Opportunity Calculated timestamp appears.
+4. Scores are between 0 and 100.
+5. Missing values show N/A.
+
+### Scanner
+
+Confirm:
+
+1. Opportunity column appears.
+2. Sort by Opportunity works.
+3. High Opportunity pill works.
+4. Min Opportunity filter works.
+5. Expandable row shows Opportunity Score.
+6. No provider calls happen from Scanner.
+
+### Dashboard
+
+Confirm:
+
+1. Dashboard loads.
+2. Opportunity score is visible if implemented.
+3. Top tables still use real DB data.
+4. No old unsupported fields return.
+
+### Data Quality Spot Check
+
+Check several stocks, for example:
+
+```txt
+META
+NVDA
+MSFT
+AAPL
+TSLA
+```
+
+Confirm:
+
+- opportunityScore exists.
+- Score is plausible.
+- Score is not null/NaN/negative.
+- Score is within 0–100.
+- Expensive stocks may have lower opportunity than fundamental quality if valuation is weak.
+
+### Regression
+
+Confirm:
+
+- Fundamental Score calculation still works.
+- Market Data Sync still works.
+- Scanner still loads.
+- Dashboard still loads.
 - Admin Sync still loads.
-- Data Inventory still loads.
-- Score Methodology still loads.
-- Market Data Sync remains unchanged.
-- Calculate Fundamental Scores remains unchanged.
-- Provider Tests tab works.
-- Watchlist page loads.
-- Alerts page loads if applicable.
-- No provider calls happen from Dashboard or Scanner render.
+- No external provider calls were added.
 
 ---
 
-# 17. Validation
+## Validation
 
 Run:
 
@@ -716,52 +774,49 @@ npx prisma validate
 npx prisma migrate status
 ```
 
-No Prisma migration should be needed.
-
-If a migration is needed, stop and explain why before adding it.
+Migration expected only for new `StockScore` fields.
 
 ---
 
-# 18. Required Implementation Report
+## Required Implementation Report
 
 Return a concise report in English only with:
 
 1. Files inspected.
-2. Dashboard audit result.
-3. Legacy/demo fields found.
-4. Files changed.
-5. Dashboard data loader changes.
-6. Summary cards implemented.
-7. Main table implemented.
-8. Sector summary implemented or deferred.
-9. Data coverage/freshness section implemented.
-10. Data warnings implemented.
-11. Unsupported fields removed/marked.
-12. Confirmation no provider calls were added.
-13. Browser QA results.
-14. Regression QA results.
-15. Automated check results.
-16. Known issues.
-17. Ready for commit or not.
+2. Files changed.
+3. Migration name and fields.
+4. Opportunity formula implemented.
+5. Component weights.
+6. Missing component behavior.
+7. Price position scoring.
+8. Admin action added.
+9. SyncRun logging.
+10. Data Inventory updates.
+11. Scanner updates.
+12. Dashboard updates or deferral.
+13. Score Methodology update.
+14. Browser QA results.
+15. Data quality spot check.
+16. Automated check results.
+17. Known issues.
+18. Ready for commit or not.
 
 ---
 
 ## Acceptance Criteria
 
-Phase 12 is complete when:
+Phase 13 is complete when:
 
-- Dashboard no longer presents legacy/demo fields as real data.
-- Dashboard uses DB-backed real data.
-- Summary cards show real counts/scores/freshness.
-- Top table uses Fundamental Score, not Hot Score.
-- Missing values display as N/A.
-- Unsupported concepts are removed or clearly marked future.
-- Data coverage is visible.
-- Last sync and score calculation freshness are visible.
-- Warnings appear when data is missing or stale.
+- Opportunity Score v1 is calculated from existing DB data.
 - No external provider calls are added.
-- No scoring formulas are changed.
-- No migration is added.
+- Opportunity Score is stored on `StockScore`.
+- Admin can calculate Opportunity Scores.
+- SyncRun logs the calculation.
+- Data Inventory shows Opportunity Score.
+- Scanner can display/filter/sort by Opportunity Score.
+- Dashboard shows Opportunity Score if implemented.
+- Score Methodology explains Opportunity Score.
+- Missing data is not treated as zero.
 - Build passes.
 - TypeScript passes.
 - Prisma validates.
@@ -769,15 +824,20 @@ Phase 12 is complete when:
 
 ---
 
-## Future Phases
+## Future Improvements
 
-After Phase 12:
+Future Opportunity Score versions may include:
 
 ```txt
-Phase 13 — Opportunity Score
-Phase 14 — Technical / Momentum Data
-Phase 15 — News / Catalyst Data
-Phase 16 — Russell 1000 Universe Expansion
+Analyst target upside
+Technical trend / moving averages
+Relative volume
+News/catalyst
+Earnings timing
+Sector-relative valuation
+FCF yield
+ROIC
+Drawdown/rebound pattern
 ```
 
 ---
@@ -808,3 +868,4 @@ Phase 16 — Russell 1000 Universe Expansion
 - Phase 10 completed (2026-05-24): Scanner Real Data Integration. Moved `/scanner` from 5 demo/seed stocks to 100 real Nasdaq 100 stocks from the DB. Changed default universe from `russell-1000` to `nasdaq-100`; added `isActive: true` membership filter and `metric: true` include to the Prisma query. Added 4 formatter helpers to `src/lib/formatters.ts` (`formatScore`, `formatMetricPercent`, `formatRatio`, `formatCompactCurrency`). Extended `HotStock` type in `mock-data.ts` with 13 new optional fields for fundamental scores and key metrics. Rewrote `ScannerTable.tsx` with 18 real columns (Symbol, Sector, Price, Day%, Fund., Growth, Profit., Valuat., Health, Risk, P/E, PEG, Rev Gr., EPS Gr., ROE, D/E, Mkt Cap). Replaced sort options with 8 fundamental-focused keys; default sort is Fundamental Score descending. Removed Risk and Setup filters (not backed by real data). Reduced view pills to 3 active (All Stocks, In Watchlist, Alert Active); 5 unsupported pills (Hot Today, Strong Momentum, Best Opportunities, Unusual Volume, FOMO Risk) shown as disabled with "Coming soon" tooltips. Updated `MobileScannerCard.tsx` to show fundamental/growth/profitability/health scores and key metrics. Updated `ScannerHeader.tsx` subtitle. Dashboard audited — still uses `hotScore`/`opportunityScore` (= 0 for real stocks); deferred to Phase 11. No Prisma migration needed. No external provider calls added. Browser QA confirmed: 100 stocks loading (META top at Fund=89), all new columns visible with real values, N/A for missing metrics, disabled pills visible, dashboard unbroken. Build passes, `tsc --noEmit` zero errors, `prisma validate` valid, `prisma migrate status` clean. Known issue: universe selector strip shows "Russell 1000" button (only BASE_UNIVERSE type) with no active highlight since selected data is Nasdaq 100 (INDEX type) — UX improvement deferred to Phase 11. Approved by user.
 - Phase 11 completed (2026-05-24): Scanner UX & Universe Selector Improvements. Fixed universe selector — Nasdaq 100 shown as active, Russell 1000 and S&P 500 shown as disabled "Coming soon" (backed by DB `hasData` count). Extended `HotStock` type with 20 new optional fields (detail metrics, score metadata, data freshness). Updated `getScannerData()` to map all new fields and compute `hasData` per universe via grouped Prisma query. Rewrote `ScannerTable` with score column tooltips (Info icon + title text), removed D/E and EPS Growth from main table, added expandable row chevron — clicking expands `ScannerExpandedRow` inline without opening the drawer. Created `ScannerExpandedRow` component with 6 grouped sections: Score Breakdown (progress bars + version + last calculated), Growth, Profitability, Valuation, Financial Health, and Data Freshness. Updated `ScannerViewPills` with 4 new active pills: High Fundamentals (≥75), High Growth (≥75), High Profitability (≥75), Reasonable Valuation (≥60). Updated `ScannerFilters` with 5 score threshold dropdowns (Any/50+/60+/70+/80+/90+) and Positive Day% toggle; exported `DEFAULT_FILTERS`. Updated `ScannerControls` with 5 new sort options (Risk Score, P/E, PEG, ROE, Revenue Growth — 13 total). Updated `ScannerPageClient` with new view/threshold filter logic, fixed universe selector rendering, improved empty states (no-match vs no-data). Dashboard deferred to Phase 12. No external provider calls, no schema changes, no Prisma migration. Build passes, TypeScript clean. Approved by user.
 - Phase 12 completed (2026-05-24): Dashboard Real Data Cleanup. Fully replaced the legacy/demo dashboard with a real-data overview screen. Rewrote `src/lib/data/dashboard.ts` — removed all seeded-data queries (MarketStat, DashboardSummaryCard, DiscoverSetup, AiInsight, RecentAlert, hotScore-based ordering) and replaced with real Prisma queries across Stock, StockQuote, StockMetric, StockScore, StockUniverseMember, and SyncRun. New `DashboardData` type exports: `DashboardSummary`, `DashboardFreshness`, `DashboardStockRow`, `DashboardSectorRow`, `DashboardWarning`, `DashboardWatchlistItem`. Created 5 new components: `DashboardSummaryCards.tsx` (8 real cards: Total Stocks, Scanner Ready, With Metrics, With Scores, Avg Fundamental, Stocks Above 75, Last Market Sync, Last Score Calc), `TopFundamentalStocksTable.tsx` (top 15 by fundamentalScore desc, with score bars and sub-scores), `SectorSummaryTable.tsx` (avg fundamental/growth/profitability per sector, top stock per sector), `DataCoverageSection.tsx` (progress bars for quotes/metrics/scores/scanner-ready with capped 100% display and "+N rows outside universe" note), `DataWarningsSection.tsx` (amber warnings for missing sync, missing metrics, missing scores, stale scores). Updated `DashboardHeader.tsx` (new subtitle), `DashboardGrid.tsx` (removed legacy widgets, wired new components), `WatchlistWidget.tsx` (shows fundamentalScore instead of hot/opp, uses `DashboardWatchlistItem` type), `app/page.tsx` (removed TodaysSignalCard, MarketStatsGrid, old SummaryCardsGrid; added new components). No Prisma migration added. No external provider calls. No scoring formula changes. Browser QA confirmed: 100 stocks, META top at Fund=89, all legacy fields absent, data warnings functional, coverage bars capped at 100%, sector summary present, watchlist shows Fund scores, Scanner and Admin Sync unbroken. Build passes, `tsc --noEmit` zero errors, `prisma validate` valid, `prisma migrate status` clean. Approved by user.
+- Phase 13 completed (2026-05-24): Opportunity Score v1. Added `oppScore Decimal?`, `oppScoreVersion String?`, `oppCalculatedAt DateTime?` to `StockScore` via migration `20260524135513_add_opportunity_score_fields`. Created `src/lib/scoring/opportunity-score.ts` — deterministic scoring engine with weighted average (fundamentalScore 35%, valuationScore 30%, growthScore 20%, riskContextScore 10%, pricePosition 5%), null-exclusion with weight re-normalization for missing components, price position scoring from 52W high/low (`(price - week52Low) / (week52High - week52Low)` → scored 30–100), version constant `OPPORTUNITY_SCORE_VERSION = "opportunity-v1"`. Added `calculateOpportunityScoresAction()` to `src/actions/market-data-actions.ts` — no external calls, skips stocks without fundamentalScore, upserts `StockScore.oppScore`, persists `SyncRun` (`type=opportunity-score-calculation`, `provider=internal`) + `SyncRunItem` per symbol. Fixed Turbopack stale cache bug (same as Phase 9I): cleared `.next/` and re-ran `prisma generate` before QA. Admin Sync Actions tab: added "Calculate Opportunity Scores" button with helper text and Internal badge. Score Methodology tab: added Opportunity Score v1 section with weights, price position table, missing data rules, version. Data Inventory: added Opp. Score, Opp. Version, Opp. Calc At columns. Scanner: added Opp. column (between Day% and Fund.), sort by Opportunity Score, "High Opportunity" pill (≥75), "Min Opp." threshold filter, expanded row shows Opportunity Score section with formula explanation. Dashboard: added "Avg Opportunity" and "High Opportunity" summary cards; added Opp. column to Top Fundamental Stocks table. No external provider calls added. Build passes, `tsc --noEmit` zero errors, `prisma validate` valid, `prisma migrate status` clean. Approved by user.

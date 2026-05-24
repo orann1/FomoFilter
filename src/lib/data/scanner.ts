@@ -174,6 +174,10 @@ export async function getScannerData({
         // Phase 11: score metadata
         scoreVersion: s.score!.scoreVersion ?? null,
         scoreLastCalculated: s.score!.lastCalculatedAt?.toISOString() ?? null,
+        // Phase 13: opportunity score
+        oppScore: toNum(s.score!.oppScore),
+        oppScoreVersion: s.score!.oppScoreVersion ?? null,
+        oppCalculatedAt: s.score!.oppCalculatedAt?.toISOString() ?? null,
         // Phase 11: data freshness
         quoteLastSynced: s.quote!.lastSyncedAt?.toISOString() ?? null,
         metricsLastSynced: m?.lastSyncedAt?.toISOString() ?? null,

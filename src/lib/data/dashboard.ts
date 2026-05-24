@@ -27,6 +27,7 @@ export type DashboardStockRow = {
   valuationScore: number | null;
   financialHealthScore: number | null;
   riskContextScore: number | null;
+  oppScore: number | null;
   marketCap: string | null;
   forwardPe: number | null;
   pegRatio: number | null;
@@ -60,6 +61,8 @@ export type DashboardSummary = {
   averageFundamentalScore: number | null;
   stocksAbove75: number;
   stocksAbove80: number;
+  averageOpportunityScore: number | null;
+  stocksAboveOpportunity75: number;
 };
 
 export type DashboardFreshness = {
@@ -173,6 +176,18 @@ export async function getDashboardData(): Promise<DashboardData> {
   const stocksAbove75 = scoresArr.filter((v) => v >= 75).length;
   const stocksAbove80 = scoresArr.filter((v) => v >= 80).length;
 
+  const oppScoresArr = dbStocks
+    .map((s) => s.score?.oppScore)
+    .filter((v): v is NonNullable<typeof v> => v != null)
+    .map(Number);
+
+  const averageOpportunityScore =
+    oppScoresArr.length > 0
+      ? Math.round(oppScoresArr.reduce((a, b) => a + b, 0) / oppScoresArr.length)
+      : null;
+
+  const stocksAboveOpportunity75 = oppScoresArr.filter((v) => v >= 75).length;
+
   const summary: DashboardSummary = {
     totalStocks,
     scannerReadyStocks,
@@ -183,6 +198,8 @@ export async function getDashboardData(): Promise<DashboardData> {
     averageFundamentalScore,
     stocksAbove75,
     stocksAbove80,
+    averageOpportunityScore,
+    stocksAboveOpportunity75,
   };
 
   // ── Freshness ─────────────────────────────────────────────────────────────────
@@ -218,6 +235,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       valuationScore: s.score?.valuationScore != null ? Math.round(Number(s.score.valuationScore)) : null,
       financialHealthScore: s.score?.financialHealthScore != null ? Math.round(Number(s.score.financialHealthScore)) : null,
       riskContextScore: s.score?.riskContextScore != null ? Math.round(Number(s.score.riskContextScore)) : null,
+      oppScore: s.score?.oppScore != null ? Math.round(Number(s.score.oppScore)) : null,
       marketCap: s.marketCap != null ? formatCompactCurrency(Number(s.marketCap)) : null,
       forwardPe: s.metric?.forwardPE != null ? Number(s.metric.forwardPE) : null,
       pegRatio: s.metric?.forwardPEG != null ? Number(s.metric.forwardPEG) : null,

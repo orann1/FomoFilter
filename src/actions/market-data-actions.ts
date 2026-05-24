@@ -24,6 +24,11 @@ import {
   SCORE_VERSION,
   type FundamentalScoreInput,
 } from "@/src/lib/scoring/fundamental-score";
+import {
+  calculateOpportunityScore,
+  OPPORTUNITY_SCORE_VERSION,
+  type OpportunityScoreInput,
+} from "@/src/lib/scoring/opportunity-score";
 
 export type UniverseSyncActionResult = {
   status: SyncRunStatus;
@@ -1024,6 +1029,172 @@ export async function calculateFundamentalScoresAction(): Promise<ScoreCalcResul
           dbAction: "created_score",
         });
       }
+    } catch (err) {
+      failedCount++;
+      items.push({
+        symbol: stock.symbol,
+        status: "failed",
+        reason: err instanceof Error ? err.message : "Database error",
+        dbAction: "kept_existing",
+      });
+    }
+  }
+
+  const finishedAt = new Date();
+  const durationMs = finishedAt.getTime() - startedAt.getTime();
+  const requestedCount = stocks.length;
+  const status: SyncRunStatus =
+    calculatedCount === 0 && failedCount > 0
+      ? "failed"
+      : failedCount > 0 || skippedCount > 0
+      ? "partial_success"
+      : calculatedCount > 0
+      ? "success"
+      : "failed";
+  const persisted = calculatedCount > 0;
+
+  const messageParts = [`${calculatedCount} calculated`];
+  if (skippedCount > 0) messageParts.push(`${skippedCount} skipped`);
+  if (failedCount > 0) messageParts.push(`${failedCount} failed`);
+  const message = messageParts.join(", ");
+
+  const syncRun = await prisma.syncRun.create({
+    data: {
+      type: SYNC_TYPE,
+      provider: PROVIDER,
+      status,
+      requestedCount,
+      successCount: calculatedCount,
+      skippedCount,
+      failedCount,
+      persisted,
+      message,
+      startedAt,
+      finishedAt,
+      durationMs,
+    },
+  });
+
+  if (items.length > 0) {
+    await prisma.syncRunItem.createMany({
+      data: items.map((item) => ({
+        syncRunId: syncRun.id,
+        symbol: item.symbol,
+        status: item.status,
+        reason: item.reason,
+        dbAction: item.dbAction,
+      })),
+    });
+  }
+
+  return {
+    status,
+    provider: PROVIDER,
+    action: SYNC_TYPE,
+    requestedCount,
+    calculatedCount,
+    skippedCount,
+    failedCount,
+    startedAt: startedAt.toISOString(),
+    finishedAt: finishedAt.toISOString(),
+    durationMs,
+    persisted,
+    message,
+    items,
+  };
+}
+
+export async function calculateOpportunityScoresAction(): Promise<ScoreCalcResult> {
+  const startedAt = new Date();
+  const SYNC_TYPE = "opportunity-score-calculation";
+  const PROVIDER = "internal";
+
+  type ItemRow = { symbol: string; status: string; reason: string; dbAction: string };
+  const items: ItemRow[] = [];
+  let calculatedCount = 0;
+  let skippedCount = 0;
+  let failedCount = 0;
+
+  const stocks = await prisma.stock.findMany({
+    where: { isActive: true },
+    include: {
+      score: true,
+      metric: true,
+      quote: true,
+    },
+    orderBy: { symbol: "asc" },
+  });
+
+  for (const stock of stocks) {
+    if (!stock.score || stock.score.fundamentalScore == null) {
+      skippedCount++;
+      items.push({
+        symbol: stock.symbol,
+        status: "skipped",
+        reason: "Missing fundamentalScore — run Fundamental Score calculation first",
+        dbAction: "kept_existing",
+      });
+      continue;
+    }
+
+    const toNum = (v: { toString(): string } | null | undefined): number | null => {
+      if (v == null) return null;
+      const n = parseFloat(v.toString());
+      return isNaN(n) ? null : n;
+    };
+
+    const score = stock.score;
+    const input: OpportunityScoreInput = {
+      fundamentalScore: toNum(score.fundamentalScore),
+      valuationScore: toNum(score.valuationScore),
+      growthScore: toNum(score.growthScore),
+      riskContextScore: toNum(score.riskContextScore),
+      price: stock.quote ? toNum(stock.quote.price) : null,
+      week52High: stock.metric ? toNum(stock.metric.week52High) : null,
+      week52Low: stock.metric ? toNum(stock.metric.week52Low) : null,
+    };
+
+    let result;
+    try {
+      result = calculateOpportunityScore(input);
+    } catch (err) {
+      failedCount++;
+      items.push({
+        symbol: stock.symbol,
+        status: "failed",
+        reason: err instanceof Error ? err.message : "Scoring function error",
+        dbAction: "kept_existing",
+      });
+      continue;
+    }
+
+    if (!result) {
+      skippedCount++;
+      items.push({
+        symbol: stock.symbol,
+        status: "skipped",
+        reason: "Insufficient data to calculate Opportunity Score",
+        dbAction: "kept_existing",
+      });
+      continue;
+    }
+
+    try {
+      await prisma.stockScore.update({
+        where: { stockId: stock.id },
+        data: {
+          oppScore: result.opportunityScore,
+          oppScoreVersion: result.opportunityScoreVersion,
+          oppCalculatedAt: new Date(),
+        },
+      });
+      calculatedCount++;
+      items.push({
+        symbol: stock.symbol,
+        status: "success",
+        reason: `Calculated ${OPPORTUNITY_SCORE_VERSION} score: ${result.opportunityScore}`,
+        dbAction: "updated_score",
+      });
     } catch (err) {
       failedCount++;
       items.push({

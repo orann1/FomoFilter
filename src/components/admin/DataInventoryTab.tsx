@@ -618,6 +618,42 @@ const COLUMNS: ColumnDef[] = [
       ),
   },
   {
+    label: "Opp. Score",
+    sourceLabel: "Internal",
+    align: "right",
+    minWidth: "90px",
+    render: (r) => {
+      if (!r.opportunityScore) return <NA />;
+      const n = parseFloat(r.opportunityScore);
+      const color = n >= 75 ? "text-emerald-300" : n >= 55 ? "text-amber-300" : "text-slate-400";
+      return <span className={`text-xs font-semibold tabular-nums ${color}`}>{r.opportunityScore}</span>;
+    },
+  },
+  {
+    label: "Opp. Version",
+    sourceLabel: "Internal",
+    align: "left",
+    minWidth: "110px",
+    render: (r) =>
+      r.opportunityScoreVersion ? (
+        <span className="font-mono text-[10px] text-slate-500">{r.opportunityScoreVersion}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "Opp. Calc At",
+    sourceLabel: "Internal",
+    align: "left",
+    minWidth: "120px",
+    render: (r) =>
+      r.opportunityCalculatedAt ? (
+        <span className="text-xs text-slate-400">{r.opportunityCalculatedAt}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
     label: "Scanner Eligible",
     sourceLabel: "Internal",
     align: "center",

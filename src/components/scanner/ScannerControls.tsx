@@ -1,6 +1,7 @@
 import { Search, ArrowUpDown } from "lucide-react";
 
 export type SortKey =
+  | "opportunity-score"
   | "fundamental-score"
   | "growth-score"
   | "profitability-score"
@@ -16,6 +17,7 @@ export type SortKey =
   | "symbol";
 
 const sortOptions: { value: SortKey; label: string }[] = [
+  { value: "opportunity-score", label: "Opportunity Score" },
   { value: "fundamental-score", label: "Fundamental Score" },
   { value: "growth-score", label: "Growth Score" },
   { value: "profitability-score", label: "Profitability Score" },

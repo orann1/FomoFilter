@@ -93,6 +93,10 @@ export type HotStock = {
   metricsLastSynced?: string | null;
   quoteSource?: string | null;
   metricsSource?: string | null;
+  // Phase 13: opportunity score
+  oppScore?: number | null;
+  oppScoreVersion?: string | null;
+  oppCalculatedAt?: string | null;
 };
 
 export const mockHotStocks: HotStock[] = [
