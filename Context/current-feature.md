@@ -1,361 +1,264 @@
-# Phase 10 — Scanner Real Data Integration
+# Phase 11 — Scanner UX & Universe Selector Improvements
 
 ## Status
 
-Completed
+Completed (2026-05-24)
 
 ---
 
 ## Goal
 
-Move the `/scanner` page from demo/seed-style data to the real market data pipeline built in Phases 9F–9J.
+Improve the Scanner UX now that Phase 10 connected `/scanner` to real DB data.
 
-The Scanner should display real stocks from the database using:
+Phase 10 made the Scanner functional with real Nasdaq 100 data. Phase 11 should make it easier to use, easier to understand, and cleaner for daily stock discovery.
 
-```txt
-Stock
-StockQuote
-StockMetric
-StockScore
-StockUniverseMember
-```
-
-The first version should focus on the data we actually have now:
+The focus is:
 
 ```txt
-Quote snapshot
-Finnhub basic financial metrics
-Fundamental Score
-Category scores
-Universe membership
-Profile fields
+Universe selector correctness
+Scanner table readability
+Real-data filters
+Real-data sort options
+Score explanations
+Expandable stock details
+Clean unsupported UI
+Minimal Dashboard cleanup/audit
 ```
 
-The Scanner should no longer rely on mock, seed, hardcoded, or old demo-style fields as the main display source.
+This phase should not introduce new data providers, new sync logic, or new scoring formulas.
 
 ---
 
 ## Why This Phase Is Needed
 
-After the market-data and scoring phases, the system now has real data for Nasdaq 100 stocks:
+After Phase 10, `/scanner` now shows around 100 real Nasdaq 100 stocks with:
 
-- Active Nasdaq 100 membership.
-- Quote snapshots from Finnhub.
-- Basic financial metrics from Finnhub.
-- Fundamental Score calculated internally.
-- Data Inventory visibility.
-- Resumable chunked market-data sync.
+- Quote data.
+- Fundamental Score.
+- Category scores.
+- Finnhub metric fields.
+- Real DB-backed rows.
 
-However, the current `/scanner` page still appears to show the original demo/sample stocks and old UI fields.
-
-Observed issue:
+However, there is a known UX issue:
 
 ```txt
-Scanner shows only around 5 stocks:
-AMD
-NVDA
-SMCI
-PLTR
-TSLA
+Universe selector still shows Russell 1000,
+while the active/default data is Nasdaq 100.
 ```
 
-The Dashboard, however, shows around 101 stocks, but many fields are empty or zero.
+Also, the table now has many real columns, which is useful but can become visually dense.
 
-This suggests the Scanner and Dashboard are still using old score fields or mock/seed concepts such as:
-
-```txt
-Hot
-Opportunity
-Risk
-Setup
-Relative Volume
-Upside
-Catalyst
-```
-
-These fields are not all backed by the new real data pipeline yet.
+Phase 11 should make the Scanner more usable before expanding to larger universes like Russell 1000.
 
 ---
 
-## Product Decision
+## Product Direction
 
-Phase 10 should make the Scanner truthful and useful with the data that exists today.
+The Scanner should become a practical **Fundamental Scanner v1**.
 
-Do not fake missing fields.
-
-Do not continue showing demo values as if they are real.
-
-The Scanner v1 should become a **Fundamental Scanner** based on:
+It should help the user answer:
 
 ```txt
-Fundamental Score
-Growth Score
-Profitability Score
-Valuation Score
-Financial Health Score
-Risk / Context Score
-Quote data
-Core metrics
-```
-
-Fields that are not yet supported by real data should be hidden, replaced with `N/A`, or moved to future phases.
-
----
-
-## Main Outcome
-
-At the end of Phase 10:
-
-```txt
-/scanner should show all real scanner-eligible stocks from the DB,
-not only the old sample/demo list.
-```
-
-Expected current result after Phase 9I/9J:
-
-```txt
-Approximately 100+ stocks with quote + score should appear.
-```
-
-Do not hardcode this number.
-
----
-
-## Phase 10 Scope
-
-This phase has two parts:
-
-1. Audit existing Scanner and Dashboard data sources.
-2. Integrate Scanner with real DB-backed quote + metric + score data.
-
----
-
-# Part 1 — Audit
-
-## Scanner Audit
-
-Inspect the Scanner implementation and report:
-
-- Which files render `/scanner`.
-- Which files load Scanner data.
-- Whether Scanner uses Prisma directly, server loaders, API routes, mock data, seed data, or hardcoded arrays.
-- What DB query is currently used.
-- Why only around 5 stocks are displayed.
-- Which filters are active by default.
-- Which sort option is active by default.
-- Whether Scanner requires old score fields like:
-  - `hotScore`
-  - `opportunityScore`
-  - `riskScore`
-  - `setup`
-  - `relativeVolume`
-  - `upside`
-  - `catalyst`
-- Whether Scanner currently ignores:
-  - `fundamentalScore`
-  - `growthScore`
-  - `profitabilityScore`
-  - `valuationScore`
-  - `financialHealthScore`
-  - `riskContextScore`
-
-## Dashboard Audit
-
-Inspect the Dashboard implementation and report:
-
-- Which files render `/`.
-- Which files load dashboard data.
-- Why Dashboard shows around 101 stocks.
-- Which fields are real DB fields.
-- Which fields are mock/seed/fallback.
-- Why many Dashboard rows show:
-  - `Hot = 0`
-  - `Opp = 0`
-  - `Setup = Unknown`
-  - `Catalyst = -`
-- Whether Dashboard is using old fields instead of `fundamentalScore`.
-- Whether Dashboard should be changed in this phase or only documented for a later phase.
-
-## Audit Report Requirement
-
-Before implementation, return or include in the implementation report:
-
-```txt
-Scanner data source:
-Dashboard data source:
-Mock/seed/hardcoded data found:
-Old fields still in use:
-Real fields available:
-Reason Scanner shows only 5 stocks:
-Recommended Scanner v1 mapping:
-```
-
----
-
-# Part 2 — Scanner Real Data Integration
-
-## Scanner v1 Purpose
-
-The Scanner v1 should answer:
-
-```txt
-Which real stocks in the selected universe have strong fundamentals and useful current quote data?
+Which Nasdaq 100 companies have the strongest fundamentals?
+Which companies are strong in growth, profitability, valuation, and financial health?
+Which metrics explain the score?
+How can I quickly filter and sort the list?
 ```
 
 It should not yet answer:
 
 ```txt
-Which stocks are breaking out technically?
+Which stocks have strong momentum?
 Which stocks have unusual volume?
-Which stocks have near-term catalyst?
+Which stocks have a catalyst?
 Which stocks have analyst upside?
-Which stocks are FOMO hot today?
+Which stocks have a technical breakout setup?
 ```
 
-Those are future phases.
+Those will be future phases.
+
+---
+
+## Scope
+
+Phase 11 includes:
+
+1. Fix Universe Selector UX.
+2. Improve Scanner table layout.
+3. Add score explanations/tooltips.
+4. Add useful real-data filter pills.
+5. Improve sort options.
+6. Add expandable row or details panel.
+7. Improve empty states.
+8. Keep unsupported future concepts disabled or hidden.
+9. Audit/minimally clean Dashboard if safe.
+
+---
+
+## Non-Scope
+
+Do not build:
+
+- New data sync.
+- New external API calls.
+- New provider integrations.
+- New Fundamental Score formula.
+- Opportunity Score.
+- Hot Score.
+- Technical indicators.
+- Volume anomaly detection.
+- News/catalyst detection.
+- Analyst target/upside.
+- Russell 1000 sync.
+- Pagination/virtualization unless required for current performance.
+- Watchlist actions unless already existing and safe.
+- Alerts logic changes.
+- AI insights.
+
+---
+
+# 1. Universe Selector Fix
+
+## Current Problem
+
+The Scanner data defaults to Nasdaq 100, but the universe selector shows a Russell 1000 button.
+
+Known issue from Phase 10:
+
+```txt
+Universe selector strip shows "Russell 1000" button,
+but the selected data is Nasdaq 100.
+No button appears active because selected slug is nasdaq-100,
+but only rendered base universe is russell-1000.
+```
+
+This is confusing and must be fixed.
+
+---
+
+## Requirements
+
+The Scanner should clearly show the active universe.
+
+For current data:
+
+```txt
+Universe: Nasdaq 100
+```
+
+The active universe selector should show:
+
+```txt
+Nasdaq 100
+```
+
+and it should be highlighted.
+
+If Russell 1000 is not available yet, do not show it as an active selectable option.
+
+Acceptable options:
+
+### Option A — Show only available universes
+
+Show:
+
+```txt
+Nasdaq 100
+```
+
+Only.
+
+### Option B — Show future universes disabled
+
+Show:
+
+```txt
+Nasdaq 100
+Russell 1000 — Coming soon
+S&P 500 — Coming soon
+```
+
+Only `Nasdaq 100` should be active/selectable.
+
+Disabled future options should have a tooltip:
+
+```txt
+Coming soon — universe data is not loaded yet.
+```
+
+Recommended:
+
+```txt
+Option B
+```
+
+because it communicates roadmap without confusing the user.
 
 ---
 
 ## Data Source
 
-The Scanner should load real DB records.
+Universe options should be DB-backed where possible.
 
-Required relations:
+Use `StockUniverse` records if available.
 
-```txt
-Stock
-StockQuote
-StockMetric
-StockScore
-StockUniverseMember
-StockUniverse
-```
+The active universe should be derived from the current query/filter.
 
-Suggested Prisma criteria:
+Do not hardcode misleading labels.
+
+If a fallback is needed, it should be accurate:
 
 ```txt
-Stock is active
-StockQuote exists
-StockScore exists
+nasdaq-100 → Nasdaq 100
 ```
-
-Optional but recommended:
-
-```txt
-Universe membership active
-Selected universe = nasdaq-100 / current UI universe
-```
-
-Do not hardcode the sample symbols.
-
-Do not use mock arrays.
-
-Do not use seed-only fallback as the main result.
 
 ---
 
-## Initial Universe
+## Acceptance Criteria
 
-For this phase, use Nasdaq 100 / real DB universe data.
-
-Current UI may show:
-
-```txt
-Universe: Russell 1000
-```
-
-or:
-
-```txt
-Universe: US Stocks
-```
-
-This should be audited and corrected if misleading.
-
-If the data currently loaded is Nasdaq 100, the UI should not label it as Russell 1000.
-
-Recommended:
-
-```txt
-Default Universe: Nasdaq 100
-```
-
-or:
-
-```txt
-All Stocks with Score
-```
-
-Use the real universe slug from DB where possible.
+- Scanner default universe label is Nasdaq 100.
+- Nasdaq 100 button is visible and active.
+- Russell 1000 is not shown as active unless real Russell 1000 data exists.
+- If Russell 1000 is shown, it is disabled and marked Coming soon.
+- Result count matches selected universe/filter.
 
 ---
 
-## Scanner v1 Columns
+# 2. Scanner Table Layout Improvements
 
-Replace or supplement old demo columns with real columns.
+## Current Situation
 
-Recommended columns:
-
-### Identity
+Phase 10 introduced real data columns:
 
 ```txt
 Symbol
-Company
 Sector
-Universe
-```
-
-### Quote
-
-```txt
 Price
 Day %
-Quote Last Synced
-```
-
-### Scores
-
-```txt
-Fundamental Score
-Growth Score
-Profitability Score
-Valuation Score
-Financial Health Score
-Risk / Context Score
-Score Version
-Score Last Calculated
-```
-
-### Key Metrics
-
-```txt
-Market Cap
-Revenue Growth TTM
-EPS Growth TTM
-Gross Margin
-Operating Margin
-Net Margin
-ROE
-Debt / Equity
-Current Ratio
-Forward P/E
+Fund.
+Growth
+Profit.
+Valuat.
+Health
+Risk
+P/E
 PEG
-EV/EBITDA
-Beta
+Rev Gr.
+EPS Gr.
+ROE
+D/E
+Mkt Cap
 ```
 
-Keep the table readable. If too many columns are too wide, use one of these approaches:
-
-- Show only key columns in the main table.
-- Put extra metrics in an expandable row.
-- Use a compact details drawer.
-- Keep advanced columns for a later phase.
+This is useful, but it can be dense.
 
 ---
 
-## Recommended Main Table Columns
+## Requirements
 
-For v1, the main table should be focused and readable:
+Keep the main table focused and readable.
+
+Recommended main table columns:
 
 ```txt
 Symbol
@@ -371,119 +274,225 @@ Health
 Risk
 P/E
 PEG
-Revenue Growth
-EPS Growth
 ROE
-Debt/Equity
-```
-
-Optional:
-
-```txt
+Revenue Growth
 Market Cap
-Quote Updated
-Score Updated
+```
+
+If the table is still too wide, move some metrics into an expandable details row.
+
+Recommended fields to move to details if needed:
+
+```txt
+EPS Growth
+Debt/Equity
+Gross Margin
+Operating Margin
+Net Margin
+Forward P/E
+EV/EBITDA
+Beta
+Quote Last Synced
+Score Last Calculated
+Metrics Last Synced
+```
+
+Do not remove important data completely; just move it to a more readable location.
+
+---
+
+## Visual Priorities
+
+The most important columns should be easiest to scan:
+
+1. Symbol / Company.
+2. Fundamental Score.
+3. Category scores.
+4. Price / Day %.
+5. Key valuation and growth metrics.
+
+Scores should stand out visually but remain readable.
+
+Use consistent formatting:
+
+```txt
+Score: integer 0–100
+Percent: +12.4%
+Currency: $610.26
+Market Cap: $1.55T
+Missing: N/A
 ```
 
 ---
 
-## Old Columns
+# 3. Expandable Stock Details
 
-Do not show old columns as real values unless backed by actual data.
+## Goal
 
-### Hide or mark unavailable for now
+Add a way to inspect why a stock scored well or poorly without overloading the main table.
 
-```txt
-Hot
-Opportunity
-Setup
-Relative Volume
-Upside
-Catalyst
-FOMO Risk
-```
-
-### If kept in UI temporarily
-
-Use one of these approaches:
+This can be:
 
 ```txt
-N/A
-Coming soon
-Requires technical/news/analyst data
+Expandable row
+Details drawer
+Side panel
+Modal
 ```
 
-Do not show demo values for these fields.
+Recommended:
+
+```txt
+Expandable row
+```
+
+because it is simpler and keeps the user in the table context.
 
 ---
 
-## Default Sorting
+## Details Content
 
-Default sort should be:
+When a user expands a stock, show grouped sections:
 
-```txt
-Fundamental Score desc
-```
-
-Secondary sort:
+### Score Breakdown
 
 ```txt
-Profitability Score desc
-Growth Score desc
-Symbol asc
+Fundamental Score
+Growth Score
+Profitability Score
+Valuation Score
+Financial Health Score
+Risk / Context Score
+Score Version
+Score Last Calculated
 ```
 
-Do not sort by old `Best Signal`, `Hot`, or demo fields unless they are real.
+### Growth Metrics
+
+```txt
+Revenue Growth TTM
+EPS Growth TTM
+Revenue Growth 3Y
+EPS Growth 3Y
+```
+
+### Profitability Metrics
+
+```txt
+Gross Margin
+Operating Margin
+Net Margin
+ROE
+ROA
+```
+
+### Valuation Metrics
+
+```txt
+P/E
+Forward P/E
+PEG
+Forward PEG
+P/S
+P/B
+EV/EBITDA
+```
+
+### Financial Health Metrics
+
+```txt
+Debt / Equity
+Current Ratio
+Quick Ratio
+Interest Coverage
+```
+
+### Quote / Data Freshness
+
+```txt
+Quote Last Synced
+Metric Last Synced
+Quote Source
+Metrics Source
+```
 
 ---
 
-## Filters
+## Important
 
-Keep filters simple for v1.
+Do not call external APIs from the details panel.
 
-Recommended filters:
+Use data already loaded from DB or include necessary fields in the existing loader.
 
-```txt
-Universe
-Sector
-Search by symbol/company
-Minimum Fundamental Score
-Minimum Growth Score
-Minimum Profitability Score
-Maximum Valuation Score or valuation range
-Has Quote
-Has Metrics
-Has Score
-```
-
-Optional filters:
-
-```txt
-Market Cap range
-Day % positive/negative
-```
-
-Do not include filters for unsupported concepts unless they are disabled or clearly marked future.
-
-Unsupported for v1:
-
-```txt
-Hot Today
-Strong Momentum
-Best Opportunities
-Unusual Volume
-FOMO Risk
-Catalyst
-Alert Active
-```
-
-Unless these are backed by real DB data.
+Avoid N+1 queries.
 
 ---
 
-## Top Filter Pills
+# 4. Score Tooltips / Explanations
 
-Current top filter pills may include:
+## Goal
+
+Help the user understand what each score means.
+
+Add small tooltips or info icons for score columns.
+
+Recommended tooltip text:
+
+### Fundamental
+
+```txt
+Weighted score from growth, profitability, valuation, financial health, and risk/context.
+```
+
+### Growth
+
+```txt
+Revenue and EPS growth metrics.
+```
+
+### Profitability
+
+```txt
+Margins, ROE, and ROA.
+```
+
+### Valuation
+
+```txt
+Price paid relative to earnings, sales, EBITDA, and growth.
+```
+
+### Financial Health
+
+```txt
+Debt, liquidity, and interest coverage.
+```
+
+### Risk / Context
+
+```txt
+Beta and company size context.
+```
+
+---
+
+## Link to Methodology
+
+If possible, add a small link or note:
+
+```txt
+See Score Methodology in Admin for full calculation rules.
+```
+
+Do not duplicate the entire methodology inside the Scanner.
+
+---
+
+# 5. Real-Data Filter Pills
+
+## Current / Previous Pills
+
+Current or legacy pills may include:
 
 ```txt
 All Stocks
@@ -496,289 +505,166 @@ In Watchlist
 Alert Active
 ```
 
-In Phase 10:
-
-- Keep `All Stocks`.
-- Keep `In Watchlist` only if backed by DB.
-- Keep `Alert Active` only if backed by DB.
-- Hide or disable unsupported pills:
-  - Hot Today
-  - Strong Momentum
-  - Best Opportunities
-  - Unusual Volume
-  - FOMO Risk
-
-Alternative:
-
-Show disabled pills with tooltip:
-
-```txt
-Coming soon — requires technical/momentum data.
-```
-
-But do not let them filter based on mock/demo values.
+Some of these are unsupported because we do not yet have technical/news/momentum/catalyst data.
 
 ---
 
-## Scanner Count
+## Requirements
 
-Scanner should show the real count.
+Do not show unsupported pills as if they work.
 
-Example:
+Recommended active pills for Phase 11:
 
 ```txt
-101 stocks
+All Stocks
+High Fundamentals
+High Growth
+High Profitability
+Reasonable Valuation
+In Watchlist
+Alert Active
+```
+
+Only keep `In Watchlist` and `Alert Active` if backed by real DB data.
+
+---
+
+## Suggested Pill Logic
+
+### All Stocks
+
+No extra filter.
+
+### High Fundamentals
+
+```txt
+fundamentalScore >= 75
+```
+
+### High Growth
+
+```txt
+growthScore >= 75
+```
+
+### High Profitability
+
+```txt
+profitabilityScore >= 75
+```
+
+### Reasonable Valuation
+
+Possible logic:
+
+```txt
+valuationScore >= 60
 ```
 
 or:
 
 ```txt
-100 stocks
+valuationScore >= 50
 ```
 
-depending on the actual DB query.
+Choose one and document it.
 
-The count should match the displayed filtered results.
+### In Watchlist
 
-No hardcoded counts.
+Only if DB relation exists.
+
+### Alert Active
+
+Only if DB relation exists.
 
 ---
 
-## Data Integrity Rules
+## Unsupported Pills
 
-Do not invent values.
-
-If a value is missing:
+Hide or disable:
 
 ```txt
-N/A
-```
-
-Do not display:
-
-```txt
-0
-```
-
-unless the true DB value is actually zero.
-
-This is important for fields like:
-
-```txt
-Growth Score
-Hot Score
-Opportunity Score
-Valuation Score
+Hot Today
+Strong Momentum
+Unusual Volume
+FOMO Risk
 Catalyst
-Relative Volume
+Best Opportunities
 ```
 
-A missing score is not the same as zero.
+If shown, they must be disabled with tooltip:
+
+```txt
+Coming soon — requires technical/momentum/news data.
+```
+
+Do not apply fake filters.
 
 ---
 
-## Scanner Eligibility
+# 6. Filter Panel
 
-Use the current eligibility logic unless a bug is discovered:
+## Filters To Keep / Add
+
+Recommended filters:
 
 ```txt
-quote exists
-score exists
-stock active
+Search by symbol/company
+Universe
+Sector
+Minimum Fundamental Score
+Minimum Growth Score
+Minimum Profitability Score
+Minimum Valuation Score
+Minimum Financial Health Score
+Market Cap range
+Positive Day %
 ```
 
-If the scanner should also require metrics, confirm whether score already implies metrics.
+Keep it simple.
 
-Do not change eligibility rules without documenting the reason.
+Do not create too many controls.
 
 ---
 
-## Dashboard Handling
+## Score Threshold Presets
 
-The Dashboard currently appears to show 101 stocks but many old fields are empty or zero.
-
-For Phase 10, there are two acceptable approaches:
-
-### Option A — Audit only
-
-Document Dashboard issues and defer Dashboard UI changes to Phase 11.
-
-This is acceptable if Phase 10 stays focused on Scanner.
-
-### Option B — Minimal Dashboard fix
-
-If the Dashboard uses the same data mapper as Scanner and is easy to fix safely, update it to avoid demo values.
-
-Possible minimal fixes:
-
-- Replace old `Hot Stocks Today` heading with `Top Fundamental Scores`.
-- Show `Fundamental Score` instead of `Hot`.
-- Show `Growth/Profitability/Valuation` instead of `Opp/Risk` if appropriate.
-- Show `N/A` instead of fake catalyst/setup.
-
-Do not overbuild Dashboard in Phase 10.
-
-Recommended:
+If implementing sliders is too much, use dropdowns or select controls:
 
 ```txt
-Focus Phase 10 on Scanner.
-Audit Dashboard and make only small safe fixes if needed.
+Any
+50+
+60+
+70+
+80+
+90+
 ```
+
+This is enough for v1.
 
 ---
 
-## Data Mapping
+## Sector Filter
 
-Create a clear mapping from DB fields to Scanner row fields.
+The sector filter should be based on sectors present in the currently loaded real data.
 
-Example:
-
-| Scanner Field | DB Source |
-| --- | --- |
-| Symbol | `Stock.symbol` |
-| Company | `Stock.name` |
-| Sector | `Stock.sector` |
-| Price | `StockQuote.price` |
-| Day % | `StockQuote.changePercent` |
-| Fundamental | `StockScore.fundamentalScore` |
-| Growth | `StockScore.growthScore` |
-| Profitability | `StockScore.profitabilityScore` |
-| Valuation | `StockScore.valuationScore` |
-| Health | `StockScore.financialHealthScore` |
-| Risk | `StockScore.riskContextScore` |
-| Revenue Growth | `StockMetric.revenueGrowthTTMYoy` |
-| EPS Growth | `StockMetric.epsGrowthTTMYoy` |
-| ROE | `StockMetric.roeTTM` |
-| Debt/Equity | `StockMetric.totalDebtToEquityAnnual` |
-| P/E | `StockMetric.peBasicExclExtraTTM` |
-| Forward P/E | `StockMetric.forwardPE` |
-| PEG | `StockMetric.pegTTM` |
-| Market Cap | `StockMetric.marketCapitalization` or `Stock.marketCap` depending on final source |
+Do not hardcode sector list unless necessary.
 
 ---
 
-## Formatting Rules
+# 7. Sorting Improvements
 
-### Scores
+## Default Sort
 
-Display scores as integers if stored as decimal:
-
-```txt
-81
-67
-94
-```
-
-If null:
+Keep:
 
 ```txt
-N/A
+Fundamental Score desc
 ```
-
-### Percentages
-
-Display with `%`.
-
-Examples:
-
-```txt
-+3.99%
--1.90%
-```
-
-For metric percentages:
-
-```txt
-Revenue Growth: 12.4%
-Gross Margin: 64.1%
-ROE: 33.2%
-```
-
-### Currency
-
-Display prices as:
-
-```txt
-$215.33
-```
-
-Market cap can be compact:
-
-```txt
-$3.1T
-$245B
-```
-
-### Ratios
-
-Display:
-
-```txt
-P/E: 31.2
-PEG: 1.8
-Debt/Equity: 0.42
-```
-
-### Missing Values
-
-Display:
-
-```txt
-N/A
-```
-
-Do not use zero as fallback.
-
----
-
-## UI Requirements
-
-The Scanner should remain clean and readable.
-
-Requirements:
-
-- Clear title.
-- Clear universe label.
-- Real result count.
-- Search input.
-- Basic filters.
-- Sort dropdown.
-- Main table with real columns.
-- No demo-only values.
-- No broken layout with 100+ rows.
-- Loading state if needed.
-- Empty state if no stocks match filters.
-
----
-
-## Suggested Scanner Header
-
-Example:
-
-```txt
-Scanner
-Discover fundamentally strong stocks using real market data and internal scores.
-```
-
-Universe line:
-
-```txt
-Universe: Nasdaq 100
-101 stocks
-```
-
-or DB-driven:
-
-```txt
-Universe: Nasdaq 100
-100 stocks
-```
-
----
 
 ## Sort Options
 
-Recommended v1 sort options:
+Recommended sort options:
 
 ```txt
 Fundamental Score
@@ -786,108 +672,120 @@ Growth Score
 Profitability Score
 Valuation Score
 Financial Health Score
-Day %
+Risk / Context Score
+Day % Change
 Market Cap
-Symbol
+P/E
+PEG
+ROE
+Revenue Growth
+Symbol A–Z
 ```
 
-Default:
-
-```txt
-Fundamental Score desc
-```
-
-Remove or hide:
+Remove or hide unsupported sorts:
 
 ```txt
 Best Signal
 Hot
 Opportunity
+Setup
+Catalyst
 ```
 
-unless mapped to real fields.
+unless they are backed by real DB data.
 
 ---
 
-## No New Data Sync
+# 8. Empty States
 
-Do not add new external API calls.
-
-Do not add new market data sync logic.
-
-Do not call Finnhub/FMP/Twelve from Scanner.
-
-Scanner must read from DB only.
-
----
-
-## No Scoring Changes
-
-Do not change the Fundamental Score calculation in this phase.
-
-Do not recalculate scores in Scanner.
-
-Scores should be precomputed by the Admin score calculation action.
-
----
-
-## No Provider Calls From Scanner
-
-Important:
-
-`/scanner` must not call external providers.
-
-Allowed:
+If no rows match filters, show a helpful message:
 
 ```txt
-Prisma query
-Internal server loader
-DB reads
+No stocks match your filters.
+Try lowering the score threshold, clearing the sector filter, or selecting All Stocks.
 ```
 
-Not allowed:
+If no data exists at all:
 
 ```txt
-Finnhub calls
-FMP calls
-Twelve Data calls
-Yahoo calls
-Apify calls
+No scanner data available yet.
+Run Market Data Sync and Calculate Fundamental Scores from Admin Sync.
 ```
 
 ---
 
-## Performance
+# 9. Dashboard Minimal Cleanup / Audit
 
-For 100 stocks, normal table rendering is fine.
+## Current Dashboard Issue
 
-For future 1000+ stocks, keep the data loader efficient.
-
-Requirements:
-
-- Use server-side DB query.
-- Avoid N+1 queries.
-- Include relations in one Prisma query if possible.
-- Avoid client-side provider calls.
-- Keep row model compact.
-
-Pagination is optional for Phase 10, but consider if the table becomes too large.
-
-Acceptable for now:
+Dashboard shows many real stocks but still displays old fields:
 
 ```txt
-Render all scanner-eligible stocks for Nasdaq 100.
+Hot
+Opp
+Setup
+Catalyst
 ```
 
-Future phase:
-
-```txt
-Pagination / virtualization for Russell 1000.
-```
+Many are zero, unknown, or dash.
 
 ---
 
-## Browser QA Checklist
+## Requirement
+
+Phase 11 may include a minimal Dashboard cleanup if safe.
+
+Preferred approach:
+
+```txt
+Audit Dashboard and make only small safe changes.
+```
+
+Possible safe changes:
+
+- Rename `Hot Stocks Today` to `Top Fundamental Scores`.
+- Show `Fundamental Score` instead of `Hot`.
+- Show `Growth` / `Profitability` / `Valuation` instead of `Opp` / `Risk` if appropriate.
+- Show `N/A` instead of fake zero.
+- Remove or hide catalyst/setup if not backed by real data.
+
+If this becomes too large, defer Dashboard cleanup to Phase 12 and document it clearly.
+
+---
+
+# 10. No Data Changes
+
+Do not add new DB fields.
+
+Do not change scoring formulas.
+
+Do not sync new provider data.
+
+Do not call external APIs.
+
+This is a UI/data mapping improvement phase.
+
+No Prisma migration should be needed.
+
+---
+
+# 11. Performance
+
+For 100 stocks, client-side filtering/sorting is acceptable.
+
+For 1000+ future stocks, this may need pagination/virtualization.
+
+Do not overbuild pagination now unless it is easy and safe.
+
+Avoid:
+
+- N+1 queries.
+- external calls.
+- repeated server calls for every filter change unless necessary.
+
+---
+
+# 12. Browser QA Checklist
 
 Open:
 
@@ -897,23 +795,31 @@ Open:
 
 Confirm:
 
-1. Scanner no longer shows only the old 5 demo stocks.
-2. Scanner shows all DB stocks that satisfy quote + score eligibility.
-3. Count matches displayed rows.
-4. Universe label is accurate.
-5. Old demo values are gone or marked unavailable.
-6. Fundamental Score column is visible.
-7. Category score columns are visible or accessible.
-8. Price and Day % come from `StockQuote`.
-9. Financial metrics come from `StockMetric`.
-10. Default sort is Fundamental Score descending.
-11. Search by symbol/company works.
-12. Sector filter works.
-13. Universe filter works if present.
-14. Unsupported filters are hidden or disabled.
-15. Missing values display as `N/A`, not fake zero.
-16. No external provider calls happen from Scanner render.
-17. Layout works with 100+ rows.
+1. Universe selector shows Nasdaq 100 as active.
+2. Russell 1000 is not misleadingly active.
+3. Result count matches displayed rows.
+4. Default sort is Fundamental Score descending.
+5. Main table is readable.
+6. Fundamental Score is visible.
+7. Category scores are visible.
+8. Score tooltips appear.
+9. Search by symbol/company works.
+10. Sector filter works.
+11. Score threshold filters work.
+12. Real-data pills work:
+    - All Stocks
+    - High Fundamentals
+    - High Growth
+    - High Profitability
+    - Reasonable Valuation
+13. Unsupported pills are hidden or disabled.
+14. Expandable row/details panel works.
+15. Details show score breakdown and metric groups.
+16. Missing values show N/A.
+17. No fake zeros are shown for missing values.
+18. No external provider calls happen from Scanner.
+19. Layout works for 100 rows.
+20. Mobile card view still works.
 
 Open:
 
@@ -923,30 +829,31 @@ Open:
 
 Dashboard QA:
 
-1. Dashboard still loads.
-2. It does not break after Scanner changes.
-3. If Dashboard still shows old fields, document that it is deferred.
-4. If minimal Dashboard fixes were made, confirm they use real fields.
+1. Dashboard loads.
+2. If changed, new labels use real data.
+3. If not changed, known Dashboard issues are documented for next phase.
 
 ---
 
-## Regression QA
+# 13. Regression QA
 
 Confirm:
 
 - Admin Sync loads.
 - Data Inventory loads.
 - Score Methodology loads.
-- Sync Actions tab loads.
-- Market data sync remains unchanged.
-- Score calculation remains unchanged.
+- Market Data Sync works or remains unchanged.
+- Calculate Fundamental Scores works or remains unchanged.
+- Provider Tests tab works.
+- Sample DB Writes work.
 - Watchlist page loads.
 - Alerts page loads if applicable.
-- No API keys or raw provider payloads are exposed.
+- Scanner has no provider calls.
+- Build passes.
 
 ---
 
-## Validation
+# 14. Validation
 
 Run:
 
@@ -957,27 +864,27 @@ npx prisma validate
 npx prisma migrate status
 ```
 
-No Prisma migration should be needed for Phase 10.
+No Prisma migration should be needed.
 
-If a migration is needed, stop and explain why before adding it.
+If a migration is needed, stop and explain why.
 
 ---
 
-## Required Implementation Report
+# 15. Required Implementation Report
 
 Return a concise report in English only with:
 
 1. Files inspected.
-2. Scanner audit result.
-3. Dashboard audit result.
-4. Mock/seed/hardcoded data found.
-5. Files changed.
-6. Data loader/query changed.
-7. New Scanner field mapping.
-8. Columns displayed.
-9. Filters/sort changes.
-10. Unsupported fields hidden/disabled.
-11. Whether Dashboard was changed or only audited.
+2. Files changed.
+3. Universe selector fix.
+4. Main table changes.
+5. Details/expandable panel implementation.
+6. Score tooltip implementation.
+7. Filter pills added/removed/disabled.
+8. Filter controls added/changed.
+9. Sort options changed.
+10. Empty state changes.
+11. Dashboard changes or Dashboard deferral note.
 12. Confirmation no provider calls were added.
 13. Browser QA results.
 14. Regression QA results.
@@ -989,19 +896,20 @@ Return a concise report in English only with:
 
 ## Acceptance Criteria
 
-Phase 10 is complete when:
+Phase 11 is complete when:
 
-- `/scanner` uses real DB data.
-- `/scanner` does not show only the old 5 demo stocks.
-- `/scanner` shows all scanner-eligible real stocks.
-- Fundamental Score is visible.
-- Category scores are visible or accessible.
-- Old unsupported columns are not shown as fake real values.
-- Missing values are displayed as `N/A`.
-- Scanner default sorting uses Fundamental Score.
-- No external provider calls happen from Scanner.
-- Dashboard behavior is audited.
-- Any Dashboard issue is either fixed safely or documented for the next phase.
+- Universe selector clearly shows Nasdaq 100 as active.
+- Russell 1000 is not misleadingly shown as active.
+- Scanner table is readable with real data.
+- User can understand what the scores mean.
+- User can filter by real score-based concepts.
+- Unsupported future concepts are hidden or disabled.
+- Expandable details show score and metric breakdown.
+- Empty states are helpful.
+- Dashboard is either minimally cleaned or explicitly deferred.
+- No external provider calls are added.
+- No scoring formula is changed.
+- No migration is added.
 - Build passes.
 - TypeScript passes.
 - Prisma validates.
@@ -1011,14 +919,14 @@ Phase 10 is complete when:
 
 ## Future Phases
 
-After Phase 10, possible next phases:
+After Phase 11:
 
 ```txt
-Phase 11 — Scanner UX and Filtering Improvements
-Phase 12 — Opportunity Score
-Phase 13 — Technical / Momentum Data
-Phase 14 — News / Catalyst Data
-Phase 15 — Russell 1000 Universe Expansion
+Phase 12 — Dashboard Real Data Cleanup
+Phase 13 — Opportunity Score
+Phase 14 — Technical / Momentum Data
+Phase 15 — News / Catalyst Data
+Phase 16 — Russell 1000 Universe Expansion
 ```
 
 ---
@@ -1047,3 +955,4 @@ Phase 15 — Russell 1000 Universe Expansion
 - Phase 9I completed (2026-05-23): Fundamental Score Foundation + Score Methodology Tab. Added 8 nullable fields to `StockScore` via migration `20260523153618_add_fundamental_score_fields` (`fundamentalScore`, `growthScore`, `profitabilityScore`, `valuationScore`, `financialHealthScore`, `riskContextScore`, `scoreVersion`, `lastCalculatedAt`). Created `src/lib/scoring/fundamental-score.ts` — deterministic scoring engine with 16 metric helper functions, `categoryAverage()` excluding nulls, weight re-normalization for missing categories, ROE cap at 60% and Interest Coverage cap at 30x (scoring only, raw values untouched), version constant `SCORE_VERSION = "fundamental-v1"`. Added `calculateFundamentalScoresAction()` to `src/actions/market-data-actions.ts` — no external API calls, skips stocks without `StockMetric`, upserts `StockScore` preserving existing `hotScore`/`opportunityScore`, persists `SyncRun` (`type=fundamental-score-calculation`, `provider=internal`) + `SyncRunItem` per symbol. Created `src/components/admin/ScoreMethodologyTab.tsx` — 6 sections: overview, category weights, 21-metric scoring rules table, caps/limitations, example calculation (score=72), future improvements. Updated `src/lib/data/admin-stock-data.ts` and `DataInventoryTab.tsx` to include 8 score columns with `Internal` source labels. Updated `SyncPageClient.tsx` to add Score Calculation section (Sync Actions tab) and Score Methodology tab (tab 6). Bug found and fixed during QA: Turbopack dev server had stale Prisma client cache from before `prisma generate` — fixed by clearing `.next/` and re-running `prisma generate`. Result: 100 stocks scored, 0 failed, 101 scanner-eligible, no duplicates, all scores in [0,100]. Build passes, `tsc --noEmit` zero errors, `prisma validate` valid, `prisma migrate status` clean. Approved by user.
 - Phase 9J completed (2026-05-24): Resumable Chunked Market Data Sync. Replaced the old long-running Nasdaq 100 full sync (single server action, ~385s) with a scalable chunk-based architecture. Added `processedCount` and `currentSymbol` to `SyncRun` via migration `20260524061553_add_sync_run_progress_fields`. Created three new API routes: `POST /api/admin/sync-runs/start` (creates or restarts SyncRun), `POST /api/admin/sync-runs/process-next` (processes one chunk of 10 stocks), `GET /api/admin/sync-runs/latest` (polling endpoint, updated type). Removed old `syncNasdaq100MarketDataAction` batch server action and all old Next 25 buttons from the UI. Chunk size: 10 stocks per chunk (20 Finnhub calls). Rate-limit strategy: call-start pacing — ≥1100ms between Finnhub call starts (~54 calls/minute). Resume logic: `SyncRunItem` rows for the active `syncRunId` are the source of truth; unprocessed = all active symbols minus already-itemised symbols. Restart creates a new `SyncRun`; previous run remains in history. Auto-continue loop: UI calls `process-next` sequentially while `status === "running"` and `!done`; 2-second polling via `/latest` runs in parallel. ETA: `avgMsPerStock = elapsedMs / processedCount`; shows "Estimating…" until processedCount ≥ 2. Paused state UX: dedicated `PausedSyncPanel` shows paused-at timestamp (`finishedAt`), reason (`message` or fallback), last symbol, processed/total counts, amber progress bar, and guidance text. Rate limit message: "Finnhub rate limit reached. Continue the sync after waiting." Restart message: "Restarted by user before completion." No duplicate `StockQuote`, `StockMetric`, or `SyncRunItem` rows. Score calculation remains a separate explicit step. Scanner unchanged. Build passes, `tsc --noEmit` zero errors, `prisma validate` valid, `prisma generate` run to refresh client types. Approved by user.
 - Phase 10 completed (2026-05-24): Scanner Real Data Integration. Moved `/scanner` from 5 demo/seed stocks to 100 real Nasdaq 100 stocks from the DB. Changed default universe from `russell-1000` to `nasdaq-100`; added `isActive: true` membership filter and `metric: true` include to the Prisma query. Added 4 formatter helpers to `src/lib/formatters.ts` (`formatScore`, `formatMetricPercent`, `formatRatio`, `formatCompactCurrency`). Extended `HotStock` type in `mock-data.ts` with 13 new optional fields for fundamental scores and key metrics. Rewrote `ScannerTable.tsx` with 18 real columns (Symbol, Sector, Price, Day%, Fund., Growth, Profit., Valuat., Health, Risk, P/E, PEG, Rev Gr., EPS Gr., ROE, D/E, Mkt Cap). Replaced sort options with 8 fundamental-focused keys; default sort is Fundamental Score descending. Removed Risk and Setup filters (not backed by real data). Reduced view pills to 3 active (All Stocks, In Watchlist, Alert Active); 5 unsupported pills (Hot Today, Strong Momentum, Best Opportunities, Unusual Volume, FOMO Risk) shown as disabled with "Coming soon" tooltips. Updated `MobileScannerCard.tsx` to show fundamental/growth/profitability/health scores and key metrics. Updated `ScannerHeader.tsx` subtitle. Dashboard audited — still uses `hotScore`/`opportunityScore` (= 0 for real stocks); deferred to Phase 11. No Prisma migration needed. No external provider calls added. Browser QA confirmed: 100 stocks loading (META top at Fund=89), all new columns visible with real values, N/A for missing metrics, disabled pills visible, dashboard unbroken. Build passes, `tsc --noEmit` zero errors, `prisma validate` valid, `prisma migrate status` clean. Known issue: universe selector strip shows "Russell 1000" button (only BASE_UNIVERSE type) with no active highlight since selected data is Nasdaq 100 (INDEX type) — UX improvement deferred to Phase 11. Approved by user.
+- Phase 11 completed (2026-05-24): Scanner UX & Universe Selector Improvements. Fixed universe selector — Nasdaq 100 shown as active, Russell 1000 and S&P 500 shown as disabled "Coming soon" (backed by DB `hasData` count). Extended `HotStock` type with 20 new optional fields (detail metrics, score metadata, data freshness). Updated `getScannerData()` to map all new fields and compute `hasData` per universe via grouped Prisma query. Rewrote `ScannerTable` with score column tooltips (Info icon + title text), removed D/E and EPS Growth from main table, added expandable row chevron — clicking expands `ScannerExpandedRow` inline without opening the drawer. Created `ScannerExpandedRow` component with 6 grouped sections: Score Breakdown (progress bars + version + last calculated), Growth, Profitability, Valuation, Financial Health, and Data Freshness. Updated `ScannerViewPills` with 4 new active pills: High Fundamentals (≥75), High Growth (≥75), High Profitability (≥75), Reasonable Valuation (≥60). Updated `ScannerFilters` with 5 score threshold dropdowns (Any/50+/60+/70+/80+/90+) and Positive Day% toggle; exported `DEFAULT_FILTERS`. Updated `ScannerControls` with 5 new sort options (Risk Score, P/E, PEG, ROE, Revenue Growth — 13 total). Updated `ScannerPageClient` with new view/threshold filter logic, fixed universe selector rendering, improved empty states (no-match vs no-data). Dashboard deferred to Phase 12. No external provider calls, no schema changes, no Prisma migration. Build passes, TypeScript clean. Approved by user.

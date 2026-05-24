@@ -7,6 +7,7 @@ export type ScannerUniverse = {
   slug: string;
   type: string;
   isDefault: boolean;
+  hasData: boolean;
 };
 
 export type ScannerData = {
@@ -77,11 +78,25 @@ export async function getScannerData({
 
   const watchlistStockIds = new Set(dbWatchlistItems.map((w) => w.stockId));
 
+  // Count scored stocks per universe to determine which ones have real data
+  const universeScoredCounts = await prisma.stockUniverseMember.groupBy({
+    by: ["universeId"],
+    where: {
+      isActive: true,
+      stock: { quote: { isNot: null }, score: { isNot: null }, isActive: true },
+    },
+    _count: { stockId: true },
+  });
+  const scoredCountByUniverseId = new Map(
+    universeScoredCounts.map((r) => [r.universeId, r._count.stockId])
+  );
+
   const universes: ScannerUniverse[] = dbUniverses.map((u) => ({
     name: u.name,
     slug: u.slug,
     type: u.type,
     isDefault: u.isDefault,
+    hasData: (scoredCountByUniverseId.get(u.id) ?? 0) > 0,
   }));
 
   function toNum(val: unknown): number | null {
@@ -140,6 +155,30 @@ export async function getScannerData({
         roe: m ? toNum(m.roeTTM) : null,
         debtToEquity: m ? toNum(m.totalDebtToEquityAnnual) : null,
         marketCapFull: m ? toNum(m.marketCapitalization) : null,
+        // Phase 11: detail panel metrics
+        grossMargin: m ? toNum(m.grossMarginTTM) : null,
+        operatingMargin: m ? toNum(m.operatingMarginTTM) : null,
+        netMargin: m ? toNum(m.netProfitMarginTTM) : null,
+        roa: m ? toNum(m.roaTTM) : null,
+        currentRatio: m ? toNum(m.currentRatioAnnual) : null,
+        quickRatio: m ? toNum(m.quickRatioAnnual) : null,
+        interestCoverage: m ? toNum(m.netInterestCoverageAnnual) : null,
+        forwardPE: m ? toNum(m.forwardPE) : null,
+        forwardPEG: m ? toNum(m.forwardPEG) : null,
+        ps: m ? toNum(m.psTTM) : null,
+        pb: m ? toNum(m.pbAnnual) : null,
+        evToEbitda: m ? toNum(m.evEbitdaTTM) : null,
+        revenueGrowth3Y: m ? toNum(m.revenueGrowth3Y) : null,
+        epsGrowth3Y: m ? toNum(m.epsGrowth3Y) : null,
+        beta: m ? toNum(m.beta) : null,
+        // Phase 11: score metadata
+        scoreVersion: s.score!.scoreVersion ?? null,
+        scoreLastCalculated: s.score!.lastCalculatedAt?.toISOString() ?? null,
+        // Phase 11: data freshness
+        quoteLastSynced: s.quote!.lastSyncedAt?.toISOString() ?? null,
+        metricsLastSynced: m?.lastSyncedAt?.toISOString() ?? null,
+        quoteSource: s.quote!.source ?? null,
+        metricsSource: m?.provider ?? null,
       };
     });
 

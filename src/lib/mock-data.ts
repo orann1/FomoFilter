@@ -69,6 +69,30 @@ export type HotStock = {
   roe?: number | null;
   debtToEquity?: number | null;
   marketCapFull?: number | null;
+  // Phase 11: detail panel metric fields
+  grossMargin?: number | null;
+  operatingMargin?: number | null;
+  netMargin?: number | null;
+  roa?: number | null;
+  currentRatio?: number | null;
+  quickRatio?: number | null;
+  interestCoverage?: number | null;
+  forwardPE?: number | null;
+  forwardPEG?: number | null;
+  ps?: number | null;
+  pb?: number | null;
+  evToEbitda?: number | null;
+  revenueGrowth3Y?: number | null;
+  epsGrowth3Y?: number | null;
+  beta?: number | null;
+  // Phase 11: score metadata
+  scoreVersion?: string | null;
+  scoreLastCalculated?: string | null;
+  // Phase 11: data freshness
+  quoteLastSynced?: string | null;
+  metricsLastSynced?: string | null;
+  quoteSource?: string | null;
+  metricsSource?: string | null;
 };
 
 export const mockHotStocks: HotStock[] = [

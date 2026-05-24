@@ -1,5 +1,9 @@
 export type ScannerView =
   | "all"
+  | "high-fundamentals"
+  | "high-growth"
+  | "high-profitability"
+  | "reasonable-valuation"
   | "in-watchlist"
   | "alert-active";
 
@@ -7,6 +11,7 @@ interface ViewPill {
   key: ScannerView;
   label: string;
   icon: string;
+  tooltip?: string;
 }
 
 interface DisabledPill {
@@ -17,16 +22,19 @@ interface DisabledPill {
 
 const views: ViewPill[] = [
   { key: "all", label: "All Stocks", icon: "◈" },
+  { key: "high-fundamentals", label: "High Fundamentals", icon: "📊", tooltip: "Fundamental Score ≥ 75" },
+  { key: "high-growth", label: "High Growth", icon: "📈", tooltip: "Growth Score ≥ 75" },
+  { key: "high-profitability", label: "High Profitability", icon: "💰", tooltip: "Profitability Score ≥ 75" },
+  { key: "reasonable-valuation", label: "Reasonable Valuation", icon: "🎯", tooltip: "Valuation Score ≥ 60" },
   { key: "in-watchlist", label: "In Watchlist", icon: "⭐" },
   { key: "alert-active", label: "Alert Active", icon: "🔔" },
 ];
 
 const disabledViews: DisabledPill[] = [
-  { label: "Hot Today", icon: "🔥", tooltip: "Coming soon — requires momentum data" },
-  { label: "Strong Momentum", icon: "📈", tooltip: "Coming soon — requires technical data" },
-  { label: "Best Opportunities", icon: "🎯", tooltip: "Coming soon — requires opportunity score" },
-  { label: "Unusual Volume", icon: "🌋", tooltip: "Coming soon — requires volume data" },
-  { label: "FOMO Risk", icon: "⚡", tooltip: "Coming soon — requires risk scoring" },
+  { label: "Hot Today", icon: "🔥", tooltip: "Coming soon — requires technical/momentum/news data" },
+  { label: "Strong Momentum", icon: "🚀", tooltip: "Coming soon — requires technical/momentum/news data" },
+  { label: "Unusual Volume", icon: "🌋", tooltip: "Coming soon — requires technical/momentum/news data" },
+  { label: "FOMO Risk", icon: "⚡", tooltip: "Coming soon — requires technical/momentum/news data" },
 ];
 
 interface ScannerViewPillsProps {
@@ -41,6 +49,7 @@ export default function ScannerViewPills({ activeView, onViewChange }: ScannerVi
         <button
           key={view.key}
           onClick={() => onViewChange(view.key)}
+          title={view.tooltip}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-colors whitespace-nowrap ${
             activeView === view.key
               ? "bg-emerald-600/20 border-emerald-600/50 text-emerald-300"
