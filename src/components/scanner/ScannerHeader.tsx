@@ -8,7 +8,7 @@ export default function ScannerHeader() {
         <h1 className="text-xl font-bold text-white">Scanner</h1>
       </div>
       <p className="text-sm text-slate-400">
-        Discover hot stocks, filter FOMO, and find setups worth tracking.
+        Discover fundamentally strong stocks using real market data and internal scores.
       </p>
     </div>
   );

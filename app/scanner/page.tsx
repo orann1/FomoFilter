@@ -10,7 +10,7 @@ interface ScannerPageProps {
 
 export default async function ScannerPage({ searchParams }: ScannerPageProps) {
   const params = await searchParams;
-  const universeSlug = params.universe ?? "russell-1000";
+  const universeSlug = params.universe ?? "nasdaq-100";
 
   const data = await getScannerData({ universeSlug });
 

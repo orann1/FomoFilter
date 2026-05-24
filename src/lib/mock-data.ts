@@ -54,6 +54,21 @@ export type HotStock = {
   isNasdaq100?: boolean;
   isRussell1000?: boolean;
   isRussell1000Only?: boolean;
+  // Phase 10: fundamental score fields (from StockScore)
+  fundamentalScore?: number | null;
+  growthScore?: number | null;
+  profitabilityScore?: number | null;
+  valuationScore?: number | null;
+  financialHealthScore?: number | null;
+  riskContextScore?: number | null;
+  // Phase 10: key metric fields (from StockMetric)
+  peRatio?: number | null;
+  pegRatio?: number | null;
+  revenueGrowth?: number | null;
+  epsGrowth?: number | null;
+  roe?: number | null;
+  debtToEquity?: number | null;
+  marketCapFull?: number | null;
 };
 
 export const mockHotStocks: HotStock[] = [

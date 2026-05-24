@@ -24,7 +24,7 @@ interface GetScannerDataParams {
 }
 
 export async function getScannerData({
-  universeSlug = "russell-1000",
+  universeSlug = "nasdaq-100",
 }: GetScannerDataParams = {}): Promise<ScannerData> {
   const [dbUser, dbUniverses, dbWatchlistItems] = await Promise.all([
     prisma.user.findFirst({ orderBy: { createdAt: "asc" } }),
@@ -38,6 +38,7 @@ export async function getScannerData({
   // Resolve the selected universe
   const selectedUniverse =
     dbUniverses.find((u) => u.slug === universeSlug) ??
+    dbUniverses.find((u) => u.slug === "nasdaq-100") ??
     dbUniverses.find((u) => u.isDefault) ??
     dbUniverses[0] ??
     null;
@@ -48,16 +49,17 @@ export async function getScannerData({
       quote: { isNot: null },
       score: { isNot: null },
       ...(selectedUniverse
-        ? { universeMemberships: { some: { universeId: selectedUniverse.id } } }
+        ? { universeMemberships: { some: { universeId: selectedUniverse.id, isActive: true } } }
         : {}),
     },
     include: {
       quote: true,
       score: true,
+      metric: true,
       drawerDetail: true,
       universeMemberships: { include: { universe: { select: { slug: true } } } },
     },
-    orderBy: { score: { hotScore: "desc" } },
+    orderBy: { symbol: "asc" },
   });
 
   const dbAlertRules = await prisma.alertRule.findMany({
@@ -82,6 +84,12 @@ export async function getScannerData({
     isDefault: u.isDefault,
   }));
 
+  function toNum(val: unknown): number | null {
+    if (val == null) return null;
+    const n = Number(val);
+    return isNaN(n) ? null : n;
+  }
+
   const stocks: HotStock[] = dbStocks
     .filter((s) => s.quote && s.score)
     .map((s) => {
@@ -90,22 +98,23 @@ export async function getScannerData({
       const isNasdaq100 = slugs.includes("nasdaq-100");
       const isRussell1000 = slugs.includes("russell-1000");
       const isRussell1000Only = isRussell1000 && !isSp500 && !isNasdaq100;
+      const m = s.metric;
 
       return {
         symbol: s.symbol,
         name: s.name,
         price: Number(s.quote!.price),
         change: Number(s.quote!.changePercent),
-        setup: s.score!.setupStatus,
+        setup: s.score!.setupStatus ?? "",
         hot: s.score!.hotScore,
         opp: s.score!.opportunityScore,
         risk: s.score!.riskLevel as RiskLevel,
-        catalyst: s.score!.catalyst,
+        catalyst: s.score!.catalyst ?? "",
         inWatchlist: watchlistStockIds.has(s.id),
         sector: s.sector ?? "",
-        weekChange: Number(s.quote!.weekChange),
-        monthChange: Number(s.quote!.monthChange),
-        volume: s.quote!.volume ?? "",
+        weekChange: Number(s.quote!.weekChange ?? 0),
+        monthChange: Number(s.quote!.monthChange ?? 0),
+        volume: s.quote!.volume ? String(s.quote!.volume) : "",
         relativeVolume: Number(s.quote!.relativeVolume ?? 0),
         analystTarget: Number(s.quote!.analystTarget ?? 0),
         analystUpside: Number(s.quote!.analystUpside ?? 0),
@@ -116,6 +125,21 @@ export async function getScannerData({
         isNasdaq100,
         isRussell1000,
         isRussell1000Only,
+        // Phase 10: fundamental scores
+        fundamentalScore: toNum(s.score!.fundamentalScore),
+        growthScore: toNum(s.score!.growthScore),
+        profitabilityScore: toNum(s.score!.profitabilityScore),
+        valuationScore: toNum(s.score!.valuationScore),
+        financialHealthScore: toNum(s.score!.financialHealthScore),
+        riskContextScore: toNum(s.score!.riskContextScore),
+        // Phase 10: key metrics
+        peRatio: m ? toNum(m.peBasicExclExtraTTM) : null,
+        pegRatio: m ? toNum(m.pegTTM) : null,
+        revenueGrowth: m ? toNum(m.revenueGrowthTTMYoy) : null,
+        epsGrowth: m ? toNum(m.epsGrowthTTMYoy) : null,
+        roe: m ? toNum(m.roeTTM) : null,
+        debtToEquity: m ? toNum(m.totalDebtToEquityAnnual) : null,
+        marketCapFull: m ? toNum(m.marketCapitalization) : null,
       };
     });
 
@@ -206,7 +230,7 @@ export async function getScannerData({
     stockDrawerDetails,
     alertRulesBySymbol,
     universes,
-    selectedUniverseSlug: selectedUniverse?.slug ?? "russell-1000",
+    selectedUniverseSlug: selectedUniverse?.slug ?? "nasdaq-100",
   };
 }
 
