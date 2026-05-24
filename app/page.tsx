@@ -2,9 +2,8 @@ export const dynamic = "force-dynamic";
 
 import ClientAppShell from "@/src/components/layout/ClientAppShell";
 import DashboardHeader from "@/src/components/dashboard/DashboardHeader";
-import TodaysSignalCard from "@/src/components/dashboard/TodaysSignalCard";
-import MarketStatsGrid from "@/src/components/dashboard/MarketStatsGrid";
-import SummaryCardsGrid from "@/src/components/dashboard/SummaryCardsGrid";
+import DashboardSummaryCards from "@/src/components/dashboard/DashboardSummaryCards";
+import DataWarningsSection from "@/src/components/dashboard/DataWarningsSection";
 import DashboardGrid from "@/src/components/dashboard/DashboardGrid";
 import { getDashboardData } from "@/src/lib/data/dashboard";
 
@@ -14,17 +13,14 @@ export default async function Home() {
   return (
     <ClientAppShell user={data.user}>
       <DashboardHeader />
-      <TodaysSignalCard />
-      <MarketStatsGrid stats={data.marketStats} />
-      <SummaryCardsGrid cards={data.summaryCards} />
+      <DataWarningsSection warnings={data.dataWarnings} />
+      <DashboardSummaryCards summary={data.summary} freshness={data.freshness} />
       <DashboardGrid
-        hotStocks={data.hotStocks}
+        topFundamentalStocks={data.topFundamentalStocks}
+        sectorSummary={data.sectorSummary}
         watchlistItems={data.watchlistItems}
-        stockDrawerDetails={data.stockDrawerDetails}
-        discoverSetups={data.discoverSetups}
-        topScoreChanges={data.topScoreChanges}
-        aiInsights={data.aiInsights}
-        recentAlerts={data.recentAlerts}
+        summary={data.summary}
+        freshness={data.freshness}
         alertRulesBySymbol={data.alertRulesBySymbol}
       />
     </ClientAppShell>
