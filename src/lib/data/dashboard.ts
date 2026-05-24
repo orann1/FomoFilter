@@ -1,14 +1,5 @@
 import { prisma } from "@/src/lib/db/prisma";
-import type {
-  HotStock,
-  WatchlistItem,
-  StockDrawerDetail,
-  ScannerSetup,
-  ScoreChange,
-  AiInsight,
-  RecentAlert,
-  RiskLevel,
-} from "@/src/lib/mock-data";
+import { formatCompactCurrency } from "@/src/lib/formatters";
 
 export type DashboardUser = {
   name: string;
@@ -24,52 +15,121 @@ export type ActiveAlertRule = {
   notifyVia: string;
 };
 
+export type DashboardStockRow = {
+  symbol: string;
+  name: string;
+  sector: string | null;
+  price: number | null;
+  changePercent: number | null;
+  fundamentalScore: number | null;
+  growthScore: number | null;
+  profitabilityScore: number | null;
+  valuationScore: number | null;
+  financialHealthScore: number | null;
+  riskContextScore: number | null;
+  marketCap: string | null;
+  forwardPe: number | null;
+  pegRatio: number | null;
+  roe: number | null;
+  revenueGrowthYoY: number | null;
+};
+
+export type DashboardSectorRow = {
+  sector: string;
+  stockCount: number;
+  avgFundamentalScore: number | null;
+  avgGrowthScore: number | null;
+  avgProfitabilityScore: number | null;
+  topSymbol: string | null;
+  topScore: number | null;
+};
+
+export type DashboardWarning = {
+  key: string;
+  message: string;
+  action: string | null;
+};
+
+export type DashboardSummary = {
+  totalStocks: number;
+  scannerReadyStocks: number;
+  withQuotes: number;
+  withMetrics: number;
+  withScores: number;
+  activeNasdaq100: number;
+  averageFundamentalScore: number | null;
+  stocksAbove75: number;
+  stocksAbove80: number;
+};
+
+export type DashboardFreshness = {
+  lastMarketDataSyncAt: string | null;
+  lastScoreCalculationAt: string | null;
+  quoteCoveragePercent: number;
+  metricCoveragePercent: number;
+  scoreCoveragePercent: number;
+};
+
+export type DashboardWatchlistItem = {
+  id: string;
+  symbol: string;
+  name: string;
+  price: number | null;
+  changePercent: number | null;
+  fundamentalScore: number | null;
+  status: string;
+  entryZoneLow: number | null;
+  entryZoneHigh: number | null;
+  target: number | null;
+  stopLoss: number | null;
+  notes: string | null;
+  stockId: string;
+};
+
 export type DashboardData = {
   user: DashboardUser;
-  marketStats: Array<{ label: string; value: string; change: string; up: boolean }>;
-  summaryCards: Array<{ label: string; value: number; icon: string; color: string }>;
-  hotStocks: HotStock[];
-  watchlistItems: WatchlistItem[];
-  stockDrawerDetails: Record<string, StockDrawerDetail>;
-  discoverSetups: ScannerSetup[];
-  topScoreChanges: ScoreChange[];
-  aiInsights: AiInsight[];
-  recentAlerts: RecentAlert[];
+  summary: DashboardSummary;
+  freshness: DashboardFreshness;
+  topFundamentalStocks: DashboardStockRow[];
+  sectorSummary: DashboardSectorRow[];
+  dataWarnings: DashboardWarning[];
+  watchlistItems: DashboardWatchlistItem[];
   alertRulesBySymbol: Record<string, ActiveAlertRule[]>;
 };
 
 export async function getDashboardData(): Promise<DashboardData> {
   const [
     dbUser,
-    dbMarketStats,
-    dbSummaryCards,
     dbStocks,
     dbWatchlistItems,
-    dbSetups,
-    dbScoreChanges,
-    dbAiInsights,
-    dbAlerts,
+    lastMarketDataSync,
+    lastScoreCalc,
   ] = await Promise.all([
     prisma.user.findFirst({ orderBy: { createdAt: "asc" } }),
-    prisma.marketStat.findMany({ orderBy: { sortOrder: "asc" } }),
-    prisma.dashboardSummaryCard.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.stock.findMany({
-      where: { isActive: true, quote: { isNot: null }, score: { isNot: null } },
-      include: { quote: true, score: true, drawerDetail: true },
-      orderBy: { score: { hotScore: "desc" } },
+      where: { isActive: true },
+      include: {
+        quote: true,
+        score: true,
+        metric: true,
+        universeMemberships: { include: { universe: { select: { slug: true } } } },
+      },
     }),
     prisma.watchlistItem.findMany({
       include: { stock: { include: { quote: true, score: true } } },
       orderBy: { createdAt: "asc" },
     }),
-    prisma.discoverSetup.findMany({ orderBy: { sortOrder: "asc" } }),
-    prisma.stockScore.findMany({
-      orderBy: { hotScoreChange: "desc" },
-      take: 4,
-      include: { stock: true },
+    prisma.syncRun.findFirst({
+      where: {
+        type: { in: ["market-data-nasdaq100-chunked-sync", "market-data-nasdaq100-batch", "quotes-nasdaq100-batch"] },
+        status: { in: ["success", "partial_success"] },
+      },
+      orderBy: { startedAt: "desc" },
     }),
-    prisma.aiInsight.findMany({ orderBy: { minutesAgo: "asc" }, take: 10 }),
-    prisma.recentAlert.findMany({ orderBy: { minutesAgo: "asc" }, take: 10 }),
+    prisma.syncRun.findFirst({
+      where: { type: "fundamental-score-calculation", status: "success" },
+      orderBy: { startedAt: "desc" },
+    }),
   ]);
 
   const dbAlertRules = await prisma.alertRule.findMany({
@@ -78,7 +138,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     orderBy: { createdAt: "desc" },
   });
 
-  // ── User ─────────────────────────────────────────────────────────────────────
+  // ── User ──────────────────────────────────────────────────────────────────────
   const user: DashboardUser = {
     name: dbUser?.name ?? "User",
     email: dbUser?.email ?? "",
@@ -86,154 +146,196 @@ export async function getDashboardData(): Promise<DashboardData> {
     plan: dbUser?.plan ?? "FREE",
   };
 
-  // ── Market Stats ─────────────────────────────────────────────────────────────
-  const marketStats = dbMarketStats.map((s) => ({
-    label: s.label,
-    value: s.value,
-    change: s.change,
-    up: s.up,
-  }));
+  // ── Coverage counts ───────────────────────────────────────────────────────────
+  const nasdaq100Stocks = dbStocks.filter((s) =>
+    s.universeMemberships.some((m) => m.universe.slug === "nasdaq-100" && m.isActive)
+  );
+  const activeNasdaq100 = nasdaq100Stocks.length;
+  const totalStocks = activeNasdaq100 > 0 ? activeNasdaq100 : dbStocks.filter((s) => s.isActive).length;
 
-  // ── Summary Cards ────────────────────────────────────────────────────────────
-  const summaryCards = dbSummaryCards.map((c) => ({
-    label: c.label,
-    value: c.value,
-    icon: c.icon,
-    color: c.color,
-  }));
+  const withQuotes = dbStocks.filter((s) => s.quote !== null).length;
+  const withMetrics = dbStocks.filter((s) => s.metric !== null).length;
+  const withScores = dbStocks.filter((s) => s.score?.fundamentalScore != null).length;
+  const scannerReadyStocks = dbStocks.filter(
+    (s) => s.quote !== null && s.score?.fundamentalScore != null
+  ).length;
 
-  // ── Hot Stocks ────────────────────────────────────────────────────────────────
-  const hotStocks: HotStock[] = dbStocks
-    .filter((s) => s.quote && s.score)
+  const scoresArr = dbStocks
+    .map((s) => s.score?.fundamentalScore)
+    .filter((v): v is NonNullable<typeof v> => v != null)
+    .map(Number);
+
+  const averageFundamentalScore =
+    scoresArr.length > 0
+      ? Math.round(scoresArr.reduce((a, b) => a + b, 0) / scoresArr.length)
+      : null;
+
+  const stocksAbove75 = scoresArr.filter((v) => v >= 75).length;
+  const stocksAbove80 = scoresArr.filter((v) => v >= 80).length;
+
+  const summary: DashboardSummary = {
+    totalStocks,
+    scannerReadyStocks,
+    withQuotes,
+    withMetrics,
+    withScores,
+    activeNasdaq100,
+    averageFundamentalScore,
+    stocksAbove75,
+    stocksAbove80,
+  };
+
+  // ── Freshness ─────────────────────────────────────────────────────────────────
+  const quoteCoveragePercent =
+    totalStocks > 0 ? Math.round((withQuotes / totalStocks) * 100) : 0;
+  const metricCoveragePercent =
+    totalStocks > 0 ? Math.round((withMetrics / totalStocks) * 100) : 0;
+  const scoreCoveragePercent =
+    totalStocks > 0 ? Math.round((withScores / totalStocks) * 100) : 0;
+
+  const freshness: DashboardFreshness = {
+    lastMarketDataSyncAt: lastMarketDataSync?.finishedAt?.toISOString() ?? lastMarketDataSync?.startedAt?.toISOString() ?? null,
+    lastScoreCalculationAt: lastScoreCalc?.finishedAt?.toISOString() ?? lastScoreCalc?.startedAt?.toISOString() ?? null,
+    quoteCoveragePercent,
+    metricCoveragePercent,
+    scoreCoveragePercent,
+  };
+
+  // ── Top Fundamental Stocks ────────────────────────────────────────────────────
+  const topFundamentalStocks: DashboardStockRow[] = dbStocks
+    .filter((s) => s.score?.fundamentalScore != null && s.quote !== null)
+    .sort((a, b) => Number(b.score!.fundamentalScore!) - Number(a.score!.fundamentalScore!))
+    .slice(0, 15)
     .map((s) => ({
       symbol: s.symbol,
       name: s.name,
-      price: Number(s.quote!.price),
-      change: Number(s.quote!.changePercent),
-      setup: s.score!.setupStatus,
-      hot: s.score!.hotScore,
-      opp: s.score!.opportunityScore,
-      risk: s.score!.riskLevel as RiskLevel,
-      catalyst: s.score!.catalyst,
-      inWatchlist: dbWatchlistItems.some((w) => w.stockId === s.id),
-      sector: s.sector ?? "",
-      weekChange: Number(s.quote!.weekChange),
-      monthChange: Number(s.quote!.monthChange),
-      volume: s.quote!.volume ?? "",
-      relativeVolume: Number(s.quote!.relativeVolume ?? 0),
-      analystTarget: Number(s.quote!.analystTarget ?? 0),
-      analystUpside: Number(s.quote!.analystUpside ?? 0),
-      analystRating: s.quote!.analystRating ?? "",
-      marketCap: s.marketCap ?? "",
+      sector: s.sector ?? null,
+      price: s.quote ? Number(s.quote.price) : null,
+      changePercent: s.quote?.changePercent != null ? Number(s.quote.changePercent) : null,
+      fundamentalScore: s.score?.fundamentalScore != null ? Math.round(Number(s.score.fundamentalScore)) : null,
+      growthScore: s.score?.growthScore != null ? Math.round(Number(s.score.growthScore)) : null,
+      profitabilityScore: s.score?.profitabilityScore != null ? Math.round(Number(s.score.profitabilityScore)) : null,
+      valuationScore: s.score?.valuationScore != null ? Math.round(Number(s.score.valuationScore)) : null,
+      financialHealthScore: s.score?.financialHealthScore != null ? Math.round(Number(s.score.financialHealthScore)) : null,
+      riskContextScore: s.score?.riskContextScore != null ? Math.round(Number(s.score.riskContextScore)) : null,
+      marketCap: s.marketCap != null ? formatCompactCurrency(Number(s.marketCap)) : null,
+      forwardPe: s.metric?.forwardPE != null ? Number(s.metric.forwardPE) : null,
+      pegRatio: s.metric?.forwardPEG != null ? Number(s.metric.forwardPEG) : null,
+      roe: s.metric?.roeTTM != null ? Number(s.metric.roeTTM) : null,
+      revenueGrowthYoY: s.metric?.revenueGrowthTTMYoy != null ? Number(s.metric.revenueGrowthTTMYoy) : null,
     }));
 
-  // ── Watchlist Items ──────────────────────────────────────────────────────────
-  const watchlistItems: WatchlistItem[] = dbWatchlistItems
-    .filter((w) => w.stock.quote && w.stock.score)
-    .map((w) => ({
-      symbol: w.stock.symbol,
-      name: w.stock.name,
-      price: Number(w.stock.quote!.price),
-      change: Number(w.stock.quote!.changePercent),
-      hot: w.stock.score!.hotScore,
-      opp: w.stock.score!.opportunityScore,
-      status: mapDbWatchStatus(w.status),
-      entryZoneLow: Number(w.entryZoneLow ?? 0),
-      entryZoneHigh: Number(w.entryZoneHigh ?? 0),
-      target: Number(w.target ?? 0),
-      stopLoss: Number(w.stopLoss ?? 0),
-      notes: w.reason ?? "",
-    }));
+  // ── Sector Summary ────────────────────────────────────────────────────────────
+  const sectorMap = new Map<
+    string,
+    { stocks: Array<{ symbol: string; fundamentalScore: number; growthScore: number | null; profitabilityScore: number | null }> }
+  >();
 
-  // ── Stock Drawer Details ──────────────────────────────────────────────────────
-  const stockDrawerDetails: Record<string, StockDrawerDetail> = {};
   for (const s of dbStocks) {
-    const d = s.drawerDetail;
-    const score = s.score;
-    if (!d || !score) continue;
-
-    stockDrawerDetails[s.symbol] = {
-      suggestedAction: d.suggestedAction,
-      fomoRisk: d.fomoRisk,
-      entryContext: d.entryContext,
-      hotDelta: d.hotDelta,
-      oppDelta: d.oppDelta,
-      hotScoreExplain: d.hotScoreExplain ?? "",
-      oppScoreExplain: d.oppScoreExplain ?? "",
-      hotBreakdown: {
-        momentum: d.hotMomentum ?? 0,
-        volumeHeat: d.hotVolumeHeat ?? 0,
-        catalyst: d.hotCatalyst ?? 0,
-        technicals: d.hotTechnicals ?? 0,
-      },
-      oppBreakdown: {
-        analystUpside: d.oppAnalystUpside ?? 0,
-        fundamentals: d.oppFundamentals ?? 0,
-        valuation: d.oppValuation ?? 0,
-        entryQuality: d.oppEntryQuality ?? 0,
-      },
-      aiWhatsHappening: d.aiWhatHappening,
-      aiWhatItMeans: d.aiWhatItMeans,
-      aiWhatToWatch: d.aiWhatToWatch,
-      aiSentiment: d.aiSentiment as "bullish" | "cautious" | "bearish",
-      aiGeneratedMinutes: d.aiGeneratedMinutes,
-      catalystType: d.catalystType ?? "",
-      catalystExplanation: d.catalystExplanation ?? "",
-      catalystConfidence: (d.catalystConfidence as "High" | "Medium" | "Low") ?? "Medium",
-      catalystSource: d.catalystSource ?? "",
-      catalystHoursAgo: d.catalystHoursAgo ?? 0,
-      entryZoneLow: Number(d.entryZoneLow ?? 0),
-      entryZoneHigh: Number(d.entryZoneHigh ?? 0),
-      target: Number(d.target ?? 0),
-      distanceToTarget: d.distanceToTarget ?? "",
-      priceEntryContext: d.entryContext,
-      watchSince: d.watchSince ?? undefined,
-      hotScoreChangeSinceAdded: score.hotScoreChange,
-      oppScoreChangeSinceAdded: score.opportunityChange,
-      latestPersonalSignal: d.latestPersonalSignal ?? undefined,
-      signalQuality: d.signalQuality ?? "",
-      lastUpdatedMinutes: d.lastUpdatedMinutes,
-      suggestedTrackingReason: d.suggestedTrackingReason ?? undefined,
-    };
+    if (!s.sector || s.score?.fundamentalScore == null) continue;
+    const sector = s.sector;
+    if (!sectorMap.has(sector)) sectorMap.set(sector, { stocks: [] });
+    sectorMap.get(sector)!.stocks.push({
+      symbol: s.symbol,
+      fundamentalScore: Math.round(Number(s.score.fundamentalScore)),
+      growthScore: s.score.growthScore != null ? Math.round(Number(s.score.growthScore)) : null,
+      profitabilityScore: s.score.profitabilityScore != null ? Math.round(Number(s.score.profitabilityScore)) : null,
+    });
   }
 
-  // ── Discover Setups ──────────────────────────────────────────────────────────
-  const discoverSetups: ScannerSetup[] = dbSetups.map((s) => ({
-    slug: s.slug,
-    name: s.name,
-    icon: s.icon,
-    description: s.description,
-    tickers: s.tickers,
-  }));
+  const sectorSummary: DashboardSectorRow[] = Array.from(sectorMap.entries())
+    .map(([sector, { stocks }]) => {
+      const fundScores = stocks.map((s) => s.fundamentalScore);
+      const avgFund = fundScores.length > 0
+        ? Math.round(fundScores.reduce((a, b) => a + b, 0) / fundScores.length)
+        : null;
+      const growthScores = stocks.map((s) => s.growthScore).filter((v): v is number => v != null);
+      const avgGrowth = growthScores.length > 0
+        ? Math.round(growthScores.reduce((a, b) => a + b, 0) / growthScores.length)
+        : null;
+      const profScores = stocks.map((s) => s.profitabilityScore).filter((v): v is number => v != null);
+      const avgProf = profScores.length > 0
+        ? Math.round(profScores.reduce((a, b) => a + b, 0) / profScores.length)
+        : null;
+      const topStock = stocks.reduce((best, s) => s.fundamentalScore > best.fundamentalScore ? s : best, stocks[0]);
+      return {
+        sector,
+        stockCount: stocks.length,
+        avgFundamentalScore: avgFund,
+        avgGrowthScore: avgGrowth,
+        avgProfitabilityScore: avgProf,
+        topSymbol: topStock?.symbol ?? null,
+        topScore: topStock?.fundamentalScore ?? null,
+      };
+    })
+    .sort((a, b) => (b.avgFundamentalScore ?? 0) - (a.avgFundamentalScore ?? 0));
 
-  // ── Top Score Changes ─────────────────────────────────────────────────────────
-  const topScoreChanges: ScoreChange[] = dbScoreChanges.map((s) => ({
-    symbol: s.stock.symbol,
-    hotScore: s.hotScore,
-    hotScoreChange: s.hotScoreChange,
-    oppScore: s.opportunityScore,
-    oppScoreChange: s.opportunityChange,
-    reason: s.signalLabel ?? "",
-  }));
+  // ── Data Warnings ─────────────────────────────────────────────────────────────
+  const dataWarnings: DashboardWarning[] = [];
+  const missingMetrics = totalStocks - withMetrics;
+  const missingScores = totalStocks - withScores;
 
-  // ── AI Insights ──────────────────────────────────────────────────────────────
-  const aiInsights: AiInsight[] = dbAiInsights.map((i) => ({
-    symbol: i.symbol,
-    sentiment: i.sentiment as "bullish" | "cautious" | "bearish",
-    title: i.title,
-    summary: i.summary,
-    minutesAgo: i.minutesAgo,
-  }));
+  if (!lastMarketDataSync) {
+    dataWarnings.push({
+      key: "no_sync",
+      message: "Market data has not been synced yet.",
+      action: "Run Market Data Sync in Admin.",
+    });
+  } else if (missingMetrics > 0) {
+    dataWarnings.push({
+      key: "missing_metrics",
+      message: `${missingMetrics} stock${missingMetrics > 1 ? "s are" : " is"} missing metrics.`,
+      action: "Run Market Data Sync to fill gaps.",
+    });
+  }
 
-  // ── Recent Alerts ─────────────────────────────────────────────────────────────
-  const recentAlerts: RecentAlert[] = dbAlerts.map((a) => ({
-    symbol: a.symbol,
-    type: a.type as RecentAlert["type"],
-    message: a.message,
-    note: a.note,
-    minutesAgo: a.minutesAgo,
-    isNew: a.isNew,
-    icon: a.icon as "trending-up" | "flame",
+  if (withScores === 0) {
+    dataWarnings.push({
+      key: "no_scores",
+      message: "Fundamental scores have not been calculated yet.",
+      action: "Run Calculate Fundamental Scores in Admin.",
+    });
+  } else if (!lastScoreCalc) {
+    dataWarnings.push({
+      key: "no_score_run",
+      message: "No score calculation run has been recorded. Re-run to track freshness.",
+      action: "Run Calculate Fundamental Scores in Admin.",
+    });
+  } else if (missingScores > 0) {
+    dataWarnings.push({
+      key: "missing_scores",
+      message: `${missingScores} stock${missingScores > 1 ? "s are" : " is"} missing scores.`,
+      action: "Run Calculate Fundamental Scores to fill gaps.",
+    });
+  }
+
+  if (
+    lastMarketDataSync &&
+    lastScoreCalc &&
+    lastScoreCalc.startedAt < lastMarketDataSync.startedAt
+  ) {
+    dataWarnings.push({
+      key: "stale_scores",
+      message: "Market data is newer than scores.",
+      action: "Recalculate Fundamental Scores in Admin.",
+    });
+  }
+
+  // ── Watchlist Items ───────────────────────────────────────────────────────────
+  const watchlistItems: DashboardWatchlistItem[] = dbWatchlistItems.map((w) => ({
+    id: w.id,
+    symbol: w.stock.symbol,
+    name: w.stock.name,
+    price: w.stock.quote ? Number(w.stock.quote.price) : null,
+    changePercent: w.stock.quote?.changePercent != null ? Number(w.stock.quote.changePercent) : null,
+    fundamentalScore: w.stock.score?.fundamentalScore != null ? Math.round(Number(w.stock.score.fundamentalScore)) : null,
+    status: w.status,
+    entryZoneLow: w.entryZoneLow != null ? Number(w.entryZoneLow) : null,
+    entryZoneHigh: w.entryZoneHigh != null ? Number(w.entryZoneHigh) : null,
+    target: w.target != null ? Number(w.target) : null,
+    stopLoss: w.stopLoss != null ? Number(w.stopLoss) : null,
+    notes: w.reason ?? null,
+    stockId: w.stockId,
   }));
 
   // ── Alert Rules by Symbol ─────────────────────────────────────────────────────
@@ -251,32 +353,12 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   return {
     user,
-    marketStats,
-    summaryCards,
-    hotStocks,
+    summary,
+    freshness,
+    topFundamentalStocks,
+    sectorSummary,
+    dataWarnings,
     watchlistItems,
-    stockDrawerDetails,
-    discoverSetups,
-    topScoreChanges,
-    aiInsights,
-    recentAlerts,
     alertRulesBySymbol,
   };
-}
-
-function mapDbWatchStatus(status: string): WatchlistItem["status"] {
-  switch (status) {
-    case "WAITING":
-      return "WAITING_FOR_PULLBACK";
-    case "READY_TO_BUY":
-      return "READY_TO_BUY";
-    case "HOLDING":
-      return "HOLDING";
-    case "AVOIDING":
-      return "AVOIDING";
-    case "ARCHIVED":
-      return "ARCHIVED";
-    default:
-      return "WATCHING";
-  }
 }
