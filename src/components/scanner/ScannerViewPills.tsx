@@ -1,5 +1,6 @@
 export type ScannerView =
   | "all"
+  | "high-opportunity"
   | "high-fundamentals"
   | "high-growth"
   | "high-profitability"
@@ -22,6 +23,7 @@ interface DisabledPill {
 
 const views: ViewPill[] = [
   { key: "all", label: "All Stocks", icon: "◈" },
+  { key: "high-opportunity", label: "High Opportunity", icon: "🎯", tooltip: "Opportunity Score ≥ 75" },
   { key: "high-fundamentals", label: "High Fundamentals", icon: "📊", tooltip: "Fundamental Score ≥ 75" },
   { key: "high-growth", label: "High Growth", icon: "📈", tooltip: "Growth Score ≥ 75" },
   { key: "high-profitability", label: "High Profitability", icon: "💰", tooltip: "Profitability Score ≥ 75" },

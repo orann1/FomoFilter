@@ -35,6 +35,10 @@ export type AdminStockDataInventoryRow = {
   riskContextScore: string | null;
   scoreVersion: string | null;
   scoreLastCalculatedAt: string | null;
+  // Opportunity Score v1
+  opportunityScore: string | null;
+  opportunityScoreVersion: string | null;
+  opportunityCalculatedAt: string | null;
   scannerEligible: boolean;
   missingReason: string;
 
@@ -187,6 +191,9 @@ export async function getAdminStockDataInventory(): Promise<AdminStockDataInvent
       riskContextScore: score?.riskContextScore != null ? fmtDecimal(score.riskContextScore, 1) : null,
       scoreVersion: score?.scoreVersion ?? null,
       scoreLastCalculatedAt: formatShortDate(score?.lastCalculatedAt),
+      opportunityScore: score?.oppScore != null ? fmtDecimal(score.oppScore, 1) : null,
+      opportunityScoreVersion: score?.oppScoreVersion ?? null,
+      opportunityCalculatedAt: formatShortDate(score?.oppCalculatedAt),
       scannerEligible,
       missingReason,
 

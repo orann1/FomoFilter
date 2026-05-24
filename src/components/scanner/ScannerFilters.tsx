@@ -8,6 +8,7 @@ export type ScannerFilterState = {
   indexFilter: IndexFilter;
   watchlistOnly: boolean;
   alertActiveOnly: boolean;
+  minOpportunity: ScoreThreshold;
   minFundamental: ScoreThreshold;
   minGrowth: ScoreThreshold;
   minProfitability: ScoreThreshold;
@@ -44,6 +45,7 @@ export function hasActiveFilters(filters: ScannerFilterState): boolean {
     filters.indexFilter !== "all" ||
     filters.watchlistOnly ||
     filters.alertActiveOnly ||
+    filters.minOpportunity > 0 ||
     filters.minFundamental > 0 ||
     filters.minGrowth > 0 ||
     filters.minProfitability > 0 ||
@@ -58,6 +60,7 @@ export const DEFAULT_FILTERS: ScannerFilterState = {
   indexFilter: "all",
   watchlistOnly: false,
   alertActiveOnly: false,
+  minOpportunity: 0,
   minFundamental: 0,
   minGrowth: 0,
   minProfitability: 0,
@@ -192,6 +195,7 @@ export default function ScannerFilters({
 
       {/* Row 2: score thresholds */}
       <div className="flex flex-wrap items-center gap-3 pl-[calc(13px+0.375rem+0.5rem)]">
+        <ThresholdSelect label="Min Opp." value={filters.minOpportunity} onChange={(v) => update({ minOpportunity: v })} />
         <ThresholdSelect label="Min Fund." value={filters.minFundamental} onChange={(v) => update({ minFundamental: v })} />
         <ThresholdSelect label="Min Growth" value={filters.minGrowth} onChange={(v) => update({ minGrowth: v })} />
         <ThresholdSelect label="Min Profit." value={filters.minProfitability} onChange={(v) => update({ minProfitability: v })} />

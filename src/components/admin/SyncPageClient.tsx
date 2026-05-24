@@ -10,6 +10,7 @@ import {
   syncProfilesSampleAction,
   syncNasdaq100UniverseAction,
   calculateFundamentalScoresAction,
+  calculateOpportunityScoresAction,
 } from "@/src/actions/market-data-actions";
 import type {
   ProviderTestResult,
@@ -219,6 +220,10 @@ const SYNC_ACTION_META: Record<string, { label: string; durationNote: string }> 
   "calc-fundamental-scores": {
     label: "Calculate Fundamental Scores",
     durationNote: "Score calculation is internal — typically completes in a few seconds for 100 stocks.",
+  },
+  "calc-opportunity-scores": {
+    label: "Calculate Opportunity Scores",
+    durationNote: "Opportunity Score calculation is internal — typically completes in a few seconds for 100 stocks.",
   },
 };
 
@@ -1642,6 +1647,32 @@ export default function SyncPageClient({
                 score rows. Does not overwrite <span className="font-mono text-slate-400">hotScore</span> or{" "}
                 <span className="font-mono text-slate-400">opportunityScore</span>. Creates a minimal score row for stocks that
                 have metrics but no existing score yet.
+              </p>
+            </div>
+
+            <ActionButton
+              variant="sync"
+              onClick={() => runScoreCalc("calc-opportunity-scores", calculateOpportunityScoresAction)}
+              disabled={isLoading || anyChunkedRunning}
+              loading={activeAction === "calc-opportunity-scores"}
+              label="Calculate Opportunity Scores"
+              description="Calculates Opportunity Score v1 from stored Fundamental Score, valuation, growth, risk/context, and 52-week price position. No external APIs."
+            />
+            {isSyncRunning && activeAction === "calc-opportunity-scores" && activeSyncMeta && (
+              <SyncInProgressPanel
+                actionLabel={activeSyncMeta.label}
+                elapsedSeconds={elapsedSeconds2}
+                durationNote={activeSyncMeta.durationNote}
+              />
+            )}
+            <div className="flex items-start gap-2 rounded bg-slate-900/60 border border-slate-700/60 px-3 py-2.5">
+              <Info className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
+              <p className="text-xs text-slate-500 leading-relaxed">
+                <span className="text-slate-400 font-medium">Internal: </span>
+                Updates only <span className="font-mono text-slate-400">oppScore</span>,{" "}
+                <span className="font-mono text-slate-400">oppScoreVersion</span>, and{" "}
+                <span className="font-mono text-slate-400">oppCalculatedAt</span>. Skips stocks with no{" "}
+                <span className="font-mono text-slate-400">fundamentalScore</span>. No external provider calls.
               </p>
             </div>
           </section>

@@ -8,6 +8,7 @@ import { formatCurrency, formatPercent, formatMetricPercent, formatRatio, format
 import ScannerExpandedRow from "./ScannerExpandedRow";
 
 const SCORE_TOOLTIPS: Record<string, string> = {
+  "Opp.": "Opportunity Score v1 — combines fundamental quality (35%), valuation (30%), growth (20%), risk/context (10%), and 52W price position (5%).",
   "Fund.": "Weighted score from growth, profitability, valuation, financial health, and risk/context.",
   "Growth": "Revenue and EPS growth metrics.",
   "Profit.": "Margins, ROE, and ROA.",
@@ -16,7 +17,7 @@ const SCORE_TOOLTIPS: Record<string, string> = {
   "Risk": "Beta and company size context.",
 };
 
-const TOTAL_COLS = 16;
+const TOTAL_COLS = 17;
 
 function ScoreCell({ value }: { value: number | null | undefined }) {
   if (value == null) return <span className="text-slate-600 text-xs">N/A</span>;
@@ -77,6 +78,9 @@ export default function ScannerTable({
             <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-3 py-3">Sector</th>
             <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wider px-3 py-3">Price</th>
             <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wider px-3 py-3">Day %</th>
+            <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wider px-3 py-3">
+              <ScoreHeader label="Opp." />
+            </th>
             <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wider px-3 py-3">
               <ScoreHeader label="Fund." />
             </th>
@@ -165,6 +169,7 @@ export default function ScannerTable({
                     </span>
                   </td>
 
+                  <td className="px-3 py-2.5 text-right"><ScoreCell value={stock.oppScore} /></td>
                   <td className="px-3 py-2.5 text-right"><ScoreCell value={stock.fundamentalScore} /></td>
                   <td className="px-3 py-2.5 text-right"><ScoreCell value={stock.growthScore} /></td>
                   <td className="px-3 py-2.5 text-right"><ScoreCell value={stock.profitabilityScore} /></td>

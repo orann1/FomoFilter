@@ -67,20 +67,41 @@ export default function ScannerExpandedRow({ stock, colSpan }: ScannerExpandedRo
 
           {/* Score Breakdown */}
           <div className="col-span-2 md:col-span-3 lg:col-span-2">
-            <Section title="Score Breakdown">
+            <Section title="Opportunity Score">
               <div className="space-y-2 pt-1">
-                <ScoreBar label="Fundamental" value={stock.fundamentalScore} />
-                <ScoreBar label="Growth" value={stock.growthScore} />
-                <ScoreBar label="Profitability" value={stock.profitabilityScore} />
-                <ScoreBar label="Valuation" value={stock.valuationScore} />
-                <ScoreBar label="Financial Health" value={stock.financialHealthScore} />
-                <ScoreBar label="Risk / Context" value={stock.riskContextScore} />
+                <ScoreBar label="Opportunity" value={stock.oppScore} />
               </div>
+              {stock.oppScore != null && (
+                <p className="text-[10px] text-slate-600 mt-1.5">
+                  Combines fundamental quality (35%), valuation (30%), growth (20%), risk/context (10%), and 52W price position (5%).
+                </p>
+              )}
+              {stock.oppScore == null && (
+                <p className="text-[10px] text-amber-600 mt-1.5">
+                  Run &quot;Calculate Opportunity Scores&quot; in Admin Sync to populate.
+                </p>
+              )}
               <div className="mt-2 pt-2 border-t border-slate-800/60 space-y-0.5">
-                <MetricItem label="Score Version" value={stock.scoreVersion ?? "N/A"} />
-                <MetricItem label="Last Calculated" value={fmtDate(stock.scoreLastCalculated)} />
+                <MetricItem label="Opp. Version" value={stock.oppScoreVersion ?? "N/A"} />
+                <MetricItem label="Opp. Calc At" value={fmtDate(stock.oppCalculatedAt)} />
               </div>
             </Section>
+            <div className="mt-3">
+              <Section title="Fundamental Score">
+                <div className="space-y-2 pt-1">
+                  <ScoreBar label="Fundamental" value={stock.fundamentalScore} />
+                  <ScoreBar label="Growth" value={stock.growthScore} />
+                  <ScoreBar label="Profitability" value={stock.profitabilityScore} />
+                  <ScoreBar label="Valuation" value={stock.valuationScore} />
+                  <ScoreBar label="Financial Health" value={stock.financialHealthScore} />
+                  <ScoreBar label="Risk / Context" value={stock.riskContextScore} />
+                </div>
+                <div className="mt-2 pt-2 border-t border-slate-800/60 space-y-0.5">
+                  <MetricItem label="Score Version" value={stock.scoreVersion ?? "N/A"} />
+                  <MetricItem label="Last Calculated" value={fmtDate(stock.scoreLastCalculated)} />
+                </div>
+              </Section>
+            </div>
           </div>
 
           {/* Growth & Profitability */}

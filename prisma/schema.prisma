@@ -139,6 +139,11 @@ model StockScore {
   scoreVersion         String?
   lastCalculatedAt     DateTime?
 
+  // Opportunity Score v1
+  oppScore             Decimal?
+  oppScoreVersion      String?
+  oppCalculatedAt      DateTime?
+
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 }

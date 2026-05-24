@@ -110,6 +110,20 @@ export default function DashboardSummaryCards({ summary, freshness }: DashboardS
         accent="amber"
       />
       <SummaryCard
+        icon={<Target size={16} />}
+        label="Avg Opportunity"
+        value={summary.averageOpportunityScore != null ? String(summary.averageOpportunityScore) : "N/A"}
+        sub="Opportunity score avg"
+        accent="emerald"
+      />
+      <SummaryCard
+        icon={<Award size={16} />}
+        label="High Opportunity"
+        value={String(summary.stocksAboveOpportunity75)}
+        sub="Opportunity score ≥ 75"
+        accent="emerald"
+      />
+      <SummaryCard
         icon={<RefreshCw size={16} />}
         label="Last Market Sync"
         value={formatSyncDate(freshness.lastMarketDataSyncAt)}

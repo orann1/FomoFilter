@@ -63,6 +63,7 @@ export default function TopFundamentalStocksTable({ stocks }: TopFundamentalStoc
               <th className="px-4 py-3 text-left text-xs text-slate-500 font-medium">Sector</th>
               <th className="px-4 py-3 text-right text-xs text-slate-500 font-medium">Price</th>
               <th className="px-4 py-3 text-right text-xs text-slate-500 font-medium">Day %</th>
+              <th className="px-4 py-3 text-center text-xs text-slate-500 font-medium">Opp.</th>
               <th className="px-4 py-3 text-center text-xs text-slate-500 font-medium">Fund.</th>
               <th className="px-4 py-3 text-center text-xs text-slate-500 font-medium">Growth</th>
               <th className="px-4 py-3 text-center text-xs text-slate-500 font-medium">Profit.</th>
@@ -102,6 +103,11 @@ export default function TopFundamentalStocksTable({ stocks }: TopFundamentalStoc
                   }`}
                 >
                   {stock.changePercent != null ? formatPercent(stock.changePercent) : "N/A"}
+                </td>
+                <td className="px-4 py-3 text-center">
+                  <span className="text-xs font-semibold tabular-nums text-emerald-300">
+                    {formatScore(stock.oppScore)}
+                  </span>
                 </td>
                 <td className="px-4 py-3">
                   <ScoreBar value={stock.fundamentalScore} />

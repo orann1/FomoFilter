@@ -214,16 +214,106 @@ export default function ScoreMethodologyTab() {
         </p>
       </Section>
 
+      {/* ── Opportunity Score v1 ────────────────────────────────────────── */}
+      <Section title="Opportunity Score v1" icon={<Activity className="w-4 h-4" />}>
+        <div className="space-y-3 text-sm text-slate-300 leading-relaxed">
+          <p>
+            <span className="font-semibold text-white">Opportunity Score v1</span> answers:{" "}
+            <em className="text-slate-400">How attractive is this stock as an investment opportunity right now, using available fundamentals, valuation, and price context?</em>
+          </p>
+          <p className="text-slate-400">
+            Unlike Fundamental Score which asks <strong className="text-slate-300">how strong is the company?</strong>,
+            Opportunity Score asks <strong className="text-slate-300">is this a good time to consider it?</strong>{" "}
+            A high-quality company with stretched valuation will score lower on Opportunity than on Fundamentals.
+          </p>
+          <div className="flex items-start gap-2 rounded bg-blue-900/20 border border-blue-800/40 px-3 py-2.5">
+            <Info className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
+            <p className="text-xs text-blue-300">
+              Version label: <span className="font-mono font-semibold">opportunity-v1</span>.
+              Requires <span className="font-mono">fundamentalScore</span> to exist — run Fundamental Score first.
+              No external API calls. Missing components are excluded and remaining weights are re-normalized.
+            </p>
+          </div>
+
+          {/* Weights table */}
+          <div className="overflow-x-auto pt-1">
+            <table className="w-full text-left text-sm">
+              <TableHeader headers={["Component", "Weight", "Source", "Purpose"]} />
+              <tbody>
+                {[
+                  { comp: "Fundamental Quality", weight: "35%", source: "StockScore.fundamentalScore", purpose: "Grounds opportunity in company quality — avoids rewarding cheap but weak stocks" },
+                  { comp: "Valuation Attractiveness", weight: "30%", source: "StockScore.valuationScore", purpose: "Rewards reasonable pricing" },
+                  { comp: "Growth Strength", weight: "20%", source: "StockScore.growthScore", purpose: "A cheap stock with no growth is not necessarily a good opportunity" },
+                  { comp: "Risk / Context", weight: "10%", source: "StockScore.riskContextScore", purpose: "Penalizes excessive risk" },
+                  { comp: "Price Position / 52W", weight: "5%", source: "StockQuote.price + StockMetric.week52High/Low", purpose: "Small timing signal — avoids overextended setups" },
+                ].map((row) => (
+                  <tr key={row.comp} className="border-b border-slate-700/40">
+                    <td className="px-3 py-2 font-medium text-slate-200">{row.comp}</td>
+                    <td className="px-3 py-2 font-mono text-emerald-300">{row.weight}</td>
+                    <td className="px-3 py-2 text-xs text-slate-400 font-mono">{row.source}</td>
+                    <td className="px-3 py-2 text-xs text-slate-400">{row.purpose}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Price position scoring */}
+          <div className="pt-1 space-y-2">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">52-Week Price Position Scoring</p>
+            <p className="text-xs text-slate-500">
+              Formula: <span className="font-mono text-slate-300">position = (price − week52Low) / (week52High − week52Low)</span>.
+              A value of 0 = near 52W low, 1 = near 52W high.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <TableHeader headers={["Position Range", "Score", "Meaning"]} />
+                <tbody>
+                  {[
+                    { range: "0.20 – 0.60", score: "100", meaning: "Attractive / not overextended" },
+                    { range: "0.60 – 0.80", score: "75", meaning: "Reasonable" },
+                    { range: "0.80 – 0.95", score: "50", meaning: "Extended" },
+                    { range: "> 0.95",       score: "30", meaning: "Very close to 52W high" },
+                    { range: "0.00 – 0.20",  score: "60", meaning: "Cheap but possibly weak / downtrend" },
+                    { range: "Missing data", score: "null", meaning: "Excluded from weighted average" },
+                  ].map((row) => (
+                    <tr key={row.range} className="border-b border-slate-700/40">
+                      <td className="px-3 py-1.5 font-mono text-slate-300">{row.range}</td>
+                      <td className="px-3 py-1.5 font-mono text-emerald-300">{row.score}</td>
+                      <td className="px-3 py-1.5 text-slate-400">{row.meaning}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-slate-500">
+              Near-low stocks score 60 (not 100) because a stock near its 52W low may be cheap but also structurally weak.
+              Without technical or news context, over-rewarding the low is avoided.
+            </p>
+          </div>
+
+          {/* Missing data */}
+          <div className="flex items-start gap-2 rounded bg-amber-900/20 border border-amber-800/40 px-3 py-2.5">
+            <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-300">
+              <strong>Missing data handling:</strong> If a component is null (e.g., no price position because 52W data is missing),
+              it is excluded from the weighted average and the remaining weights are re-normalized to 100%.
+              Missing components are <strong>never treated as zero</strong>.
+            </p>
+          </div>
+        </div>
+      </Section>
+
       {/* Future Improvements */}
       <Section title="Future Improvements (Not in v1)" icon={<TrendingUp className="w-4 h-4" />}>
         <div className="text-xs text-slate-400 space-y-2">
           <p>The following are planned improvements for future score versions:</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
             {[
-              "Sector-relative scoring (e.g., compare margins within the same sector)",
+              "Sector-relative scoring (compare margins within the same sector)",
               "ROIC (Return on Invested Capital)",
               "Free Cash Flow and FCF Margin",
-              "FCF Growth",
+              "FCF Growth and FCF yield",
               "Book Value Growth",
               "P/FCF ratio",
               "Asset Turnover and Inventory Turnover",
@@ -232,10 +322,13 @@ export default function ScoreMethodologyTab() {
               "Peer comparison within sector",
               "Z-score normalization for distributions with sufficient data",
               "Moat score (R&D %, brand strength proxy)",
-              "Efficiency score",
-              "Analyst target / upside score",
-              "News and catalyst score",
-              "Technical score",
+              "Analyst target / upside (Opportunity Score v2)",
+              "Technical trend / moving averages (Opportunity Score v2)",
+              "Relative volume anomaly (Opportunity Score v2)",
+              "News and catalyst score (Opportunity Score v2)",
+              "Earnings timing (Opportunity Score v2)",
+              "Sector-relative valuation (Opportunity Score v2)",
+              "Drawdown / rebound pattern (Opportunity Score v2)",
             ].map((item) => (
               <div key={item} className="flex items-start gap-2">
                 <span className="text-slate-600 mt-0.5">•</span>

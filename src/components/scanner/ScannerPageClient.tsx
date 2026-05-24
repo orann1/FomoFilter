@@ -27,6 +27,8 @@ function nullLast(a: number | null | undefined, b: number | null | undefined, de
 function sortStocks(stocks: HotStock[], sortBy: SortKey): HotStock[] {
   const sorted = [...stocks];
   switch (sortBy) {
+    case "opportunity-score":
+      return sorted.sort((a, b) => nullLast(a.oppScore, b.oppScore));
     case "fundamental-score":
       return sorted.sort((a, b) => nullLast(a.fundamentalScore, b.fundamentalScore));
     case "growth-score":
@@ -77,6 +79,8 @@ function applyViewFilter(
   view: ScannerView
 ): HotStock[] {
   switch (view) {
+    case "high-opportunity":
+      return stocks.filter((s) => (s.oppScore ?? 0) >= 75);
     case "high-fundamentals":
       return stocks.filter((s) => (s.fundamentalScore ?? 0) >= 75);
     case "high-growth":
@@ -96,6 +100,7 @@ function applyViewFilter(
 
 function applyScoreThresholds(stocks: HotStock[], filters: ScannerFilterState): HotStock[] {
   return stocks.filter((s) => {
+    if (filters.minOpportunity > 0 && (s.oppScore ?? 0) < filters.minOpportunity) return false;
     if (filters.minFundamental > 0 && (s.fundamentalScore ?? 0) < filters.minFundamental) return false;
     if (filters.minGrowth > 0 && (s.growthScore ?? 0) < filters.minGrowth) return false;
     if (filters.minProfitability > 0 && (s.profitabilityScore ?? 0) < filters.minProfitability) return false;
