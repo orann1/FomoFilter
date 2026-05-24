@@ -4,8 +4,6 @@ export type IndexFilter = "all" | "sp-500" | "nasdaq-100" | "russell-1000-only";
 
 export type ScannerFilterState = {
   sector: string;
-  risk: string;
-  setup: string;
   indexFilter: IndexFilter;
   watchlistOnly: boolean;
   alertActiveOnly: boolean;
@@ -15,16 +13,7 @@ interface ScannerFiltersProps {
   filters: ScannerFilterState;
   onFilterChange: (filters: ScannerFilterState) => void;
   availableSectors: string[];
-  availableSetups: string[];
 }
-
-const riskOptions: { value: string; label: string }[] = [
-  { value: "all", label: "All Risk" },
-  { value: "LOW", label: "Low" },
-  { value: "MEDIUM", label: "Medium" },
-  { value: "HIGH", label: "High" },
-  { value: "EXTREME", label: "Extreme" },
-];
 
 const indexOptions: { value: IndexFilter; label: string }[] = [
   { value: "all", label: "All Indexes" },
@@ -36,8 +25,6 @@ const indexOptions: { value: IndexFilter; label: string }[] = [
 export function hasActiveFilters(filters: ScannerFilterState): boolean {
   return (
     filters.sector !== "all" ||
-    filters.risk !== "all" ||
-    filters.setup !== "all" ||
     filters.indexFilter !== "all" ||
     filters.watchlistOnly ||
     filters.alertActiveOnly
@@ -48,7 +35,6 @@ export default function ScannerFilters({
   filters,
   onFilterChange,
   availableSectors,
-  availableSetups,
 }: ScannerFiltersProps) {
   function update(partial: Partial<ScannerFilterState>) {
     onFilterChange({ ...filters, ...partial });
@@ -94,37 +80,6 @@ export default function ScannerFilters({
         ))}
       </select>
 
-      {/* Risk */}
-      <select
-        value={filters.risk}
-        onChange={(e) => update({ risk: e.target.value })}
-        className={`bg-slate-800/60 border rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-emerald-600/60 transition-colors cursor-pointer ${
-          filters.risk !== "all"
-            ? "border-emerald-600/50 text-emerald-300"
-            : "border-slate-700/60 text-slate-400"
-        }`}
-      >
-        {riskOptions.map((opt) => (
-          <option key={opt.value} value={opt.value}>{opt.label}</option>
-        ))}
-      </select>
-
-      {/* Setup */}
-      <select
-        value={filters.setup}
-        onChange={(e) => update({ setup: e.target.value })}
-        className={`bg-slate-800/60 border rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:border-emerald-600/60 transition-colors cursor-pointer ${
-          filters.setup !== "all"
-            ? "border-emerald-600/50 text-emerald-300"
-            : "border-slate-700/60 text-slate-400"
-        }`}
-      >
-        <option value="all">All Setups</option>
-        {availableSetups.map((s) => (
-          <option key={s} value={s}>{s}</option>
-        ))}
-      </select>
-
       {/* Watchlist only toggle */}
       <button
         onClick={() => update({ watchlistOnly: !filters.watchlistOnly })}
@@ -157,8 +112,6 @@ export default function ScannerFilters({
           onClick={() =>
             onFilterChange({
               sector: "all",
-              risk: "all",
-              setup: "all",
               indexFilter: "all",
               watchlistOnly: false,
               alertActiveOnly: false,

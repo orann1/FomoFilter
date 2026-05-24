@@ -10,7 +10,7 @@ import StockPreviewDrawer from "@/src/components/dashboard/StockPreviewDrawer";
 import ScannerHeader from "./ScannerHeader";
 import ScannerViewPills, { type ScannerView } from "./ScannerViewPills";
 import ScannerControls, { type SortKey } from "./ScannerControls";
-import ScannerFilters, { type ScannerFilterState, type IndexFilter } from "./ScannerFilters";
+import ScannerFilters, { type ScannerFilterState } from "./ScannerFilters";
 import ScannerTable from "./ScannerTable";
 import MobileScannerCard from "./MobileScannerCard";
 import { Radar, Globe } from "lucide-react";
@@ -19,43 +19,35 @@ const CLOSE_ANIMATION_MS = 300;
 
 const DEFAULT_FILTERS: ScannerFilterState = {
   sector: "all",
-  risk: "all",
-  setup: "all",
   indexFilter: "all",
   watchlistOnly: false,
   alertActiveOnly: false,
 };
 
-function getRiskPenalty(risk: string): number {
-  switch (risk) {
-    case "EXTREME": return 30;
-    case "HIGH": return 20;
-    case "MEDIUM": return 10;
-    default: return 0;
-  }
-}
-
-function computeBestSignal(stock: HotStock): number {
-  const analystScore = Math.min(stock.analystUpside * 2, 100);
-  const penalty = getRiskPenalty(stock.risk);
-  return stock.hot * 0.4 + stock.opp * 0.4 + analystScore * 0.1 - penalty * 0.1;
+function nullLast(a: number | null | undefined, b: number | null | undefined, desc = true): number {
+  if (a == null && b == null) return 0;
+  if (a == null) return 1;
+  if (b == null) return -1;
+  return desc ? b - a : a - b;
 }
 
 function sortStocks(stocks: HotStock[], sortBy: SortKey): HotStock[] {
   const sorted = [...stocks];
   switch (sortBy) {
-    case "best-signal":
-      return sorted.sort((a, b) => computeBestSignal(b) - computeBestSignal(a));
-    case "hot-score":
-      return sorted.sort((a, b) => b.hot - a.hot);
-    case "opp-score":
-      return sorted.sort((a, b) => b.opp - a.opp);
+    case "fundamental-score":
+      return sorted.sort((a, b) => nullLast(a.fundamentalScore, b.fundamentalScore));
+    case "growth-score":
+      return sorted.sort((a, b) => nullLast(a.growthScore, b.growthScore));
+    case "profitability-score":
+      return sorted.sort((a, b) => nullLast(a.profitabilityScore, b.profitabilityScore));
+    case "valuation-score":
+      return sorted.sort((a, b) => nullLast(a.valuationScore, b.valuationScore));
+    case "health-score":
+      return sorted.sort((a, b) => nullLast(a.financialHealthScore, b.financialHealthScore));
     case "daily-change":
       return sorted.sort((a, b) => b.change - a.change);
-    case "rel-volume":
-      return sorted.sort((a, b) => b.relativeVolume - a.relativeVolume);
-    case "analyst-upside":
-      return sorted.sort((a, b) => b.analystUpside - a.analystUpside);
+    case "market-cap":
+      return sorted.sort((a, b) => nullLast(a.marketCapFull, b.marketCapFull));
     case "symbol":
       return sorted.sort((a, b) => a.symbol.localeCompare(b.symbol));
     default:
@@ -63,7 +55,7 @@ function sortStocks(stocks: HotStock[], sortBy: SortKey): HotStock[] {
   }
 }
 
-function applyIndexFilter(stocks: HotStock[], indexFilter: IndexFilter): HotStock[] {
+function applyIndexFilter(stocks: HotStock[], indexFilter: ScannerFilterState["indexFilter"]): HotStock[] {
   switch (indexFilter) {
     case "sp-500":
       return stocks.filter((s) => s.isSp500);
@@ -82,29 +74,12 @@ function applyViewFilter(
   view: ScannerView
 ): HotStock[] {
   switch (view) {
-    case "strong-momentum":
-      return stocks.filter((s) => s.change > 3 || s.weekChange > 5);
-    case "unusual-volume":
-      return stocks.filter((s) => s.relativeVolume > 1.5);
-    case "fomo-risk":
-      return stocks.filter((s) => s.risk === "HIGH" || s.risk === "EXTREME");
     case "in-watchlist":
       return stocks.filter((s) => s.inWatchlist);
     case "alert-active":
       return stocks.filter((s) => (alertRulesBySymbol[s.symbol]?.length ?? 0) > 0);
     default:
       return stocks;
-  }
-}
-
-function getViewDefaultSort(view: ScannerView): SortKey {
-  switch (view) {
-    case "hot-today": return "hot-score";
-    case "strong-momentum": return "daily-change";
-    case "best-opportunities": return "opp-score";
-    case "unusual-volume": return "rel-volume";
-    case "fomo-risk": return "hot-score";
-    default: return "best-signal";
   }
 }
 
@@ -135,7 +110,7 @@ export default function ScannerPageClient({
   // Scanner state
   const [activeView, setActiveView] = useState<ScannerView>("all");
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState<SortKey>("best-signal");
+  const [sortBy, setSortBy] = useState<SortKey>("fundamental-score");
   const [filters, setFilters] = useState<ScannerFilterState>(DEFAULT_FILTERS);
   const [universeSlug, setUniverseSlug] = useState(selectedUniverseSlug);
 
@@ -159,11 +134,6 @@ export default function ScannerPageClient({
     return sectors;
   }, [stocks]);
 
-  const availableSetups = useMemo(() => {
-    const setups = [...new Set(stocks.map((s) => s.setup).filter(Boolean))].sort();
-    return setups;
-  }, [stocks]);
-
   // Apply filters + view + sort
   const filteredStocks = useMemo(() => {
     let result = [...stocks];
@@ -184,30 +154,20 @@ export default function ScannerPageClient({
       result = result.filter((s) => s.sector === filters.sector);
     }
 
-    // 4. Risk filter
-    if (filters.risk !== "all") {
-      result = result.filter((s) => s.risk === filters.risk);
-    }
-
-    // 5. Setup filter
-    if (filters.setup !== "all") {
-      result = result.filter((s) => s.setup === filters.setup);
-    }
-
-    // 6. Watchlist only
+    // 4. Watchlist only
     if (filters.watchlistOnly) {
       result = result.filter((s) => s.inWatchlist);
     }
 
-    // 7. Alert active only
+    // 5. Alert active only
     if (filters.alertActiveOnly) {
       result = result.filter((s) => (alertRulesBySymbol[s.symbol]?.length ?? 0) > 0);
     }
 
-    // 8. View filter
+    // 6. View filter
     result = applyViewFilter(result, alertRulesBySymbol, activeView);
 
-    // 9. Sort
+    // 7. Sort
     result = sortStocks(result, sortBy);
 
     return result;
@@ -215,7 +175,6 @@ export default function ScannerPageClient({
 
   function handleViewChange(view: ScannerView) {
     setActiveView(view);
-    setSortBy(getViewDefaultSort(view));
   }
 
   function closeDrawer() {
@@ -306,7 +265,6 @@ export default function ScannerPageClient({
         filters={filters}
         onFilterChange={setFilters}
         availableSectors={availableSectors}
-        availableSetups={availableSetups}
       />
 
       {/* Desktop table */}
@@ -344,7 +302,7 @@ export default function ScannerPageClient({
               setSearch("");
               setActiveView("all");
               setFilters(DEFAULT_FILTERS);
-              setSortBy("best-signal");
+              setSortBy("fundamental-score");
             }}
             className="text-xs text-emerald-400 hover:text-emerald-300 border border-emerald-800/50 px-3 py-1.5 rounded-lg transition-colors"
           >

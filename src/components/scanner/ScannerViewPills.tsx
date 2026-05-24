@@ -1,10 +1,5 @@
 export type ScannerView =
   | "all"
-  | "hot-today"
-  | "strong-momentum"
-  | "best-opportunities"
-  | "unusual-volume"
-  | "fomo-risk"
   | "in-watchlist"
   | "alert-active";
 
@@ -14,15 +9,24 @@ interface ViewPill {
   icon: string;
 }
 
+interface DisabledPill {
+  label: string;
+  icon: string;
+  tooltip: string;
+}
+
 const views: ViewPill[] = [
   { key: "all", label: "All Stocks", icon: "◈" },
-  { key: "hot-today", label: "Hot Today", icon: "🔥" },
-  { key: "strong-momentum", label: "Strong Momentum", icon: "📈" },
-  { key: "best-opportunities", label: "Best Opportunities", icon: "🎯" },
-  { key: "unusual-volume", label: "Unusual Volume", icon: "🌋" },
-  { key: "fomo-risk", label: "FOMO Risk", icon: "⚡" },
   { key: "in-watchlist", label: "In Watchlist", icon: "⭐" },
   { key: "alert-active", label: "Alert Active", icon: "🔔" },
+];
+
+const disabledViews: DisabledPill[] = [
+  { label: "Hot Today", icon: "🔥", tooltip: "Coming soon — requires momentum data" },
+  { label: "Strong Momentum", icon: "📈", tooltip: "Coming soon — requires technical data" },
+  { label: "Best Opportunities", icon: "🎯", tooltip: "Coming soon — requires opportunity score" },
+  { label: "Unusual Volume", icon: "🌋", tooltip: "Coming soon — requires volume data" },
+  { label: "FOMO Risk", icon: "⚡", tooltip: "Coming soon — requires risk scoring" },
 ];
 
 interface ScannerViewPillsProps {
@@ -46,6 +50,15 @@ export default function ScannerViewPills({ activeView, onViewChange }: ScannerVi
           <span>{view.icon}</span>
           {view.label}
         </button>
+      ))}
+
+      {disabledViews.map((view) => (
+        <div key={view.label} title={view.tooltip} className="cursor-not-allowed">
+          <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-slate-800/60 text-slate-600 bg-slate-900/40 whitespace-nowrap select-none">
+            <span>{view.icon}</span>
+            {view.label}
+          </span>
+        </div>
       ))}
     </div>
   );

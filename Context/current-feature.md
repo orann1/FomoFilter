@@ -1,4 +1,4 @@
-# Phase 9J — Resumable Chunked Market Data Sync
+# Phase 10 — Scanner Real Data Integration
 
 ## Status
 
@@ -8,1024 +8,941 @@ Completed
 
 ## Goal
 
-Replace the current long-running Nasdaq 100 full market-data sync with a scalable, resumable, chunk-based sync architecture.
+Move the `/scanner` page from demo/seed-style data to the real market data pipeline built in Phases 9F–9J.
 
-The new architecture must support:
+The Scanner should display real stocks from the database using:
 
 ```txt
-Nasdaq 100 now
-Russell 1000 later
-Larger universes in the future
+Stock
+StockQuote
+StockMetric
+StockScore
+StockUniverseMember
 ```
 
-The process must be highly informative for the Admin user:
+The first version should focus on the data we actually have now:
 
-- Show real progress.
-- Show how many stocks were scanned.
-- Show how many succeeded, skipped, and failed.
-- Show a progress bar.
-- Show current symbol.
-- Show elapsed time.
-- Show estimated remaining time.
-- Show clear success / partial success / failed messages.
-- Allow continuing from the middle if the process stops.
-- Allow restarting the full sync from scratch if the user wants fresh data for everything.
+```txt
+Quote snapshot
+Finnhub basic financial metrics
+Fundamental Score
+Category scores
+Universe membership
+Profile fields
+```
+
+The Scanner should no longer rely on mock, seed, hardcoded, or old demo-style fields as the main display source.
 
 ---
 
-## Why This Change Is Needed
+## Why This Phase Is Needed
 
-The previous Phase 9J implementation proved that syncing all Nasdaq 100 stocks can work locally.
+After the market-data and scoring phases, the system now has real data for Nasdaq 100 stocks:
 
-Manual QA result:
+- Active Nasdaq 100 membership.
+- Quote snapshots from Finnhub.
+- Basic financial metrics from Finnhub.
+- Fundamental Score calculated internally.
+- Data Inventory visibility.
+- Resumable chunked market-data sync.
 
-```txt
-Requested: 100
-Processed: 100
-Updated: 100
-Failed: 0
-Duration: ~385 seconds
-```
+However, the current `/scanner` page still appears to show the original demo/sample stocks and old UI fields.
 
-This is functionally correct for local development, but it is not scalable.
-
-If 100 stocks take around 6.5 minutes, then 1000 stocks may take around:
+Observed issue:
 
 ```txt
-60–70 minutes
+Scanner shows only around 5 stocks:
+AMD
+NVDA
+SMCI
+PLTR
+TSLA
 ```
 
-A single long server action is not suitable for that.
+The Dashboard, however, shows around 101 stocks, but many fields are empty or zero.
 
-Problems with the long-running action approach:
+This suggests the Scanner and Dashboard are still using old score fields or mock/seed concepts such as:
 
-- Risk of request timeout.
-- Not suitable for serverless environments.
-- Not scalable to 1000+ stocks.
-- Hard to resume if interrupted.
-- User must keep the request alive.
-- Failure in the middle is harder to recover from.
-- Progress depends on one long execution.
+```txt
+Hot
+Opportunity
+Risk
+Setup
+Relative Volume
+Upside
+Catalyst
+```
 
-Therefore, Phase 9J should be rebuilt as a **resumable chunked sync job**.
+These fields are not all backed by the new real data pipeline yet.
 
 ---
 
-## Core Architecture
+## Product Decision
 
-Do not run the whole universe sync inside one long server action.
+Phase 10 should make the Scanner truthful and useful with the data that exists today.
 
-Use a job-style flow:
+Do not fake missing fields.
+
+Do not continue showing demo values as if they are real.
+
+The Scanner v1 should become a **Fundamental Scanner** based on:
 
 ```txt
-User clicks Start
-  ↓
-Create SyncRun in DB
-  ↓
-UI repeatedly calls Process Next Chunk
-  ↓
-Each chunk processes a small number of stocks
-  ↓
-Progress is saved after every symbol
-  ↓
-UI polls progress from DB
-  ↓
-If interrupted, the run can be resumed
+Fundamental Score
+Growth Score
+Profitability Score
+Valuation Score
+Financial Health Score
+Risk / Context Score
+Quote data
+Core metrics
+```
+
+Fields that are not yet supported by real data should be hidden, replaced with `N/A`, or moved to future phases.
+
+---
+
+## Main Outcome
+
+At the end of Phase 10:
+
+```txt
+/scanner should show all real scanner-eligible stocks from the DB,
+not only the old sample/demo list.
+```
+
+Expected current result after Phase 9I/9J:
+
+```txt
+Approximately 100+ stocks with quote + score should appear.
+```
+
+Do not hardcode this number.
+
+---
+
+## Phase 10 Scope
+
+This phase has two parts:
+
+1. Audit existing Scanner and Dashboard data sources.
+2. Integrate Scanner with real DB-backed quote + metric + score data.
+
+---
+
+# Part 1 — Audit
+
+## Scanner Audit
+
+Inspect the Scanner implementation and report:
+
+- Which files render `/scanner`.
+- Which files load Scanner data.
+- Whether Scanner uses Prisma directly, server loaders, API routes, mock data, seed data, or hardcoded arrays.
+- What DB query is currently used.
+- Why only around 5 stocks are displayed.
+- Which filters are active by default.
+- Which sort option is active by default.
+- Whether Scanner requires old score fields like:
+  - `hotScore`
+  - `opportunityScore`
+  - `riskScore`
+  - `setup`
+  - `relativeVolume`
+  - `upside`
+  - `catalyst`
+- Whether Scanner currently ignores:
+  - `fundamentalScore`
+  - `growthScore`
+  - `profitabilityScore`
+  - `valuationScore`
+  - `financialHealthScore`
+  - `riskContextScore`
+
+## Dashboard Audit
+
+Inspect the Dashboard implementation and report:
+
+- Which files render `/`.
+- Which files load dashboard data.
+- Why Dashboard shows around 101 stocks.
+- Which fields are real DB fields.
+- Which fields are mock/seed/fallback.
+- Why many Dashboard rows show:
+  - `Hot = 0`
+  - `Opp = 0`
+  - `Setup = Unknown`
+  - `Catalyst = -`
+- Whether Dashboard is using old fields instead of `fundamentalScore`.
+- Whether Dashboard should be changed in this phase or only documented for a later phase.
+
+## Audit Report Requirement
+
+Before implementation, return or include in the implementation report:
+
+```txt
+Scanner data source:
+Dashboard data source:
+Mock/seed/hardcoded data found:
+Old fields still in use:
+Real fields available:
+Reason Scanner shows only 5 stocks:
+Recommended Scanner v1 mapping:
 ```
 
 ---
 
-## Main User Workflow
+# Part 2 — Scanner Real Data Integration
 
-The Sync Actions tab should show this clean workflow:
+## Scanner v1 Purpose
+
+The Scanner v1 should answer:
 
 ```txt
-1. Sync Nasdaq 100 Universe
-2. Sync All Nasdaq 100 Market Data
-3. Calculate Fundamental Scores
+Which real stocks in the selected universe have strong fundamentals and useful current quote data?
 ```
 
-The market-data action should be informative and resumable.
+It should not yet answer:
+
+```txt
+Which stocks are breaking out technically?
+Which stocks have unusual volume?
+Which stocks have near-term catalyst?
+Which stocks have analyst upside?
+Which stocks are FOMO hot today?
+```
+
+Those are future phases.
 
 ---
 
-## Buttons
+## Data Source
 
-### Keep
+The Scanner should load real DB records.
 
-Keep:
+Required relations:
 
 ```txt
-Sync Nasdaq 100 Universe
-Sync All Nasdaq 100 Market Data
-Calculate Fundamental Scores
+Stock
+StockQuote
+StockMetric
+StockScore
+StockUniverseMember
+StockUniverse
 ```
 
-### Remove From UI
-
-Do not show old buttons:
+Suggested Prisma criteria:
 
 ```txt
-Sync Nasdaq 100 Quotes + Metrics — Next 25
-Sync Nasdaq 100 Quote Snapshots — Next 25
+Stock is active
+StockQuote exists
+StockScore exists
 ```
 
-No old market-data buttons should remain visible.
-
-### Market Data Buttons
-
-The market-data section should support these user actions:
-
-#### Start New Sync
+Optional but recommended:
 
 ```txt
-Start Full Market Data Sync
+Universe membership active
+Selected universe = nasdaq-100 / current UI universe
+```
+
+Do not hardcode the sample symbols.
+
+Do not use mock arrays.
+
+Do not use seed-only fallback as the main result.
+
+---
+
+## Initial Universe
+
+For this phase, use Nasdaq 100 / real DB universe data.
+
+Current UI may show:
+
+```txt
+Universe: Russell 1000
 ```
 
 or:
 
 ```txt
-Sync All Nasdaq 100 Market Data
+Universe: US Stocks
 ```
 
-Creates a new SyncRun and begins processing from the first active stock.
+This should be audited and corrected if misleading.
 
-#### Continue Sync
-
-```txt
-Continue Sync
-```
-
-Visible when there is an existing incomplete sync run.
-
-Continues from where the previous run stopped.
-
-#### Restart Full Sync
-
-```txt
-Restart Full Sync
-```
-
-Visible when a completed or incomplete sync exists.
-
-Starts a new run from the beginning, refreshing all active stocks again.
-
-This should be explicit so the user understands it will rescan all stocks.
-
-Recommended confirmation text:
-
-```txt
-This will start a new full sync for all active Nasdaq 100 stocks. Existing quote and metric rows will be updated safely. Continue?
-```
-
-Do not delete existing StockQuote or StockMetric rows before restarting.
-
-Restart means:
-
-```txt
-Create new SyncRun
-Process all active stocks again
-Upsert fresh quote + metric data
-```
-
----
-
-## SyncRun Lifecycle
-
-### 1. queued
-
-A SyncRun has been created but not yet processed.
-
-### 2. running
-
-A SyncRun is actively being processed by chunks.
-
-### 3. paused / interrupted
-
-Processing stopped before completion.
-
-This may happen because:
-
-- User closed the page.
-- Request failed.
-- Rate limit occurred.
-- Server timeout.
-- Manual stop in a future phase.
-
-If no explicit `paused` status exists, use `partial_success` or another existing status carefully, but the UI must be able to identify an incomplete run.
-
-### 4. success
-
-All target stocks were processed successfully.
-
-### 5. partial_success
-
-Some stocks succeeded but some were skipped/failed, or the run stopped before all targets were processed.
-
-### 6. failed
-
-No stocks were successfully processed.
-
----
-
-## DB Requirements
-
-Use the existing `SyncRun` and `SyncRunItem` models where possible.
-
-Existing or recently added progress fields:
-
-```txt
-requestedCount
-processedCount
-successCount
-skippedCount
-failedCount
-currentSymbol
-status
-startedAt
-finishedAt
-durationMs
-message
-persisted
-```
-
-If missing, add only minimal fields.
-
-Potential additional fields if needed:
-
-```txt
-chunkSize
-universeSlug
-syncScope
-lastProcessedSymbol
-```
-
-Only add them if implementation genuinely needs them.
-
-Avoid unnecessary schema complexity.
-
----
-
-## SyncRun Type
-
-Use:
-
-```txt
-market-data-universe-chunked-sync
-```
-
-or, if keeping it specific for this phase:
-
-```txt
-market-data-nasdaq100-chunked-sync
-```
-
-Recommended for future scalability:
-
-```txt
-market-data-universe-chunked-sync
-```
-
-with metadata/message indicating:
-
-```txt
-universeSlug = nasdaq-100
-```
-
-If adding `universeSlug` to SyncRun is too much for this phase, use the type:
-
-```txt
-market-data-nasdaq100-chunked-sync
-```
-
-Provider:
-
-```txt
-finnhub
-```
-
----
-
-## Target Universe
-
-For this phase, the UI should sync:
-
-```txt
-Nasdaq 100
-```
-
-Select all active Nasdaq 100 stocks from DB:
-
-```txt
-StockUniverseMember.isActive = true
-universe.slug = "nasdaq-100"
-```
-
-Do not hardcode 100.
-
-Use DB count.
-
-Future phases can reuse the same architecture for:
-
-```txt
-S&P 500
-Russell 1000
-Custom watchlist
-All active stocks
-```
-
----
-
-## Chunk Size
-
-Use a small controlled chunk.
+If the data currently loaded is Nasdaq 100, the UI should not label it as Russell 1000.
 
 Recommended:
 
 ```txt
-10 stocks per chunk
+Default Universe: Nasdaq 100
 ```
 
-Each stock requires:
+or:
 
 ```txt
-1 Finnhub quote call
-1 Finnhub metrics call
+All Stocks with Score
 ```
 
-So each chunk is:
-
-```txt
-10 stocks × 2 calls = 20 Finnhub calls
-```
-
-This is safer than 100 stocks in one request.
-
-Expected chunk duration:
-
-```txt
-20–40 seconds
-```
-
-depending on API and DB latency.
-
-If this still risks timeout, reduce chunk size to:
-
-```txt
-5 stocks
-```
-
-Do not process all 100 or 1000 in one request.
+Use the real universe slug from DB where possible.
 
 ---
 
-## Rate Limit Strategy
+## Scanner v1 Columns
 
-Finnhub free plan:
+Replace or supplement old demo columns with real columns.
 
-```txt
-60 calls/minute
-```
+Recommended columns:
 
-Use call-start pacing, not sleep-after-call.
-
-### Correct pacing
-
-Track the time each Finnhub call starts.
-
-Before each Finnhub call:
+### Identity
 
 ```txt
-elapsed = now - lastFinnhubCallStartedAt
-if elapsed < 1100ms:
-  wait 1100ms - elapsed
-start call
-set lastFinnhubCallStartedAt = now
+Symbol
+Company
+Sector
+Universe
 ```
 
-Do not add a fixed delay after each call.
-
-This avoids unnecessary runtime while keeping calls under the rate limit.
-
-Target:
+### Quote
 
 ```txt
-~54 calls/minute
+Price
+Day %
+Quote Last Synced
 ```
+
+### Scores
+
+```txt
+Fundamental Score
+Growth Score
+Profitability Score
+Valuation Score
+Financial Health Score
+Risk / Context Score
+Score Version
+Score Last Calculated
+```
+
+### Key Metrics
+
+```txt
+Market Cap
+Revenue Growth TTM
+EPS Growth TTM
+Gross Margin
+Operating Margin
+Net Margin
+ROE
+Debt / Equity
+Current Ratio
+Forward P/E
+PEG
+EV/EBITDA
+Beta
+```
+
+Keep the table readable. If too many columns are too wide, use one of these approaches:
+
+- Show only key columns in the main table.
+- Put extra metrics in an expandable row.
+- Use a compact details drawer.
+- Keep advanced columns for a later phase.
 
 ---
 
-## 429 Handling
+## Recommended Main Table Columns
 
-If Finnhub returns 429:
-
-1. Preserve already successful updates.
-2. Persist current progress.
-3. Show clear message:
-   ```txt
-   Finnhub rate limit reached. You can continue the sync after waiting.
-   ```
-4. Stop the current chunk safely.
-5. Mark the SyncRun as incomplete / partial.
-6. Show a `Continue Sync` button.
-
-Do not wait forever.
-
-Do not use infinite retry.
-
-For this scalable architecture, it is better to stop safely and let the user continue.
-
----
-
-## Processing Logic
-
-### Start New Sync
-
-When user clicks:
+For v1, the main table should be focused and readable:
 
 ```txt
-Start Full Market Data Sync
+Symbol
+Company
+Sector
+Price
+Day %
+Fundamental
+Growth
+Profitability
+Valuation
+Health
+Risk
+P/E
+PEG
+Revenue Growth
+EPS Growth
+ROE
+Debt/Equity
 ```
 
-Do:
-
-1. Load all active Nasdaq 100 symbols.
-2. Create new SyncRun.
-3. Set:
-   ```txt
-   requestedCount = number of active symbols
-   processedCount = 0
-   successCount = 0
-   skippedCount = 0
-   failedCount = 0
-   status = running
-   currentSymbol = null
-   ```
-4. Begin chunk processing.
-
-### Process Next Chunk
-
-For the current SyncRun:
-
-1. Determine which symbols have not yet been processed for this run.
-2. Select next `chunkSize` symbols.
-3. For each symbol:
-   - Set `currentSymbol`.
-   - Fetch quote.
-   - Fetch metrics.
-   - Upsert StockQuote.
-   - Upsert StockMetric.
-   - Create SyncRunItem.
-   - Update processed/success/skipped/failed counts.
-4. If no more symbols:
-   - Mark SyncRun success / partial_success / failed.
-5. If chunk completes but symbols remain:
-   - Leave status as running.
-   - UI should call next chunk automatically or show Continue.
-
-### Continue Sync
-
-When user clicks:
+Optional:
 
 ```txt
-Continue Sync
-```
-
-Do:
-
-1. Use the latest incomplete SyncRun.
-2. Process next chunk.
-3. Continue from unprocessed symbols.
-4. Do not start from the beginning.
-5. Do not duplicate SyncRunItems for already processed symbols.
-
-### Restart Full Sync
-
-When user clicks:
-
-```txt
-Restart Full Sync
-```
-
-Do:
-
-1. Create a new SyncRun.
-2. Target all active stocks again.
-3. Upsert fresh quote and metric data.
-4. Previous SyncRun remains in history.
-
----
-
-## How To Know Which Symbols Are Already Processed
-
-Use `SyncRunItem`.
-
-For a given SyncRun:
-
-```txt
-processed symbols = SyncRunItem.symbol values for that syncRunId
-```
-
-Unprocessed symbols:
-
-```txt
-active universe symbols - processed symbols
-```
-
-This is more reliable than using `processedCount` alone.
-
-`processedCount` is for display.
-
-`SyncRunItem` is the source of truth for resume.
-
----
-
-## UI Progress Requirements
-
-The progress panel must be informative.
-
-During running state, show:
-
-```txt
-Sync in progress
-Sync All Nasdaq 100 Market Data
-
-Current symbol: AAPL
-Processed: 17 / 100
-Succeeded: 16
-Skipped: 1
-Failed: 0
-Progress: 17%
-Elapsed time: 01:42
-Estimated time remaining: 08:10
-Current chunk size: 10
-```
-
-### Progress Bar
-
-Use real progress:
-
-```txt
-processedCount / requestedCount * 100
-```
-
-### Estimated Remaining Time
-
-Estimate from actual speed.
-
-Formula:
-
-```txt
-elapsedMs = now - startedAt
-processed = processedCount
-remaining = requestedCount - processedCount
-
-avgMsPerStock = elapsedMs / max(processed, 1)
-estimatedRemainingMs = remaining * avgMsPerStock
-```
-
-Display only after at least a few stocks are processed.
-
-Before enough data:
-
-```txt
-Estimating...
-```
-
-Do not show fake ETA.
-
-Use real observed progress.
-
----
-
-## UI Status Messages
-
-### Running
-
-```txt
-Sync is running. Please keep this page open.
-```
-
-### Completed successfully
-
-```txt
-Success — all 100 stocks were synced.
-```
-
-or DB-based:
-
-```txt
-Success — all X stocks were synced.
-```
-
-### Partial / interrupted
-
-```txt
-Sync stopped before completion.
-Processed X / Y stocks.
-You can continue from where it stopped.
-```
-
-Show button:
-
-```txt
-Continue Sync
-```
-
-### Failed
-
-```txt
-Sync failed before any stock was updated.
-You can restart the full sync.
-```
-
-Show button:
-
-```txt
-Restart Full Sync
-```
-
-### Rate limit
-
-```txt
-Finnhub rate limit reached.
-Processed X / Y stocks.
-Wait a moment, then continue the sync.
-```
-
-Show:
-
-```txt
-Continue Sync
-Restart Full Sync
+Market Cap
+Quote Updated
+Score Updated
 ```
 
 ---
 
-## Auto-Continue vs Manual Continue
+## Old Columns
 
-Preferred for this phase:
+Do not show old columns as real values unless backed by actual data.
+
+### Hide or mark unavailable for now
 
 ```txt
-Auto-process chunks while the page stays open.
+Hot
+Opportunity
+Setup
+Relative Volume
+Upside
+Catalyst
+FOMO Risk
 ```
 
-Flow:
+### If kept in UI temporarily
 
-1. User clicks Start.
-2. UI calls process-next-chunk.
-3. When chunk completes, UI checks if run is still running.
-4. If symbols remain, UI calls process-next-chunk again.
-5. Progress polling continues.
-6. If an error or rate limit occurs, auto-processing stops and user sees Continue.
+Use one of these approaches:
 
-This avoids one long request while still giving a one-click experience.
+```txt
+N/A
+Coming soon
+Requires technical/news/analyst data
+```
 
-If auto-processing is too risky, manual Continue is acceptable, but the user specifically wants a smooth informative process, so auto-processing is preferred.
+Do not show demo values for these fields.
 
 ---
 
-## Polling
+## Default Sorting
 
-Use a lightweight API route or loader to fetch progress.
-
-Recommended:
+Default sort should be:
 
 ```txt
-GET /api/admin/sync-runs/latest?type=market-data-nasdaq100-chunked-sync
+Fundamental Score desc
 ```
 
-or updated equivalent.
-
-Poll every:
+Secondary sort:
 
 ```txt
-2 seconds
+Profitability Score desc
+Growth Score desc
+Symbol asc
 ```
 
-Stop polling when:
-
-```txt
-status is success / partial_success / failed
-```
-
-Keep polling while:
-
-```txt
-status = running
-```
+Do not sort by old `Best Signal`, `Hot`, or demo fields unless they are real.
 
 ---
 
-## Process Next Chunk API
+## Filters
 
-Add or update an endpoint/action:
+Keep filters simple for v1.
+
+Recommended filters:
 
 ```txt
-POST /api/admin/sync-runs/process-next
+Universe
+Sector
+Search by symbol/company
+Minimum Fundamental Score
+Minimum Growth Score
+Minimum Profitability Score
+Maximum Valuation Score or valuation range
+Has Quote
+Has Metrics
+Has Score
 ```
 
-or a server action if it does not block progress polling.
+Optional filters:
 
-Given previous QA, API route is preferred for progress operations because server action polling can be blocked behind long-running actions.
+```txt
+Market Cap range
+Day % positive/negative
+```
 
-The endpoint should:
+Do not include filters for unsupported concepts unless they are disabled or clearly marked future.
 
-- Process only one chunk.
-- Return current progress.
-- Never expose API keys.
-- Never return raw provider payloads.
-- Respect rate limits.
-- Be idempotent as much as possible.
+Unsupported for v1:
+
+```txt
+Hot Today
+Strong Momentum
+Best Opportunities
+Unusual Volume
+FOMO Risk
+Catalyst
+Alert Active
+```
+
+Unless these are backed by real DB data.
 
 ---
 
-## Start / Restart API
+## Top Filter Pills
 
-Add or update endpoint/action:
-
-```txt
-POST /api/admin/sync-runs/start
-```
-
-or an equivalent server action.
-
-It should support:
+Current top filter pills may include:
 
 ```txt
-mode = start
-mode = restart
-universeSlug = nasdaq-100
+All Stocks
+Hot Today
+Strong Momentum
+Best Opportunities
+Unusual Volume
+FOMO Risk
+In Watchlist
+Alert Active
 ```
 
-If server action is used, it must not perform the full sync. It should only create the SyncRun.
+In Phase 10:
+
+- Keep `All Stocks`.
+- Keep `In Watchlist` only if backed by DB.
+- Keep `Alert Active` only if backed by DB.
+- Hide or disable unsupported pills:
+  - Hot Today
+  - Strong Momentum
+  - Best Opportunities
+  - Unusual Volume
+  - FOMO Risk
+
+Alternative:
+
+Show disabled pills with tooltip:
+
+```txt
+Coming soon — requires technical/momentum data.
+```
+
+But do not let them filter based on mock/demo values.
 
 ---
 
-## Concurrency Rules
+## Scanner Count
 
-Do not allow multiple active market-data syncs for the same universe.
-
-Before starting:
-
-1. Check if a running/incomplete SyncRun exists.
-2. If yes:
-   - Show Continue Sync.
-   - Do not start another one unless user chooses Restart.
-3. If Restart:
-   - Mark old run as partial/interrupted if needed.
-   - Create new run.
-
-The UI should clearly show:
-
-```txt
-A sync is already in progress.
-Continue it or restart from the beginning.
-```
-
----
-
-## Data Safety
-
-Do not delete existing data during sync.
-
-Use safe upsert behavior.
-
-Rules:
-
-- Do not overwrite valid quote values with invalid provider data.
-- Do not overwrite valid metric values with invalid provider data.
-- If one provider call fails for a symbol, preserve existing data.
-- If quote succeeds but metrics fails, save quote and mark partial.
-- If metrics succeeds but quote fails, save metrics and mark partial.
-- Create a SyncRunItem for every processed symbol.
-
----
-
-## Review Results
-
-After completion, show:
-
-```txt
-Success / Partial Success / Failed
-Requested
-Processed
-Succeeded
-Skipped
-Failed
-Duration
-Persisted
-Message
-```
-
-Symbol details should show per-symbol reason.
+Scanner should show the real count.
 
 Example:
 
 ```txt
-AAPL — updated_quote_updated_metrics — Quote updated, Metrics updated
-MSFT — partial_update — Quote updated, Metrics skipped
+101 stocks
+```
+
+or:
+
+```txt
+100 stocks
+```
+
+depending on the actual DB query.
+
+The count should match the displayed filtered results.
+
+No hardcoded counts.
+
+---
+
+## Data Integrity Rules
+
+Do not invent values.
+
+If a value is missing:
+
+```txt
+N/A
+```
+
+Do not display:
+
+```txt
+0
+```
+
+unless the true DB value is actually zero.
+
+This is important for fields like:
+
+```txt
+Growth Score
+Hot Score
+Opportunity Score
+Valuation Score
+Catalyst
+Relative Volume
+```
+
+A missing score is not the same as zero.
+
+---
+
+## Scanner Eligibility
+
+Use the current eligibility logic unless a bug is discovered:
+
+```txt
+quote exists
+score exists
+stock active
+```
+
+If the scanner should also require metrics, confirm whether score already implies metrics.
+
+Do not change eligibility rules without documenting the reason.
+
+---
+
+## Dashboard Handling
+
+The Dashboard currently appears to show 101 stocks but many old fields are empty or zero.
+
+For Phase 10, there are two acceptable approaches:
+
+### Option A — Audit only
+
+Document Dashboard issues and defer Dashboard UI changes to Phase 11.
+
+This is acceptable if Phase 10 stays focused on Scanner.
+
+### Option B — Minimal Dashboard fix
+
+If the Dashboard uses the same data mapper as Scanner and is easy to fix safely, update it to avoid demo values.
+
+Possible minimal fixes:
+
+- Replace old `Hot Stocks Today` heading with `Top Fundamental Scores`.
+- Show `Fundamental Score` instead of `Hot`.
+- Show `Growth/Profitability/Valuation` instead of `Opp/Risk` if appropriate.
+- Show `N/A` instead of fake catalyst/setup.
+
+Do not overbuild Dashboard in Phase 10.
+
+Recommended:
+
+```txt
+Focus Phase 10 on Scanner.
+Audit Dashboard and make only small safe fixes if needed.
 ```
 
 ---
 
-## Sync History
+## Data Mapping
 
-Sync History should show the chunked sync run.
+Create a clear mapping from DB fields to Scanner row fields.
 
-Columns should show:
+Example:
 
-- type
-- provider
-- status
-- requested
-- processed if available
-- updated/success
-- skipped
-- failed
-- persisted
-
-Expanding the row should show per-symbol details.
-
----
-
-## Data Inventory
-
-No major redesign needed.
-
-After sync:
-
-- Quote Last Synced updates.
-- Metrics Last Synced updates.
-- Metrics Source remains Finnhub.
-- Has Metrics remains accurate.
+| Scanner Field | DB Source |
+| --- | --- |
+| Symbol | `Stock.symbol` |
+| Company | `Stock.name` |
+| Sector | `Stock.sector` |
+| Price | `StockQuote.price` |
+| Day % | `StockQuote.changePercent` |
+| Fundamental | `StockScore.fundamentalScore` |
+| Growth | `StockScore.growthScore` |
+| Profitability | `StockScore.profitabilityScore` |
+| Valuation | `StockScore.valuationScore` |
+| Health | `StockScore.financialHealthScore` |
+| Risk | `StockScore.riskContextScore` |
+| Revenue Growth | `StockMetric.revenueGrowthTTMYoy` |
+| EPS Growth | `StockMetric.epsGrowthTTMYoy` |
+| ROE | `StockMetric.roeTTM` |
+| Debt/Equity | `StockMetric.totalDebtToEquityAnnual` |
+| P/E | `StockMetric.peBasicExclExtraTTM` |
+| Forward P/E | `StockMetric.forwardPE` |
+| PEG | `StockMetric.pegTTM` |
+| Market Cap | `StockMetric.marketCapitalization` or `Stock.marketCap` depending on final source |
 
 ---
 
-## Score Calculation
+## Formatting Rules
 
-Do not automatically calculate scores after market data sync.
+### Scores
 
-After market data sync completes, show a reminder:
+Display scores as integers if stored as decimal:
 
 ```txt
-Market data sync completed. Run Calculate Fundamental Scores to refresh scores.
+81
+67
+94
+```
+
+If null:
+
+```txt
+N/A
+```
+
+### Percentages
+
+Display with `%`.
+
+Examples:
+
+```txt
++3.99%
+-1.90%
+```
+
+For metric percentages:
+
+```txt
+Revenue Growth: 12.4%
+Gross Margin: 64.1%
+ROE: 33.2%
+```
+
+### Currency
+
+Display prices as:
+
+```txt
+$215.33
+```
+
+Market cap can be compact:
+
+```txt
+$3.1T
+$245B
+```
+
+### Ratios
+
+Display:
+
+```txt
+P/E: 31.2
+PEG: 1.8
+Debt/Equity: 0.42
+```
+
+### Missing Values
+
+Display:
+
+```txt
+N/A
+```
+
+Do not use zero as fallback.
+
+---
+
+## UI Requirements
+
+The Scanner should remain clean and readable.
+
+Requirements:
+
+- Clear title.
+- Clear universe label.
+- Real result count.
+- Search input.
+- Basic filters.
+- Sort dropdown.
+- Main table with real columns.
+- No demo-only values.
+- No broken layout with 100+ rows.
+- Loading state if needed.
+- Empty state if no stocks match filters.
+
+---
+
+## Suggested Scanner Header
+
+Example:
+
+```txt
+Scanner
+Discover fundamentally strong stocks using real market data and internal scores.
+```
+
+Universe line:
+
+```txt
+Universe: Nasdaq 100
+101 stocks
+```
+
+or DB-driven:
+
+```txt
+Universe: Nasdaq 100
+100 stocks
 ```
 
 ---
 
-## No Scanner Changes
+## Sort Options
 
-Do not change Scanner in this phase.
+Recommended v1 sort options:
+
+```txt
+Fundamental Score
+Growth Score
+Profitability Score
+Valuation Score
+Financial Health Score
+Day %
+Market Cap
+Symbol
+```
+
+Default:
+
+```txt
+Fundamental Score desc
+```
+
+Remove or hide:
+
+```txt
+Best Signal
+Hot
+Opportunity
+```
+
+unless mapped to real fields.
 
 ---
 
-## UX Copy Requirements
+## No New Data Sync
 
-The market-data section should explain:
+Do not add new external API calls.
+
+Do not add new market data sync logic.
+
+Do not call Finnhub/FMP/Twelve from Scanner.
+
+Scanner must read from DB only.
+
+---
+
+## No Scoring Changes
+
+Do not change the Fundamental Score calculation in this phase.
+
+Do not recalculate scores in Scanner.
+
+Scores should be precomputed by the Admin score calculation action.
+
+---
+
+## No Provider Calls From Scanner
+
+Important:
+
+`/scanner` must not call external providers.
+
+Allowed:
 
 ```txt
-This sync updates quote snapshots and basic financial metrics for all active Nasdaq 100 stocks.
-The process runs in small chunks so it can handle larger universes later.
-Progress is saved after each stock.
-If the process stops, you can continue from where it stopped.
-Use Restart Full Sync if you want to rescan all stocks from the beginning.
+Prisma query
+Internal server loader
+DB reads
 ```
 
-Show key numbers:
+Not allowed:
 
 ```txt
-Active stocks: X
-Estimated Finnhub calls: X * 2
-Chunk size: 10
-Rate limit: paced below 60 calls/minute
+Finnhub calls
+FMP calls
+Twelve Data calls
+Yahoo calls
+Apify calls
 ```
 
 ---
 
-## Timeout / Deployment Note
+## Performance
 
-This chunked architecture is designed to avoid long single-request timeouts.
+For 100 stocks, normal table rendering is fine.
 
-Still document:
+For future 1000+ stocks, keep the data loader efficient.
+
+Requirements:
+
+- Use server-side DB query.
+- Avoid N+1 queries.
+- Include relations in one Prisma query if possible.
+- Avoid client-side provider calls.
+- Keep row model compact.
+
+Pagination is optional for Phase 10, but consider if the table becomes too large.
+
+Acceptable for now:
 
 ```txt
-Each chunk must complete within deployment request limits.
-If chunk duration is too long, reduce chunk size.
-For large universes, this design can be extended into a true background worker or scheduled job.
+Render all scanner-eligible stocks for Nasdaq 100.
+```
+
+Future phase:
+
+```txt
+Pagination / virtualization for Russell 1000.
 ```
 
 ---
 
 ## Browser QA Checklist
 
-### Initial UI
+Open:
+
+```txt
+/scanner
+```
+
+Confirm:
+
+1. Scanner no longer shows only the old 5 demo stocks.
+2. Scanner shows all DB stocks that satisfy quote + score eligibility.
+3. Count matches displayed rows.
+4. Universe label is accurate.
+5. Old demo values are gone or marked unavailable.
+6. Fundamental Score column is visible.
+7. Category score columns are visible or accessible.
+8. Price and Day % come from `StockQuote`.
+9. Financial metrics come from `StockMetric`.
+10. Default sort is Fundamental Score descending.
+11. Search by symbol/company works.
+12. Sector filter works.
+13. Universe filter works if present.
+14. Unsupported filters are hidden or disabled.
+15. Missing values display as `N/A`, not fake zero.
+16. No external provider calls happen from Scanner render.
+17. Layout works with 100+ rows.
 
 Open:
 
 ```txt
-/admin/sync → Sync Actions
+/
 ```
 
-Confirm:
+Dashboard QA:
 
-1. Old Next 25 buttons are absent.
-2. Sync All Nasdaq 100 Market Data is visible.
-3. Explanation text is clear.
-4. Active stock count is shown.
-5. Estimated calls are shown.
-6. Chunk size is shown.
-7. Continue / Restart controls appear only when relevant.
+1. Dashboard still loads.
+2. It does not break after Scanner changes.
+3. If Dashboard still shows old fields, document that it is deferred.
+4. If minimal Dashboard fixes were made, confirm they use real fields.
 
-### Start Full Sync
+---
 
-Click:
-
-```txt
-Sync All Nasdaq 100 Market Data
-```
+## Regression QA
 
 Confirm:
 
-1. SyncRun is created.
-2. Progress panel appears.
-3. Progress bar starts at 0%.
-4. Current symbol appears.
-5. Processed / total updates.
-6. Succeeded/skipped/failed updates.
-7. ETA appears after some progress.
-8. UI continues chunk-by-chunk without one long blocking request.
-9. Buttons are disabled or changed appropriately while running.
-
-### Continue Sync
-
-Simulate interruption if practical:
-
-1. Stop the process or reload page mid-run.
-2. Return to Sync Actions.
-3. UI shows incomplete sync.
-4. Continue Sync button appears.
-5. Clicking Continue resumes from unprocessed symbols.
-6. Already processed symbols are not duplicated.
-
-### Restart Full Sync
-
-Click:
-
-```txt
-Restart Full Sync
-```
-
-Confirm:
-
-1. New SyncRun is created.
-2. Previous run remains in history.
-3. New run starts from all active stocks again.
-4. Existing StockQuote and StockMetric rows are updated safely, not duplicated.
-
-### Completion
-
-After run completes:
-
-1. Status is success if all stocks processed.
-2. Processed equals requested.
-3. Progress reaches 100%.
-4. Clear success message appears.
-5. Review Results shows final counts.
-6. Sync History records the run.
-7. Data Inventory timestamps update.
-
-### Rate Limit
-
-If 429 occurs:
-
-1. Sync stops safely or pauses.
-2. Progress is persisted.
-3. Message explains rate limit.
-4. Continue Sync is available.
-5. No successful data is lost.
-
-### Duplicate Checks
-
-Confirm:
-
-- No duplicate StockQuote rows.
-- No duplicate StockMetric rows.
-- No duplicate SyncRunItem rows for the same symbol in the same run.
-
-### Regression
-
-Confirm:
-
-- Universe Sync works.
-- Calculate Fundamental Scores works.
-- Provider Tests work.
-- Sample DB Writes work.
-- Data Inventory works.
-- Score Methodology works.
-- Dashboard loads.
-- Scanner loads.
-- No external provider calls happen from Scanner render.
+- Admin Sync loads.
+- Data Inventory loads.
+- Score Methodology loads.
+- Sync Actions tab loads.
+- Market data sync remains unchanged.
+- Score calculation remains unchanged.
+- Watchlist page loads.
+- Alerts page loads if applicable.
+- No API keys or raw provider payloads are exposed.
 
 ---
 
@@ -1040,63 +957,69 @@ npx prisma validate
 npx prisma migrate status
 ```
 
+No Prisma migration should be needed for Phase 10.
+
+If a migration is needed, stop and explain why before adding it.
+
 ---
 
 ## Required Implementation Report
 
 Return a concise report in English only with:
 
-1. Files created.
-2. Files changed.
-3. Migration name and fields, if any.
-4. Old buttons removed.
-5. New start/continue/restart behavior.
-6. Chunk size.
-7. Rate-limit strategy.
-8. Progress tracking implementation.
-9. ETA calculation.
-10. Polling implementation.
-11. API routes/server actions added.
-12. Resume logic.
-13. Restart logic.
-14. SyncRun / SyncRunItem usage.
-15. Full sync QA result.
-16. Continue QA result.
-17. Restart QA result.
-18. Runtime per chunk.
-19. Duplicate row verification.
-20. Automated check results.
-21. Known issues.
-22. Ready for commit or not.
+1. Files inspected.
+2. Scanner audit result.
+3. Dashboard audit result.
+4. Mock/seed/hardcoded data found.
+5. Files changed.
+6. Data loader/query changed.
+7. New Scanner field mapping.
+8. Columns displayed.
+9. Filters/sort changes.
+10. Unsupported fields hidden/disabled.
+11. Whether Dashboard was changed or only audited.
+12. Confirmation no provider calls were added.
+13. Browser QA results.
+14. Regression QA results.
+15. Automated check results.
+16. Known issues.
+17. Ready for commit or not.
 
 ---
 
 ## Acceptance Criteria
 
-Phase 9J is complete when:
+Phase 10 is complete when:
 
-- The old `Next 25` market-data buttons are gone from the UI.
-- There is one clear market-data sync flow.
-- The sync runs in chunks, not as one long request.
-- The process can continue after interruption.
-- The user can restart the full sync from the beginning.
-- Progress is informative and DB-backed.
-- Progress includes:
-  - current symbol
-  - processed / total
-  - succeeded / skipped / failed
-  - elapsed time
-  - estimated remaining time
-  - progress bar
-- Clear success/partial/failure messages are shown.
-- Rate limits are handled safely.
-- No duplicate quote/metric rows are created.
-- Score calculation remains a separate explicit step.
-- Scanner is unchanged.
+- `/scanner` uses real DB data.
+- `/scanner` does not show only the old 5 demo stocks.
+- `/scanner` shows all scanner-eligible real stocks.
+- Fundamental Score is visible.
+- Category scores are visible or accessible.
+- Old unsupported columns are not shown as fake real values.
+- Missing values are displayed as `N/A`.
+- Scanner default sorting uses Fundamental Score.
+- No external provider calls happen from Scanner.
+- Dashboard behavior is audited.
+- Any Dashboard issue is either fixed safely or documented for the next phase.
 - Build passes.
 - TypeScript passes.
 - Prisma validates.
 - Migration status is clean.
+
+---
+
+## Future Phases
+
+After Phase 10, possible next phases:
+
+```txt
+Phase 11 — Scanner UX and Filtering Improvements
+Phase 12 — Opportunity Score
+Phase 13 — Technical / Momentum Data
+Phase 14 — News / Catalyst Data
+Phase 15 — Russell 1000 Universe Expansion
+```
 
 ---
 
@@ -1123,3 +1046,4 @@ Phase 9J is complete when:
 - Phase 9H-B completed (2026-05-23): Nasdaq 100 Quote + Basic Financials Sync. Added `StockMetric` Prisma model (28 Decimal? fields: growth, profitability, financial strength, valuation, market/risk context; `stockId @unique`; `provider`, `rawMetricCount`, `lastSyncedAt`, `createdAt`, `updatedAt`) via migration `20260522154752_add_stock_metrics`. Added `fetchFinnhubBasicFinancials(symbol)` to `src/lib/market-data/providers/finnhub.ts` mapping 28 Finnhub metric fields with bracket notation for `totalDebt/totalEquityAnnual`, `52WeekHigh`, `52WeekLow`; Finnhub `marketCapitalization` (millions) multiplied by 1,000,000 before storing; percentage fields stored as-is (47.86 = 47.86%). Added `getNextNasdaq100MarketDataBatch(limit=25)` selector in `src/lib/data/admin-universes.ts` (priority: missing metrics → missing quotes → oldest metric sync → oldest quote sync → symbol ASC). Added `syncNasdaq100MarketDataAction()` to `src/actions/market-data-actions.ts` (type=`market-data-nasdaq100-batch`, provider=`finnhub`; 2 Finnhub calls per symbol — quote + metric; 500ms delay between symbols; stops on 429 rate-limit with partial-success persistence; safe-update pattern: create uses `safeNum() ?? undefined`, update uses `safeNum() ?? existingMetric?.field ?? null`; non-null assertion on required `price` field confirmed valid by preceding `isValidNumber` guard; persists `SyncRun` + `SyncRunItem` per symbol with per-field outcome messages). Extended `AdminStockDataInventoryRow` type and `getAdminStockDataInventory()` in `src/lib/data/admin-stock-data.ts` with 30+ metric fields (metric relation included in Prisma query; percentage fields suffixed with `%`; market cap formatted as `$X.XXB`). Updated `src/components/admin/DataInventoryTab.tsx`: added 20+ metric columns across Growth, Profitability, Financial Strength, and Valuation/Market sections with `Finnhub` source labels; added `Missing Metrics` filter pill; expanded summary cards from 6 to 8 (added With Metrics, Missing Metrics). Updated `src/components/admin/SyncPageClient.tsx`: added `Nasdaq 100 Market Data Sync` section in Sync Actions tab with metrics coverage panel; UX cleanup — removed old quote-only Nasdaq batch button from Sync Actions, removed Sample Sync from Sync Actions, added `Sample DB Writes` section to Provider Tests tab with inline progress panel. `syncNasdaq100QuoteSnapshotsAction` retained in `market-data-actions.ts` (internal use, not exposed in UI). Build passes, `tsc --noEmit` zero errors, `prisma validate` valid, `prisma migrate status` clean. Approved by user.
 - Phase 9I completed (2026-05-23): Fundamental Score Foundation + Score Methodology Tab. Added 8 nullable fields to `StockScore` via migration `20260523153618_add_fundamental_score_fields` (`fundamentalScore`, `growthScore`, `profitabilityScore`, `valuationScore`, `financialHealthScore`, `riskContextScore`, `scoreVersion`, `lastCalculatedAt`). Created `src/lib/scoring/fundamental-score.ts` — deterministic scoring engine with 16 metric helper functions, `categoryAverage()` excluding nulls, weight re-normalization for missing categories, ROE cap at 60% and Interest Coverage cap at 30x (scoring only, raw values untouched), version constant `SCORE_VERSION = "fundamental-v1"`. Added `calculateFundamentalScoresAction()` to `src/actions/market-data-actions.ts` — no external API calls, skips stocks without `StockMetric`, upserts `StockScore` preserving existing `hotScore`/`opportunityScore`, persists `SyncRun` (`type=fundamental-score-calculation`, `provider=internal`) + `SyncRunItem` per symbol. Created `src/components/admin/ScoreMethodologyTab.tsx` — 6 sections: overview, category weights, 21-metric scoring rules table, caps/limitations, example calculation (score=72), future improvements. Updated `src/lib/data/admin-stock-data.ts` and `DataInventoryTab.tsx` to include 8 score columns with `Internal` source labels. Updated `SyncPageClient.tsx` to add Score Calculation section (Sync Actions tab) and Score Methodology tab (tab 6). Bug found and fixed during QA: Turbopack dev server had stale Prisma client cache from before `prisma generate` — fixed by clearing `.next/` and re-running `prisma generate`. Result: 100 stocks scored, 0 failed, 101 scanner-eligible, no duplicates, all scores in [0,100]. Build passes, `tsc --noEmit` zero errors, `prisma validate` valid, `prisma migrate status` clean. Approved by user.
 - Phase 9J completed (2026-05-24): Resumable Chunked Market Data Sync. Replaced the old long-running Nasdaq 100 full sync (single server action, ~385s) with a scalable chunk-based architecture. Added `processedCount` and `currentSymbol` to `SyncRun` via migration `20260524061553_add_sync_run_progress_fields`. Created three new API routes: `POST /api/admin/sync-runs/start` (creates or restarts SyncRun), `POST /api/admin/sync-runs/process-next` (processes one chunk of 10 stocks), `GET /api/admin/sync-runs/latest` (polling endpoint, updated type). Removed old `syncNasdaq100MarketDataAction` batch server action and all old Next 25 buttons from the UI. Chunk size: 10 stocks per chunk (20 Finnhub calls). Rate-limit strategy: call-start pacing — ≥1100ms between Finnhub call starts (~54 calls/minute). Resume logic: `SyncRunItem` rows for the active `syncRunId` are the source of truth; unprocessed = all active symbols minus already-itemised symbols. Restart creates a new `SyncRun`; previous run remains in history. Auto-continue loop: UI calls `process-next` sequentially while `status === "running"` and `!done`; 2-second polling via `/latest` runs in parallel. ETA: `avgMsPerStock = elapsedMs / processedCount`; shows "Estimating…" until processedCount ≥ 2. Paused state UX: dedicated `PausedSyncPanel` shows paused-at timestamp (`finishedAt`), reason (`message` or fallback), last symbol, processed/total counts, amber progress bar, and guidance text. Rate limit message: "Finnhub rate limit reached. Continue the sync after waiting." Restart message: "Restarted by user before completion." No duplicate `StockQuote`, `StockMetric`, or `SyncRunItem` rows. Score calculation remains a separate explicit step. Scanner unchanged. Build passes, `tsc --noEmit` zero errors, `prisma validate` valid, `prisma generate` run to refresh client types. Approved by user.
+- Phase 10 completed (2026-05-24): Scanner Real Data Integration. Moved `/scanner` from 5 demo/seed stocks to 100 real Nasdaq 100 stocks from the DB. Changed default universe from `russell-1000` to `nasdaq-100`; added `isActive: true` membership filter and `metric: true` include to the Prisma query. Added 4 formatter helpers to `src/lib/formatters.ts` (`formatScore`, `formatMetricPercent`, `formatRatio`, `formatCompactCurrency`). Extended `HotStock` type in `mock-data.ts` with 13 new optional fields for fundamental scores and key metrics. Rewrote `ScannerTable.tsx` with 18 real columns (Symbol, Sector, Price, Day%, Fund., Growth, Profit., Valuat., Health, Risk, P/E, PEG, Rev Gr., EPS Gr., ROE, D/E, Mkt Cap). Replaced sort options with 8 fundamental-focused keys; default sort is Fundamental Score descending. Removed Risk and Setup filters (not backed by real data). Reduced view pills to 3 active (All Stocks, In Watchlist, Alert Active); 5 unsupported pills (Hot Today, Strong Momentum, Best Opportunities, Unusual Volume, FOMO Risk) shown as disabled with "Coming soon" tooltips. Updated `MobileScannerCard.tsx` to show fundamental/growth/profitability/health scores and key metrics. Updated `ScannerHeader.tsx` subtitle. Dashboard audited — still uses `hotScore`/`opportunityScore` (= 0 for real stocks); deferred to Phase 11. No Prisma migration needed. No external provider calls added. Browser QA confirmed: 100 stocks loading (META top at Fund=89), all new columns visible with real values, N/A for missing metrics, disabled pills visible, dashboard unbroken. Build passes, `tsc --noEmit` zero errors, `prisma validate` valid, `prisma migrate status` clean. Known issue: universe selector strip shows "Russell 1000" button (only BASE_UNIVERSE type) with no active highlight since selected data is Nasdaq 100 (INDEX type) — UX improvement deferred to Phase 11. Approved by user.

@@ -1,21 +1,23 @@
 import { Search, ArrowUpDown } from "lucide-react";
 
 export type SortKey =
-  | "best-signal"
-  | "hot-score"
-  | "opp-score"
+  | "fundamental-score"
+  | "growth-score"
+  | "profitability-score"
+  | "valuation-score"
+  | "health-score"
   | "daily-change"
-  | "rel-volume"
-  | "analyst-upside"
+  | "market-cap"
   | "symbol";
 
 const sortOptions: { value: SortKey; label: string }[] = [
-  { value: "best-signal", label: "Best Signal" },
-  { value: "hot-score", label: "Hot Score" },
-  { value: "opp-score", label: "Opportunity Score" },
-  { value: "daily-change", label: "Daily Change" },
-  { value: "rel-volume", label: "Relative Volume" },
-  { value: "analyst-upside", label: "Analyst Upside" },
+  { value: "fundamental-score", label: "Fundamental Score" },
+  { value: "growth-score", label: "Growth Score" },
+  { value: "profitability-score", label: "Profitability Score" },
+  { value: "valuation-score", label: "Valuation Score" },
+  { value: "health-score", label: "Financial Health Score" },
+  { value: "daily-change", label: "Day % Change" },
+  { value: "market-cap", label: "Market Cap" },
   { value: "symbol", label: "Symbol (A–Z)" },
 ];
 
