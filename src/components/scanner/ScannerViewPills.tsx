@@ -5,6 +5,7 @@ export type ScannerView =
   | "high-growth"
   | "high-profitability"
   | "reasonable-valuation"
+  | "high-analyst-upside"
   | "in-watchlist"
   | "alert-active";
 
@@ -28,6 +29,7 @@ const views: ViewPill[] = [
   { key: "high-growth", label: "High Growth", icon: "📈", tooltip: "Growth Score ≥ 75" },
   { key: "high-profitability", label: "High Profitability", icon: "💰", tooltip: "Profitability Score ≥ 75" },
   { key: "reasonable-valuation", label: "Reasonable Valuation", icon: "🎯", tooltip: "Valuation Score ≥ 60" },
+  { key: "high-analyst-upside", label: "High Analyst Upside", icon: "🧠", tooltip: "Analyst Upside ≥ 20%" },
   { key: "in-watchlist", label: "In Watchlist", icon: "⭐" },
   { key: "alert-active", label: "Alert Active", icon: "🔔" },
 ];

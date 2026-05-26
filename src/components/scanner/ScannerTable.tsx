@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState } from "react";
 import { Star, Bell, BarChart3, Info, ChevronDown, ChevronRight } from "lucide-react";
 import type { HotStock } from "@/src/lib/mock-data";
 import type { ActiveAlertRule } from "@/src/lib/data/dashboard";
@@ -17,7 +17,7 @@ const SCORE_TOOLTIPS: Record<string, string> = {
   "Risk": "Beta and company size context.",
 };
 
-const TOTAL_COLS = 17;
+const TOTAL_COLS = 20;
 
 function ScoreCell({ value }: { value: number | null | undefined }) {
   if (value == null) return <span className="text-slate-600 text-xs">N/A</span>;
@@ -78,6 +78,9 @@ export default function ScannerTable({
             <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-3 py-3">Sector</th>
             <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wider px-3 py-3">Price</th>
             <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wider px-3 py-3">Day %</th>
+            <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wider px-3 py-3">Target</th>
+            <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wider px-3 py-3">Upside</th>
+            <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-3 py-3">Rating</th>
             <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wider px-3 py-3">
               <ScoreHeader label="Opp." />
             </th>
@@ -114,9 +117,8 @@ export default function ScannerTable({
             const isExpanded = expandedSymbols.has(stock.symbol);
 
             return (
-              <>
+              <React.Fragment key={stock.symbol}>
                 <tr
-                  key={stock.symbol}
                   onClick={() => onSelectStock(stock)}
                   className={`border-b border-slate-800/60 cursor-pointer transition-colors ${
                     isSelected
@@ -167,6 +169,40 @@ export default function ScannerTable({
                     <span className={`font-semibold tabular-nums text-xs ${stock.change >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                       {formatPercent(stock.change)}
                     </span>
+                  </td>
+
+                  {/* Analyst Target */}
+                  <td className="px-3 py-2.5 text-right">
+                    <span className="text-xs text-slate-300 tabular-nums">
+                      {stock.analystTargetPrice != null ? formatCurrency(stock.analystTargetPrice) : <span className="text-slate-600">N/A</span>}
+                    </span>
+                  </td>
+
+                  {/* Analyst Upside */}
+                  <td className="px-3 py-2.5 text-right">
+                    {stock.analystUpsidePercent != null ? (
+                      <span className={`text-xs font-semibold tabular-nums ${stock.analystUpsidePercent >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                        {stock.analystUpsidePercent >= 0 ? "+" : ""}{Number(stock.analystUpsidePercent).toFixed(1)}%
+                      </span>
+                    ) : (
+                      <span className="text-slate-600 text-xs">N/A</span>
+                    )}
+                  </td>
+
+                  {/* Analyst Rating */}
+                  <td className="px-3 py-2.5 text-left">
+                    {stock.analystRatingNormalized ? (
+                      <span className={`text-xs font-medium ${
+                        stock.analystRatingNormalized === "Strong Buy" ? "text-emerald-300" :
+                        stock.analystRatingNormalized === "Buy" ? "text-emerald-400/70" :
+                        stock.analystRatingNormalized === "Hold" ? "text-amber-400" :
+                        stock.analystRatingNormalized === "Sell" ? "text-red-400/70" :
+                        stock.analystRatingNormalized === "Strong Sell" ? "text-red-400" :
+                        "text-slate-500"
+                      }`}>{stock.analystRatingNormalized}</span>
+                    ) : (
+                      <span className="text-slate-600 text-xs">N/A</span>
+                    )}
                   </td>
 
                   <td className="px-3 py-2.5 text-right"><ScoreCell value={stock.oppScore} /></td>
@@ -224,7 +260,7 @@ export default function ScannerTable({
                 {isExpanded && (
                   <ScannerExpandedRow key={`${stock.symbol}-expanded`} stock={stock} colSpan={TOTAL_COLS} />
                 )}
-              </>
+              </React.Fragment>
             );
           })}
         </tbody>

@@ -97,6 +97,15 @@ export type HotStock = {
   oppScore?: number | null;
   oppScoreVersion?: string | null;
   oppCalculatedAt?: string | null;
+  // Phase 14: analyst data
+  analystTargetPrice?: number | null;
+  analystUpsidePercent?: number | null;
+  analystRatingNormalized?: string | null;
+  analystCount?: number | null;
+  analystTargetHigh?: number | null;
+  analystTargetLow?: number | null;
+  analystSource?: string | null;
+  analystLastSyncedAt?: string | null;
 };
 
 export const mockHotStocks: HotStock[] = [

@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { Search, CheckCircle, XCircle, List } from "lucide-react";
 import type { AdminStockDataInventoryRow } from "@/src/lib/data/admin-stock-data";
 
-type FilterId = "all" | "scanner-eligible" | "missing-score" | "missing-quote" | "missing-metrics" | "nasdaq100";
+type FilterId = "all" | "scanner-eligible" | "missing-score" | "missing-quote" | "missing-metrics" | "missing-analyst" | "nasdaq100";
 
 const FILTERS: Array<{ id: FilterId; label: string }> = [
   { id: "all", label: "All" },
@@ -13,6 +13,7 @@ const FILTERS: Array<{ id: FilterId; label: string }> = [
   { id: "missing-score", label: "Missing Score" },
   { id: "missing-quote", label: "Missing Quote" },
   { id: "missing-metrics", label: "Missing Metrics" },
+  { id: "missing-analyst", label: "Missing Analyst" },
   { id: "nasdaq100", label: "Nasdaq 100" },
 ];
 
@@ -675,6 +676,115 @@ const COLUMNS: ColumnDef[] = [
       </span>
     ),
   },
+  // ── Analyst Data ──────────────────────────────────────────────────────────────
+  {
+    label: "Has Analyst",
+    sourceLabel: "DB",
+    align: "center",
+    minWidth: "90px",
+    render: (r) => <YesNoBadge value={r.hasAnalystData} />,
+  },
+  {
+    label: "Target Price",
+    sourceLabel: "Finnhub",
+    align: "right",
+    minWidth: "90px",
+    render: (r) =>
+      r.analystTargetPrice ? (
+        <span className="font-mono text-xs text-slate-300">{r.analystTargetPrice}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "Upside %",
+    sourceLabel: "Internal",
+    align: "right",
+    minWidth: "80px",
+    render: (r) => {
+      if (!r.analystUpsidePercent) return <NA />;
+      const val = parseFloat(r.analystUpsidePercent);
+      const cls = val > 0 ? "text-emerald-400" : val < 0 ? "text-red-400" : "text-slate-300";
+      return <span className={`font-mono text-xs ${cls}`}>{r.analystUpsidePercent}</span>;
+    },
+  },
+  {
+    label: "Analyst Rating",
+    sourceLabel: "Finnhub",
+    align: "left",
+    minWidth: "100px",
+    render: (r) => {
+      if (!r.analystRating) return <NA />;
+      const cls =
+        r.analystRating === "Strong Buy" ? "text-emerald-300 font-medium" :
+        r.analystRating === "Buy" ? "text-emerald-400" :
+        r.analystRating === "Hold" ? "text-amber-400" :
+        r.analystRating === "Sell" ? "text-red-400" :
+        r.analystRating === "Strong Sell" ? "text-red-300 font-medium" :
+        "text-slate-400";
+      return <span className={`text-xs ${cls}`}>{r.analystRating}</span>;
+    },
+  },
+  {
+    label: "Analyst Count",
+    sourceLabel: "Finnhub",
+    align: "right",
+    minWidth: "90px",
+    render: (r) =>
+      r.analystCount ? (
+        <span className="font-mono text-xs text-slate-300">{r.analystCount}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "Target High",
+    sourceLabel: "Finnhub",
+    align: "right",
+    minWidth: "90px",
+    render: (r) =>
+      r.analystTargetHigh ? (
+        <span className="font-mono text-xs text-slate-300">{r.analystTargetHigh}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "Target Low",
+    sourceLabel: "Finnhub",
+    align: "right",
+    minWidth: "90px",
+    render: (r) =>
+      r.analystTargetLow ? (
+        <span className="font-mono text-xs text-slate-300">{r.analystTargetLow}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "Analyst Source",
+    sourceLabel: "DB",
+    align: "left",
+    minWidth: "90px",
+    render: (r) =>
+      r.analystSource ? (
+        <span className="font-mono text-[10px] text-slate-400">{r.analystSource}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "Analyst Synced",
+    sourceLabel: "DB",
+    align: "left",
+    minWidth: "120px",
+    render: (r) =>
+      r.analystLastSyncedAt ? (
+        <span className="text-xs text-slate-400">{r.analystLastSyncedAt}</span>
+      ) : (
+        <NA />
+      ),
+  },
   // ── Optional ──────────────────────────────────────────────────────────────────
   {
     label: "In Watchlist",
@@ -709,6 +819,8 @@ export default function DataInventoryTab({ rows }: DataInventoryTabProps) {
       missingMetric: rows.filter((r) => !r.hasMetric).length,
       withScore: rows.filter((r) => r.hasScore).length,
       scannerEligible: rows.filter((r) => r.scannerEligible).length,
+      withAnalystData: rows.filter((r) => r.hasAnalystData).length,
+      missingAnalyst: rows.filter((r) => !r.hasAnalystData).length,
       nasdaq100Active: rows.filter((r) => r.inNasdaq100 && r.membershipActive).length,
     }),
     [rows]
@@ -739,6 +851,9 @@ export default function DataInventoryTab({ rows }: DataInventoryTabProps) {
       case "missing-metrics":
         result = result.filter((r) => !r.hasMetric);
         break;
+      case "missing-analyst":
+        result = result.filter((r) => !r.hasAnalystData);
+        break;
       case "nasdaq100":
         result = result.filter((r) => r.inNasdaq100 && r.membershipActive);
         break;
@@ -757,7 +872,7 @@ export default function DataInventoryTab({ rows }: DataInventoryTabProps) {
           <h2 className="text-sm font-semibold text-slate-200">Stock Data Inventory</h2>
           <span className="text-xs text-slate-500 ml-1">DB-only snapshot</span>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2">
           <SummaryCard label="Total Stocks" value={summary.totalStocks} />
           <SummaryCard label="With Quote" value={summary.withQuote} color="text-emerald-400" />
           <SummaryCard
@@ -776,6 +891,12 @@ export default function DataInventoryTab({ rows }: DataInventoryTabProps) {
             label="Scanner Eligible"
             value={summary.scannerEligible}
             color={summary.scannerEligible > 0 ? "text-emerald-400" : "text-amber-400"}
+          />
+          <SummaryCard label="With Analyst Data" value={summary.withAnalystData} color="text-emerald-400" />
+          <SummaryCard
+            label="Missing Analyst"
+            value={summary.missingAnalyst}
+            color={summary.missingAnalyst > 0 ? "text-amber-400" : "text-slate-400"}
           />
           <SummaryCard label="Nasdaq 100 Active" value={summary.nasdaq100Active} color="text-blue-400" />
         </div>

@@ -109,6 +109,7 @@ interface SyncPageClientProps {
   dbStockSummary: DbStockSummary;
   stockInventory: AdminStockDataInventoryRow[];
   initialChunkedSync: ChunkedSyncProgress | null;
+  initialAnalystSync: ChunkedSyncProgress | null;
 }
 
 type LastResult =
@@ -586,9 +587,7 @@ function ChunkedSyncResultPanel({ progress }: { progress: ChunkedSyncProgress })
       )}
 
       <p className="text-xs text-slate-500">
-        Check the Sync History tab for a full record. Run{" "}
-        <span className="text-slate-400 font-medium">Calculate Fundamental Scores</span>{" "}
-        to refresh scores.
+        Check the Sync History tab for a full record.
       </p>
     </div>
   );
@@ -1107,6 +1106,7 @@ export default function SyncPageClient({
   dbStockSummary,
   stockInventory,
   initialChunkedSync,
+  initialAnalystSync,
 }: SyncPageClientProps) {
   const router = useRouter();
   const [lastResult, setLastResult] = useState<LastResult>(null);
@@ -1115,7 +1115,7 @@ export default function SyncPageClient({
   const [activeTab, setActiveTab] = useState<TabId>("overview");
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Chunked sync state
+  // Market data chunked sync state
   const [chunkedSync, setChunkedSync] = useState<ChunkedSyncProgress | null>(initialChunkedSync);
   const [autoRunning, setAutoRunning] = useState(false);
   const [chunkError, setChunkError] = useState<string | null>(null);
@@ -1124,11 +1124,24 @@ export default function SyncPageClient({
   const syncStartedAtRef = useRef<number>(0);
   const [elapsedMs, setElapsedMs] = useState(0);
 
+  // Analyst data chunked sync state
+  const [analystSync, setAnalystSync] = useState<ChunkedSyncProgress | null>(initialAnalystSync);
+  const [analystAutoRunning, setAnalystAutoRunning] = useState(false);
+  const [analystChunkError, setAnalystChunkError] = useState<string | null>(null);
+  const analystAutoRunRef = useRef(false);
+  const analystPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const analystSyncStartedAtRef = useRef<number>(0);
+  const [analystElapsedMs, setAnalystElapsedMs] = useState(0);
+  const analystTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       if (pollRef.current) clearInterval(pollRef.current);
       autoRunRef.current = false;
+      if (analystTimerRef.current) clearInterval(analystTimerRef.current);
+      if (analystPollRef.current) clearInterval(analystPollRef.current);
+      analystAutoRunRef.current = false;
     };
   }, []);
 
@@ -1273,6 +1286,127 @@ export default function SyncPageClient({
     await startAutoRun();
   }
 
+  // ── Analyst sync helpers ───────────────────────────────────────────────────
+
+  function startAnalystPolling() {
+    if (analystPollRef.current) return;
+    analystPollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch("/api/admin/analyst-sync/latest", { cache: "no-store" });
+        if (res.ok) {
+          const progress: ChunkedSyncProgress | null = await res.json();
+          if (progress) setAnalystSync(progress);
+        }
+      } catch {
+        // network error — keep polling
+      }
+    }, 2000);
+  }
+
+  function stopAnalystPolling() {
+    if (analystPollRef.current) {
+      clearInterval(analystPollRef.current);
+      analystPollRef.current = null;
+    }
+  }
+
+  function startAnalystElapsedTimer() {
+    analystSyncStartedAtRef.current = Date.now();
+    if (analystTimerRef.current) clearInterval(analystTimerRef.current);
+    analystTimerRef.current = setInterval(() => {
+      setAnalystElapsedMs(Date.now() - analystSyncStartedAtRef.current);
+    }, 500);
+  }
+
+  function stopAnalystElapsedTimer() {
+    if (analystTimerRef.current) {
+      clearInterval(analystTimerRef.current);
+      analystTimerRef.current = null;
+    }
+  }
+
+  const startAnalystAutoRun = useCallback(async () => {
+    analystAutoRunRef.current = true;
+    setAnalystAutoRunning(true);
+    setAnalystChunkError(null);
+    startAnalystPolling();
+    startAnalystElapsedTimer();
+
+    try {
+      while (analystAutoRunRef.current) {
+        const res = await fetch("/api/admin/analyst-sync/process-next", { method: "POST" });
+        const data = await res.json();
+
+        if (!res.ok) {
+          setAnalystChunkError(data.error ?? "Chunk processing failed.");
+          break;
+        }
+
+        if (data.progress) setAnalystSync(data.progress);
+
+        if (data.done || !analystAutoRunRef.current) break;
+        if (data.progress?.status !== "running") break;
+      }
+    } catch (err) {
+      setAnalystChunkError(err instanceof Error ? err.message : "Network error during chunk.");
+    }
+
+    stopAnalystPolling();
+    stopAnalystElapsedTimer();
+    analystAutoRunRef.current = false;
+    setAnalystAutoRunning(false);
+
+    try {
+      const finalRes = await fetch("/api/admin/analyst-sync/latest", { cache: "no-store" });
+      if (finalRes.ok) {
+        const finalProgress = await finalRes.json();
+        if (finalProgress) setAnalystSync(finalProgress);
+      }
+    } catch {
+      // ignore
+    }
+
+    router.refresh();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router]);
+
+  async function handleStartAnalystSync() {
+    setAnalystChunkError(null);
+    const res = await fetch("/api/admin/analyst-sync/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "start" }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setAnalystChunkError(data.error ?? "Failed to start analyst sync.");
+      return;
+    }
+    setAnalystSync(data);
+    await startAnalystAutoRun();
+  }
+
+  async function handleContinueAnalystSync() {
+    setAnalystChunkError(null);
+    await startAnalystAutoRun();
+  }
+
+  async function handleRestartAnalystSync() {
+    setAnalystChunkError(null);
+    const res = await fetch("/api/admin/analyst-sync/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "restart" }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setAnalystChunkError(data.error ?? "Failed to restart analyst sync.");
+      return;
+    }
+    setAnalystSync(data);
+    await startAnalystAutoRun();
+  }
+
   // ── Other sync/test helpers ────────────────────────────────────────────────
 
   function runTest(label: string, fn: () => Promise<ProviderTestResult>) {
@@ -1349,7 +1483,14 @@ export default function SyncPageClient({
   const showResult = !autoRunning && chunkedSync && isTerminal(chunkedSync);
   const showContinue = !autoRunning && isIncomplete(chunkedSync);
   const showRestart = !autoRunning && chunkedSync !== null;
-  const anyChunkedRunning = autoRunning;
+
+  const analystShowProgress = analystAutoRunning;
+  const analystShowPaused = !analystAutoRunning && isIncomplete(analystSync);
+  const analystShowResult = !analystAutoRunning && analystSync && isTerminal(analystSync);
+  const analystShowContinue = !analystAutoRunning && isIncomplete(analystSync);
+  const analystShowRestart = !analystAutoRunning && analystSync !== null;
+
+  const anyChunkedRunning = autoRunning || analystAutoRunning;
 
   return (
     <div className="max-w-4xl mx-auto space-y-5">
@@ -1610,7 +1751,100 @@ export default function SyncPageClient({
             )}
           </section>
 
-          {/* 3 — Score Calculation */}
+          {/* 3 — Analyst Data Sync (chunked) */}
+          <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
+            <div>
+              <div className="flex items-center gap-2 mb-0.5">
+                <Database className="w-4 h-4 text-slate-400" />
+                <h2 className="text-sm font-semibold text-slate-200">Analyst Data Sync</h2>
+                <span className="text-xs font-medium text-emerald-700 bg-emerald-900/40 border border-emerald-800/50 px-2 py-0.5 rounded ml-1">
+                  Writes to DB
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                Fetches analyst target price and recommendation data from Finnhub for all active Nasdaq 100
+                stocks. Stores target price, upside %, rating, and analyst counts in{" "}
+                <span className="font-mono text-slate-400">StockAnalystData</span>. Does not change scores.
+              </p>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex flex-wrap gap-2">
+              {!analystSync || isTerminal(analystSync) ? (
+                <button
+                  onClick={handleStartAnalystSync}
+                  disabled={isLoading || anyChunkedRunning}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {analystAutoRunning ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Play className="w-3.5 h-3.5" />
+                  )}
+                  Sync Nasdaq 100 Analyst Data
+                </button>
+              ) : null}
+
+              {analystShowContinue && (
+                <button
+                  onClick={handleContinueAnalystSync}
+                  disabled={isLoading || anyChunkedRunning}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium bg-blue-700 hover:bg-blue-600 text-white border border-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <SkipForward className="w-3.5 h-3.5" />
+                  Continue Sync
+                </button>
+              )}
+
+              {analystShowRestart && !analystAutoRunning && (
+                <button
+                  onClick={handleRestartAnalystSync}
+                  disabled={isLoading || anyChunkedRunning}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium bg-slate-700 hover:bg-slate-600 text-slate-200 border border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Restart Full Sync
+                </button>
+              )}
+            </div>
+
+            {analystShowProgress && analystSync && (
+              <ChunkedSyncProgressPanel
+                progress={analystSync}
+                autoRunning={analystAutoRunning}
+                chunkError={analystChunkError}
+                elapsedMs={analystElapsedMs}
+              />
+            )}
+
+            {analystShowPaused && analystSync && (
+              <PausedSyncPanel progress={analystSync} chunkError={analystChunkError} />
+            )}
+
+            {analystChunkError && !analystSync && (
+              <p className="text-xs text-red-400 bg-red-900/20 border border-red-800/40 rounded px-3 py-2">
+                {analystChunkError}
+              </p>
+            )}
+
+            {analystShowResult && analystSync && (
+              <ChunkedSyncResultPanel progress={analystSync} />
+            )}
+
+            <div className="rounded bg-slate-900/60 border border-slate-700/60 px-3 py-2.5 space-y-2">
+              <div className="flex items-start gap-2">
+                <Info className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
+                <div className="text-xs space-y-0.5 text-slate-500">
+                  <p>Uses Finnhub. 2 calls per stock: <span className="font-mono text-slate-400">/stock/price-target</span> + <span className="font-mono text-slate-400">/stock/recommendation</span>.</p>
+                  <p>Chunk size: 10 stocks. Rate limited to ~50 calls/minute (≥1.2s between stocks).</p>
+                  <p>Upside % is calculated internally: <span className="font-mono text-slate-400">((target - price) / price) × 100</span>.</p>
+                  <p className="text-amber-500">Does not change Opportunity Score v1. Scores will use analyst data in a future phase.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* 4 — Score Calculation */}
           <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
             <div>
               <div className="flex items-center gap-2 mb-0.5">

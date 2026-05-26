@@ -74,6 +74,17 @@ export type AdminStockDataInventoryRow = {
   week52Low: string | null;
   dividendYieldIndicatedAnnual: string | null;
 
+  // Analyst Data
+  hasAnalystData: boolean;
+  analystTargetPrice: string | null;
+  analystUpsidePercent: string | null;
+  analystRating: string | null;
+  analystCount: string | null;
+  analystTargetHigh: string | null;
+  analystTargetLow: string | null;
+  analystSource: string | null;
+  analystLastSyncedAt: string | null;
+
   inWatchlist: boolean;
   hasActiveAlert: boolean;
 };
@@ -112,6 +123,7 @@ export async function getAdminStockDataInventory(): Promise<AdminStockDataInvent
       quote: true,
       score: true,
       metric: true,
+      analystData: true,
       universeMemberships: {
         include: {
           universe: { select: { slug: true } },
@@ -227,6 +239,21 @@ export async function getAdminStockDataInventory(): Promise<AdminStockDataInvent
       dividendYieldIndicatedAnnual: metric?.dividendYieldIndicatedAnnual != null
         ? `${fmtDecimal(metric.dividendYieldIndicatedAnnual)}%`
         : null,
+
+      // Analyst Data
+      hasAnalystData: stock.analystData !== null,
+      analystTargetPrice: fmtDecimal(stock.analystData?.targetPrice),
+      analystUpsidePercent: stock.analystData?.analystUpsidePercent != null
+        ? `${fmtDecimal(stock.analystData.analystUpsidePercent)}%`
+        : null,
+      analystRating: stock.analystData?.analystRating ?? null,
+      analystCount: stock.analystData?.analystCount != null
+        ? String(stock.analystData.analystCount)
+        : null,
+      analystTargetHigh: fmtDecimal(stock.analystData?.targetHigh),
+      analystTargetLow: fmtDecimal(stock.analystData?.targetLow),
+      analystSource: stock.analystData?.source ?? null,
+      analystLastSyncedAt: formatShortDate(stock.analystData?.lastSyncedAt),
 
       inWatchlist: stock.watchlistItems.length > 0,
       hasActiveAlert: stock.alertRules.some((r) => r.isActive),
