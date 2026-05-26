@@ -3,6 +3,8 @@ import { SlidersHorizontal, Star, Bell, X } from "lucide-react";
 export type IndexFilter = "all" | "sp-500" | "nasdaq-100" | "russell-1000-only";
 export type ScoreThreshold = 0 | 50 | 60 | 70 | 80 | 90;
 
+export type AnalystUpsideThreshold = 0 | 10 | 20 | 30 | 50;
+
 export type ScannerFilterState = {
   sector: string;
   indexFilter: IndexFilter;
@@ -15,6 +17,7 @@ export type ScannerFilterState = {
   minValuation: ScoreThreshold;
   minHealth: ScoreThreshold;
   positiveDay: boolean;
+  minAnalystUpside: AnalystUpsideThreshold;
 };
 
 interface ScannerFiltersProps {
@@ -28,6 +31,14 @@ const indexOptions: { value: IndexFilter; label: string }[] = [
   { value: "sp-500", label: "S&P 500" },
   { value: "nasdaq-100", label: "Nasdaq 100" },
   { value: "russell-1000-only", label: "Russell 1000 Only" },
+];
+
+const analystUpsideOptions: { value: AnalystUpsideThreshold; label: string }[] = [
+  { value: 0, label: "Any" },
+  { value: 10, label: "10%+" },
+  { value: 20, label: "20%+" },
+  { value: 30, label: "30%+" },
+  { value: 50, label: "50%+" },
 ];
 
 const thresholdOptions: { value: ScoreThreshold; label: string }[] = [
@@ -51,7 +62,8 @@ export function hasActiveFilters(filters: ScannerFilterState): boolean {
     filters.minProfitability > 0 ||
     filters.minValuation > 0 ||
     filters.minHealth > 0 ||
-    filters.positiveDay
+    filters.positiveDay ||
+    filters.minAnalystUpside > 0
   );
 }
 
@@ -67,6 +79,7 @@ export const DEFAULT_FILTERS: ScannerFilterState = {
   minValuation: 0,
   minHealth: 0,
   positiveDay: false,
+  minAnalystUpside: 0,
 };
 
 function ThresholdSelect({
@@ -201,6 +214,24 @@ export default function ScannerFilters({
         <ThresholdSelect label="Min Profit." value={filters.minProfitability} onChange={(v) => update({ minProfitability: v })} />
         <ThresholdSelect label="Min Valuat." value={filters.minValuation} onChange={(v) => update({ minValuation: v })} />
         <ThresholdSelect label="Min Health" value={filters.minHealth} onChange={(v) => update({ minHealth: v })} />
+
+        {/* Analyst Upside filter */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-slate-500 whitespace-nowrap">Min Upside</span>
+          <select
+            value={filters.minAnalystUpside}
+            onChange={(e) => update({ minAnalystUpside: Number(e.target.value) as AnalystUpsideThreshold })}
+            className={`bg-slate-800/60 border rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-emerald-600/60 transition-colors cursor-pointer ${
+              filters.minAnalystUpside > 0
+                ? "border-emerald-600/50 text-emerald-300"
+                : "border-slate-700/60 text-slate-400"
+            }`}
+          >
+            {analystUpsideOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
       </div>
     </div>
   );

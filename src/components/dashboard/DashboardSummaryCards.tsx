@@ -7,6 +7,7 @@ import {
   Award,
   RefreshCw,
   Calculator,
+  BadgeDollarSign,
 } from "lucide-react";
 import type { DashboardSummary, DashboardFreshness } from "@/src/lib/data/dashboard";
 
@@ -122,6 +123,20 @@ export default function DashboardSummaryCards({ summary, freshness }: DashboardS
         value={String(summary.stocksAboveOpportunity75)}
         sub="Opportunity score ≥ 75"
         accent="emerald"
+      />
+      <SummaryCard
+        icon={<BadgeDollarSign size={16} />}
+        label="With Analyst Data"
+        value={String(summary.withAnalystData)}
+        sub={summary.withAnalystData > 0 ? `${summary.stocksWithHighUpside} with ≥20% upside` : "Run Analyst Sync"}
+        accent={summary.withAnalystData > 0 ? "blue" : "slate"}
+      />
+      <SummaryCard
+        icon={<TrendingUp size={16} />}
+        label="Avg Analyst Upside"
+        value={summary.averageAnalystUpside != null ? `${summary.averageAnalystUpside > 0 ? "+" : ""}${summary.averageAnalystUpside}%` : "N/A"}
+        sub="Consensus target vs price"
+        accent={summary.averageAnalystUpside != null && summary.averageAnalystUpside > 0 ? "emerald" : "slate"}
       />
       <SummaryCard
         icon={<RefreshCw size={16} />}

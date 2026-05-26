@@ -57,6 +57,7 @@ export async function getScannerData({
       quote: true,
       score: true,
       metric: true,
+      analystData: true,
       drawerDetail: true,
       universeMemberships: { include: { universe: { select: { slug: true } } } },
     },
@@ -183,6 +184,15 @@ export async function getScannerData({
         metricsLastSynced: m?.lastSyncedAt?.toISOString() ?? null,
         quoteSource: s.quote!.source ?? null,
         metricsSource: m?.provider ?? null,
+        // Phase 14: analyst data
+        analystTargetPrice: s.analystData ? toNum(s.analystData.targetPrice) : null,
+        analystUpsidePercent: s.analystData ? toNum(s.analystData.analystUpsidePercent) : null,
+        analystRatingNormalized: s.analystData?.analystRating ?? null,
+        analystCount: s.analystData?.analystCount ?? null,
+        analystTargetHigh: s.analystData ? toNum(s.analystData.targetHigh) : null,
+        analystTargetLow: s.analystData ? toNum(s.analystData.targetLow) : null,
+        analystSource: s.analystData?.source ?? null,
+        analystLastSyncedAt: s.analystData?.lastSyncedAt?.toISOString() ?? null,
       };
     });
 

@@ -1,4 +1,4 @@
-export type MarketDataProvider = "fmp" | "twelve-data" | "finnhub";
+export type MarketDataProvider = "fmp" | "twelve-data" | "finnhub" | "fmp+finnhub";
 
 export type ProviderTestResult<T = unknown> = {
   ok: boolean;

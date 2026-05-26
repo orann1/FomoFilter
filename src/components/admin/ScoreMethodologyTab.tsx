@@ -304,6 +304,51 @@ export default function ScoreMethodologyTab() {
         </div>
       </Section>
 
+      {/* ── Analyst Data (Phase 14) ─────────────────────────────────────── */}
+      <Section title="Analyst Data — Collected, Not Yet Scored" icon={<Info className="w-4 h-4" />}>
+        <div className="space-y-3 text-sm text-slate-300 leading-relaxed">
+          <p>
+            As of <span className="font-semibold text-white">Phase 14</span>, analyst consensus data is fetched from{" "}
+            <span className="font-mono text-slate-300">Finnhub</span> and stored in{" "}
+            <span className="font-mono text-slate-300">StockAnalystData</span>.
+            This data is displayed in the Scanner and Dashboard but is{" "}
+            <strong className="text-white">not yet included in Opportunity Score v1</strong>.
+          </p>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <TableHeader headers={["Field", "Source", "How Derived", "Status"]} />
+              <tbody>
+                {[
+                  { field: "Analyst Target Price", source: "Finnhub /stock/price-target", derived: "targetMean from provider", status: "Stored" },
+                  { field: "Analyst Upside %", source: "Internal calculation", derived: "((targetMean − price) / price) × 100", status: "Stored" },
+                  { field: "Analyst Rating", source: "Finnhub /stock/recommendation", derived: "Normalized from Buy/Hold/Sell counts", status: "Stored" },
+                  { field: "Analyst Count", source: "Finnhub /stock/recommendation", derived: "strongBuy + buy + hold + sell + strongSell", status: "Stored" },
+                  { field: "Target High / Low", source: "Finnhub /stock/price-target", derived: "targetHigh / targetLow direct", status: "Stored" },
+                ].map((row) => (
+                  <tr key={row.field} className="border-b border-slate-700/40">
+                    <td className="px-3 py-2 font-medium text-slate-200">{row.field}</td>
+                    <td className="px-3 py-2 text-xs text-slate-400 font-mono">{row.source}</td>
+                    <td className="px-3 py-2 text-xs text-slate-400">{row.derived}</td>
+                    <td className="px-3 py-2">
+                      <span className="text-emerald-400 text-xs font-medium">{row.status}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex items-start gap-2 rounded bg-blue-900/20 border border-blue-800/40 px-3 py-2.5">
+            <Info className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
+            <p className="text-xs text-blue-300">
+              <strong>Future:</strong> Opportunity Score v2 may incorporate analyst upside %, rating strength,
+              analyst count (confidence), and recommendation trend. This is tracked as a planned Phase 15 improvement.
+            </p>
+          </div>
+        </div>
+      </Section>
+
       {/* Future Improvements */}
       <Section title="Future Improvements (Not in v1)" icon={<TrendingUp className="w-4 h-4" />}>
         <div className="text-xs text-slate-400 space-y-2">

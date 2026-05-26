@@ -63,7 +63,7 @@ export default function ScannerExpandedRow({ stock, colSpan }: ScannerExpandedRo
   return (
     <tr className="bg-[#0d0f14]/80">
       <td colSpan={colSpan} className="px-4 py-4">
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 xl:grid-cols-7 gap-6">
 
           {/* Score Breakdown */}
           <div className="col-span-2 md:col-span-3 lg:col-span-2">
@@ -155,8 +155,38 @@ export default function ScannerExpandedRow({ stock, colSpan }: ScannerExpandedRo
                 <MetricItem label="Quote Source" value={stock.quoteSource ?? "N/A"} />
                 <MetricItem label="Metrics Synced" value={fmtDate(stock.metricsLastSynced)} />
                 <MetricItem label="Metrics Source" value={stock.metricsSource ?? "N/A"} />
+                <MetricItem label="Analyst Synced" value={fmtDate(stock.analystLastSyncedAt)} />
+                <MetricItem label="Analyst Source" value={stock.analystSource ?? "N/A"} />
               </Section>
             </div>
+          </div>
+
+          {/* Analyst Data */}
+          <div>
+            <Section title="Analyst Data">
+              <MetricItem
+                label="Target Price"
+                value={stock.analystTargetPrice != null ? `$${Number(stock.analystTargetPrice).toFixed(2)}` : "N/A"}
+                highlight={stock.analystUpsidePercent != null && stock.analystUpsidePercent > 0}
+              />
+              <MetricItem
+                label="Upside %"
+                value={stock.analystUpsidePercent != null
+                  ? `${stock.analystUpsidePercent >= 0 ? "+" : ""}${Number(stock.analystUpsidePercent).toFixed(1)}%`
+                  : "N/A"}
+                highlight={stock.analystUpsidePercent != null && stock.analystUpsidePercent > 0}
+              />
+              <MetricItem label="Rating" value={stock.analystRatingNormalized ?? "N/A"} />
+              <MetricItem label="Analysts" value={stock.analystCount != null ? String(stock.analystCount) : "N/A"} />
+              <MetricItem
+                label="Target High"
+                value={stock.analystTargetHigh != null ? `$${Number(stock.analystTargetHigh).toFixed(2)}` : "N/A"}
+              />
+              <MetricItem
+                label="Target Low"
+                value={stock.analystTargetLow != null ? `$${Number(stock.analystTargetLow).toFixed(2)}` : "N/A"}
+              />
+            </Section>
           </div>
 
         </div>

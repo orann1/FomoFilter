@@ -63,6 +63,22 @@ export type DashboardSummary = {
   stocksAbove80: number;
   averageOpportunityScore: number | null;
   stocksAboveOpportunity75: number;
+  withAnalystData: number;
+  averageAnalystUpside: number | null;
+  stocksWithHighUpside: number;
+};
+
+export type DashboardAnalystRow = {
+  symbol: string;
+  name: string;
+  sector: string | null;
+  price: number | null;
+  analystTargetPrice: number | null;
+  analystUpsidePercent: number | null;
+  analystRating: string | null;
+  analystCount: number | null;
+  fundamentalScore: number | null;
+  oppScore: number | null;
 };
 
 export type DashboardFreshness = {
@@ -98,6 +114,7 @@ export type DashboardData = {
   dataWarnings: DashboardWarning[];
   watchlistItems: DashboardWatchlistItem[];
   alertRulesBySymbol: Record<string, ActiveAlertRule[]>;
+  topAnalystUpsideStocks: DashboardAnalystRow[];
 };
 
 export async function getDashboardData(): Promise<DashboardData> {
@@ -115,6 +132,7 @@ export async function getDashboardData(): Promise<DashboardData> {
         quote: true,
         score: true,
         metric: true,
+        analystData: true,
         universeMemberships: { include: { universe: { select: { slug: true } } } },
       },
     }),
@@ -130,7 +148,11 @@ export async function getDashboardData(): Promise<DashboardData> {
       orderBy: { startedAt: "desc" },
     }),
     prisma.syncRun.findFirst({
-      where: { type: "fundamental-score-calculation", status: "success" },
+      where: {
+        type: "fundamental-score-calculation",
+        status: { in: ["success", "partial_success"] },
+        successCount: { gt: 0 },
+      },
       orderBy: { startedAt: "desc" },
     }),
   ]);
@@ -188,6 +210,17 @@ export async function getDashboardData(): Promise<DashboardData> {
 
   const stocksAboveOpportunity75 = oppScoresArr.filter((v) => v >= 75).length;
 
+  const withAnalystData = dbStocks.filter((s) => s.analystData !== null).length;
+  const analystUpsideArr = dbStocks
+    .map((s) => s.analystData?.analystUpsidePercent)
+    .filter((v): v is NonNullable<typeof v> => v != null)
+    .map(Number);
+  const averageAnalystUpside =
+    analystUpsideArr.length > 0
+      ? Math.round(analystUpsideArr.reduce((a, b) => a + b, 0) / analystUpsideArr.length)
+      : null;
+  const stocksWithHighUpside = analystUpsideArr.filter((v) => v >= 20).length;
+
   const summary: DashboardSummary = {
     totalStocks,
     scannerReadyStocks,
@@ -200,6 +233,9 @@ export async function getDashboardData(): Promise<DashboardData> {
     stocksAbove80,
     averageOpportunityScore,
     stocksAboveOpportunity75,
+    withAnalystData,
+    averageAnalystUpside,
+    stocksWithHighUpside,
   };
 
   // ── Freshness ─────────────────────────────────────────────────────────────────
@@ -310,13 +346,13 @@ export async function getDashboardData(): Promise<DashboardData> {
   if (withScores === 0) {
     dataWarnings.push({
       key: "no_scores",
-      message: "Fundamental scores have not been calculated yet.",
+      message: "No scores calculated yet.",
       action: "Run Calculate Fundamental Scores in Admin.",
     });
   } else if (!lastScoreCalc) {
     dataWarnings.push({
       key: "no_score_run",
-      message: "No score calculation run has been recorded. Re-run to track freshness.",
+      message: "Scores exist, but no score calculation run record was found. Re-run to track freshness.",
       action: "Run Calculate Fundamental Scores in Admin.",
     });
   } else if (missingScores > 0) {
@@ -356,6 +392,24 @@ export async function getDashboardData(): Promise<DashboardData> {
     stockId: w.stockId,
   }));
 
+  // ── Top Analyst Upside Stocks ─────────────────────────────────────────────────
+  const topAnalystUpsideStocks: DashboardAnalystRow[] = dbStocks
+    .filter((s) => s.analystData?.analystUpsidePercent != null && s.quote !== null)
+    .sort((a, b) => Number(b.analystData!.analystUpsidePercent!) - Number(a.analystData!.analystUpsidePercent!))
+    .slice(0, 10)
+    .map((s) => ({
+      symbol: s.symbol,
+      name: s.name,
+      sector: s.sector ?? null,
+      price: s.quote ? Number(s.quote.price) : null,
+      analystTargetPrice: s.analystData?.targetMean != null ? Number(s.analystData.targetMean) : null,
+      analystUpsidePercent: s.analystData?.analystUpsidePercent != null ? Number(s.analystData.analystUpsidePercent) : null,
+      analystRating: s.analystData?.analystRating ?? null,
+      analystCount: s.analystData?.analystCount ?? null,
+      fundamentalScore: s.score?.fundamentalScore != null ? Math.round(Number(s.score.fundamentalScore)) : null,
+      oppScore: s.score?.oppScore != null ? Math.round(Number(s.score.oppScore)) : null,
+    }));
+
   // ── Alert Rules by Symbol ─────────────────────────────────────────────────────
   const alertRulesBySymbol: Record<string, ActiveAlertRule[]> = {};
   for (const rule of dbAlertRules) {
@@ -378,5 +432,6 @@ export async function getDashboardData(): Promise<DashboardData> {
     dataWarnings,
     watchlistItems,
     alertRulesBySymbol,
+    topAnalystUpsideStocks,
   };
 }

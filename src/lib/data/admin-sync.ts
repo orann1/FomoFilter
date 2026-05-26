@@ -28,6 +28,7 @@ export type SyncRunRow = {
 };
 
 const CHUNKED_SYNC_TYPE = "market-data-nasdaq100-chunked-sync";
+const ANALYST_SYNC_TYPE = "analyst-data-nasdaq100-sync";
 
 export type LatestChunkedSyncRun = {
   id: string;
@@ -45,6 +46,35 @@ export type LatestChunkedSyncRun = {
   durationMs: number | null;
   message: string | null;
 };
+
+export async function getLatestAnalystSyncRun(): Promise<LatestChunkedSyncRun | null> {
+  const run = await prisma.syncRun.findFirst({
+    where: { type: ANALYST_SYNC_TYPE },
+    orderBy: { startedAt: "desc" },
+    select: {
+      id: true,
+      type: true,
+      provider: true,
+      status: true,
+      requestedCount: true,
+      processedCount: true,
+      currentSymbol: true,
+      successCount: true,
+      skippedCount: true,
+      failedCount: true,
+      startedAt: true,
+      finishedAt: true,
+      durationMs: true,
+      message: true,
+    },
+  });
+  if (!run) return null;
+  return {
+    ...run,
+    startedAt: run.startedAt.toISOString(),
+    finishedAt: run.finishedAt?.toISOString() ?? null,
+  };
+}
 
 export async function getLatestChunkedSyncRun(): Promise<LatestChunkedSyncRun | null> {
   const run = await prisma.syncRun.findFirst({

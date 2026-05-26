@@ -1,738 +1,696 @@
-# Phase 13 — Opportunity Score v1
+# Phase 14 — Analyst Data & Upside Integration
 
 ## Status
 
-Completed (2026-05-24)
+Complete — Approved
 
 ---
 
 ## Goal
 
-Add the first version of **Opportunity Score**.
+Add analyst data to the app so the system can show market expectation and potential upside for each stock.
 
-The current app can already answer:
-
-```txt
-Which companies are fundamentally strong?
-```
-
-through:
+This phase should collect, store, and display analyst-related fields such as:
 
 ```txt
-Fundamental Score
-Growth Score
-Profitability Score
-Valuation Score
-Financial Health Score
-Risk / Context Score
+Analyst Target Price
+Analyst Upside %
+Analyst Rating / Recommendation
+Number of Analysts
+Last Analyst Data Sync
 ```
 
-Opportunity Score should answer a different question:
-
-```txt
-Which fundamentally strong stocks look attractive as investment opportunities right now, based on the data we already have?
-```
-
-The score should combine:
-
-```txt
-Company quality
-Valuation attractiveness
-Growth strength
-Risk/context
-Price position
-```
-
-This phase should not add new external provider calls.
+The goal is to make the app more useful for opportunity analysis, but **not yet change the Opportunity Score formula** unless explicitly approved later.
 
 ---
 
 ## Why This Phase Is Needed
 
-After Phases 9–12, the app has:
+After Phase 13, the app has:
 
-- Nasdaq 100 universe.
-- Real quote data.
-- Finnhub basic financial metrics.
-- Fundamental Score.
-- Scanner connected to real data.
-- Dashboard connected to real data.
-- Admin sync and Data Inventory.
+- Fundamental Score
+- Opportunity Score v1
+- Quote data
+- Basic financial metrics
+- Scanner
+- Dashboard
+- Data Inventory
+- Admin Sync
 
-However, **Fundamental Score alone is not enough**.
+Opportunity Score v1 is based on:
 
-A company can be excellent but still expensive.
+- Fundamental quality
+- Valuation
+- Growth
+- Risk / Context
+- 52-week price position
 
-Example:
-
-```txt
-High Fundamental Score
-High Growth
-High Profitability
-But very expensive valuation
-```
-
-Opportunity Score should help separate:
+This is useful, but still missing an important investment signal:
 
 ```txt
-Great company
+What upside do analysts see from the current price?
 ```
 
-from:
+Analyst target data can help answer:
 
-```txt
-Great company at a reasonable or attractive setup
-```
+- Is the stock trading below analyst target?
+- How much upside/downside is implied?
+- Is the analyst view positive, neutral, or negative?
+- How many analysts support the estimate?
+
+This phase should build the data foundation first.
+
+Opportunity Score v2 can use this data in a later phase.
 
 ---
 
 ## Product Direction
 
-Opportunity Score v1 should be:
+Phase 14 should be a **data integration phase**, not a new scoring phase.
+
+Main objective:
 
 ```txt
-Deterministic
-Explainable
-DB-backed
-Based only on existing data
-Useful for sorting and filtering in Scanner
+Fetch and store analyst data reliably.
+Expose it in Admin, Scanner, and Dashboard.
+Keep Opportunity Score v1 unchanged for now.
 ```
 
-It should not be an AI recommendation or buy/sell signal.
-
-It should be a ranking tool.
+Do not mix data ingestion and score formula changes in the same phase.
 
 ---
 
 ## Important Scope Decision
 
-Use only the data already stored in the DB.
+This phase should:
 
-Allowed:
+- Research available analyst data endpoints from existing providers.
+- Prefer providers already used by the project.
+- Respect free-plan limits.
+- Store analyst data in the DB.
+- Display analyst data in Data Inventory, Scanner, and Dashboard.
+- Add a manual Admin Sync action.
+- Avoid changing Opportunity Score v1.
+
+---
+
+## Provider Strategy
+
+Existing provider strategy:
+
+| Provider | Current Main Role |
+| --- | --- |
+| Finnhub | Quotes, basic financial metrics, news/fallback |
+| FMP | Company profile, fundamentals, analyst/earnings if available on plan |
+| Twelve Data | Quotes/OHLC/candles/technical base data if needed later |
+| Internal Engine | Scores, derived calculations, alerts |
+
+For analyst data, investigate:
 
 ```txt
-StockQuote
-StockMetric
-StockScore
-StockUniverseMember
-Stock
+Finnhub
+FMP
+Twelve Data
+Other provider only if needed
 ```
 
-Not allowed in this phase:
+Do not add a new provider unless existing providers cannot reasonably support the required fields.
+
+---
+
+# 1. Research / Provider Investigation
+
+Before implementation, inspect available provider functions and API plans.
+
+Research should answer:
+
+- Which provider can supply analyst target price?
+- Which provider can supply analyst recommendation/rating?
+- Which provider can supply number of analysts?
+- Which provider is available on the current free plan/API key?
+- What are the rate limits?
+- What fields are returned?
+- How fresh is the data?
+
+---
+
+## Candidate Data Fields
+
+Minimum target fields:
 
 ```txt
-New provider calls
-Analyst target/upside
-News catalyst
-Technical indicators
-Historical candles
-Volume anomaly
-AI analysis
-New sync jobs
-Scanner provider calls
+targetPrice
+analystUpsidePercent
+analystRating
+analystCount
+analystSource
+analystLastSyncedAt
+```
+
+Optional fields if available:
+
+```txt
+targetHigh
+targetLow
+targetMedian
+targetMean
+strongBuyCount
+buyCount
+holdCount
+sellCount
+strongSellCount
+recommendationTrendDate
 ```
 
 ---
 
-## Difference Between Fundamental Score and Opportunity Score
+## Provider Investigation Requirements
 
-### Fundamental Score
+Return a short provider investigation report before or inside the implementation report:
 
-Answers:
+| Provider | Endpoint | Free Plan Access | Useful Fields | Decision |
+| --- | --- | --- | --- | --- |
+| Finnhub | TBD | TBD | TBD | Use / fallback / not available |
+| FMP | TBD | TBD | TBD | Use / fallback / not available |
+| Twelve Data | TBD | TBD | TBD | Use / fallback / not available |
 
-```txt
-How strong is the company?
-```
+Do not assume endpoint availability.
 
-Mainly based on:
+Actually test the available endpoint with the current configured API key.
 
-```txt
-Growth
-Profitability
-Valuation
-Financial Health
-Risk / Context
-```
-
-### Opportunity Score
-
-Answers:
-
-```txt
-How attractive is this stock as an opportunity right now, using available fundamentals, valuation, and price context?
-```
-
-It should give more importance to:
-
-```txt
-Valuation
-Growth-adjusted valuation
-Price position
-Risk-adjusted quality
-```
+Do not expose API keys in logs or UI.
 
 ---
 
-## Opportunity Score v1 Formula
+# 2. DB Design
 
-Recommended initial weights:
+## Preferred Model
 
-| Component | Weight | Purpose |
-| --- | ---: | --- |
-| Fundamental Quality | 35% | Avoid ranking weak companies highly just because they are cheap |
-| Valuation Attractiveness | 30% | Reward reasonable pricing |
-| Growth Strength | 20% | Reward companies still growing |
-| Risk / Context | 10% | Penalize excessive risk |
-| Price Position / 52W Context | 5% | Small timing/context signal |
+Add analyst fields to a dedicated model if the data is separate enough from quote/metric/score.
 
-Total:
+Recommended model:
 
-```txt
-100%
+```prisma
+model StockAnalystData {
+  id                    String   @id @default(cuid())
+  stockId               String   @unique
+  stock                 Stock    @relation(fields: [stockId], references: [id], onDelete: Cascade)
+
+  targetPrice           Decimal?
+  analystUpsidePercent  Decimal?
+  analystRating         String?
+  analystCount          Int?
+
+  targetHigh            Decimal?
+  targetLow             Decimal?
+  targetMedian          Decimal?
+  targetMean            Decimal?
+
+  strongBuyCount        Int?
+  buyCount              Int?
+  holdCount             Int?
+  sellCount             Int?
+  strongSellCount       Int?
+
+  source                String?
+  lastSyncedAt          DateTime?
+  sourceUpdatedAt       DateTime?
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([lastSyncedAt])
+  @@index([analystRating])
+}
 ```
+
+If the existing schema already has analyst fields elsewhere, inspect first and avoid duplication.
 
 ---
 
-## Component Mapping
+## Alternative
 
-### 1. Fundamental Quality — 35%
+If analyst fields already exist in `StockQuote` or `StockMetric`, consider whether they are still appropriate.
 
-Use existing:
-
-```txt
-StockScore.fundamentalScore
-```
-
-This is already a 0–100 score.
-
-Purpose:
+But preferred:
 
 ```txt
-The opportunity must be grounded in company quality.
+StockAnalystData
 ```
 
-### 2. Valuation Attractiveness — 30%
+Reasons:
 
-Use existing:
+- Keeps analyst data separate from quote snapshots.
+- Allows different sync cadence.
+- Easier future expansion.
+- Avoids overloading `StockMetric`.
+
+---
+
+## Migration
+
+If needed, add migration:
 
 ```txt
-StockScore.valuationScore
+add_stock_analyst_data
 ```
 
-Optionally enrich with raw metrics if needed:
+No unrelated schema changes.
+
+---
+
+# 3. Data Calculation
+
+## Analyst Upside %
+
+Calculate internally if provider gives target price and current price.
+
+Formula:
 
 ```txt
-StockMetric.forwardPE
-StockMetric.peBasicExclExtraTTM
-StockMetric.pegTTM
-StockMetric.forwardPEG
-StockMetric.evEbitdaTTM
+analystUpsidePercent = ((targetPrice - currentPrice) / currentPrice) * 100
 ```
-
-For v1, prefer using:
-
-```txt
-valuationScore
-```
-
-because it already summarizes valuation safely.
-
-### 3. Growth Strength — 20%
-
-Use existing:
-
-```txt
-StockScore.growthScore
-```
-
-Purpose:
-
-```txt
-A cheap stock with no growth may not be a good opportunity.
-```
-
-### 4. Risk / Context — 10%
-
-Use existing:
-
-```txt
-StockScore.riskContextScore
-```
-
-Purpose:
-
-```txt
-Avoid over-rewarding high-risk names.
-```
-
-### 5. Price Position / 52W Context — 5%
 
 Use:
 
 ```txt
 StockQuote.price
-StockMetric.week52High
-StockMetric.week52Low
 ```
 
-This should be a small score that rewards stocks not too close to extreme overextension, without punishing strong companies too aggressively.
+If current price is missing:
+
+```txt
+analystUpsidePercent = null
+```
+
+Do not use stale hardcoded price.
+
+If provider gives upside directly, still prefer calculating from current stored quote for consistency unless provider data is clearly better.
 
 ---
 
-## Price Position Scoring
+## Rating Normalization
 
-Calculate where the current price sits between 52-week low and 52-week high.
+Provider ratings may differ.
 
-Formula:
-
-```txt
-position = (price - week52Low) / (week52High - week52Low)
-```
-
-Interpretation:
+Normalize to simple labels:
 
 ```txt
-0.00 = near 52-week low
-1.00 = near 52-week high
+Strong Buy
+Buy
+Hold
+Sell
+Strong Sell
+N/A
 ```
 
-Suggested scoring:
+If provider gives numeric rating, map carefully and document mapping.
 
-| Position | Score | Meaning |
-| --- | ---: | --- |
-| 0.20–0.60 | 100 | Attractive / not overextended |
-| 0.60–0.80 | 75 | Reasonable |
-| 0.80–0.95 | 50 | Extended |
-| > 0.95 | 30 | Very close to 52W high |
-| 0.00–0.20 | 60 | Cheap but possibly weak/downtrend |
-| Invalid/missing | null | Exclude from final weighted average |
-
-Why not give 100 near the low?
-
-Because a stock close to its 52-week low may be cheap, but it can also be structurally weak. Without technical/news context, avoid over-rewarding it.
-
----
-
-## Score Calculation Rules
-
-### Output Scale
-
-Store Opportunity Score as:
-
-```txt
-0–100
-```
-
-### Missing Data Handling
-
-If a component is missing:
-
-- Do not treat it as zero.
-- Exclude it from the weighted average.
-- Re-normalize remaining weights.
+If provider only gives recommendation counts, derive a simple rating if safe.
 
 Example:
 
-If price position is missing, calculate from the other 95% of available weights.
+```txt
+Buy or Strong Buy majority → Buy
+Hold majority → Hold
+Sell majority → Sell
+```
 
-### Caps
-
-Do not cap raw data in DB.
-
-Any caps or ranges should apply only inside scoring helper functions.
-
-### No Fake Values
-
-Do not create opportunity values for stocks missing fundamental score.
-
-If there is no `fundamentalScore`, skip the stock.
+Do not overcomplicate v1.
 
 ---
 
-## DB / StockScore Changes
+## Missing Data Handling
 
-Use existing `StockScore` model.
+If analyst data is missing:
 
-Add fields only if they do not already exist.
-
-Expected new fields:
-
-```txt
-opportunityScore
-opportunityScoreVersion
-opportunityCalculatedAt
-```
-
-Optional component fields if useful:
-
-```txt
-opportunityQualityComponent
-opportunityValuationComponent
-opportunityGrowthComponent
-opportunityRiskComponent
-opportunityPricePositionComponent
-```
-
-Recommendation:
-
-Add only:
-
-```txt
-opportunityScore
-opportunityScoreVersion
-opportunityCalculatedAt
-```
-
-Do not over-expand schema in v1.
-
-If component debugging is needed, it can be shown live from existing scores.
-
-Migration expected:
-
-```txt
-add_opportunity_score_fields
-```
+- Store nulls.
+- Show `N/A`.
+- Do not display zero unless real count/value is zero.
+- Do not fail the whole sync because one symbol has no analyst data.
 
 ---
 
-## Score Version
+# 4. Sync Behavior
 
-Use version:
-
-```txt
-opportunity-v1
-```
-
-Store in:
+Add a manual Admin action:
 
 ```txt
-opportunityScoreVersion
-```
-
----
-
-## Calculation Target
-
-Add an Admin action:
-
-```txt
-Calculate Opportunity Scores
+Sync Nasdaq 100 Analyst Data
 ```
 
 Location:
 
 ```txt
-/admin/sync → Sync Actions → Score Calculation
+/admin/sync → Sync Actions
 ```
 
-This action should:
+or a new section:
 
-1. Find stocks with `StockScore.fundamentalScore`.
-2. Include quote and metrics needed for price position.
-3. Calculate Opportunity Score.
-4. Update existing `StockScore`.
-5. Persist SyncRun / SyncRunItem logging.
-6. Return counts:
-   - requested
-   - calculated
-   - skipped
-   - failed
+```txt
+Analyst Data Sync
+```
+
+This action should sync analyst data for all active Nasdaq 100 stocks.
+
+---
+
+## Chunked or Batch?
+
+Because analyst endpoints may have rate limits, use the same scalable pattern as market data sync if needed.
+
+Recommended:
+
+```txt
+Chunked sync if endpoint requires one call per symbol.
+Batch sync if provider supports multiple symbols safely.
+```
+
+For v1, if one call per symbol:
+
+```txt
+Use chunk size 10
+Use progress tracking
+Use DB-backed SyncRun / SyncRunItem
+Use Continue / Restart if long-running
+```
+
+If provider supports batch and it is fast:
+
+```txt
+A normal action may be acceptable
+```
+
+But do not build a long-running request if it can exceed timeout.
+
+---
+
+## SyncRun
+
+Recommended SyncRun type:
+
+```txt
+analyst-data-nasdaq100-sync
+```
 
 Provider:
 
 ```txt
-internal
-```
-
-SyncRun type:
-
-```txt
-opportunity-score-calculation
-```
-
-No external API calls.
-
----
-
-## Admin UI
-
-### Sync Actions
-
-Update the Score Calculation section.
-
-Current:
-
-```txt
-Calculate Fundamental Scores
-```
-
-Add:
-
-```txt
-Calculate Opportunity Scores
-```
-
-Helper text:
-
-```txt
-Calculates Opportunity Score v1 from stored Fundamental Score, valuation, growth, risk/context, and 52-week price position. No external APIs.
-```
-
-Badge:
-
-```txt
-Internal
+finnhub
 ```
 
 or:
 
 ```txt
-Writes to DB
+fmp
 ```
 
-Use existing progress/result patterns.
+depending on selected provider.
+
+Log per symbol:
+
+```txt
+updated_analyst_data
+created_analyst_data
+skipped_no_data
+failed_provider_error
+```
 
 ---
 
-## Data Inventory Updates
+## Progress UI
+
+If sync is chunked, show:
+
+```txt
+Current symbol
+Processed / total
+Succeeded
+Skipped
+Failed
+Elapsed time
+Estimated remaining time
+Progress bar
+Continue / Restart if interrupted
+```
+
+If sync is fast/batch, still show:
+
+```txt
+requested
+updated
+skipped
+failed
+persisted
+```
+
+---
+
+# 5. Admin UI Updates
+
+## Sync Actions
+
+Add section:
+
+```txt
+Analyst Data Sync
+```
+
+Button:
+
+```txt
+Sync Nasdaq 100 Analyst Data
+```
+
+Helper text:
+
+```txt
+Fetches analyst target/rating data for active Nasdaq 100 stocks and stores it in the database.
+```
+
+Safety note:
+
+```txt
+Does not change scores automatically. Opportunity Score v2 may use this data in a later phase.
+```
+
+---
+
+## Data Inventory
 
 Add columns:
 
-| Column | Source |
-| --- | --- |
-| Opportunity Score | Internal |
-| Opportunity Version | Internal |
-| Opportunity Calculated | Internal |
-| 52W Position | Internal / Derived |
+```txt
+Target Price
+Analyst Upside %
+Analyst Rating
+Analyst Count
+Analyst Source
+Analyst Last Synced
+```
+
+Source row:
+
+```txt
+Provider name
+```
+
+or:
+
+```txt
+Internal for analystUpsidePercent if calculated internally
+```
+
+Recommended source display:
+
+```txt
+Target Price: Provider
+Upside %: Internal / Provider-derived
+Rating: Provider
+Count: Provider
+Last Synced: DB
+```
+
+---
+
+# 6. Scanner Updates
+
+Add analyst columns to Scanner, but keep the table readable.
+
+Recommended main table additions:
+
+```txt
+Analyst Upside %
+Target Price
+Rating
+```
 
 Optional:
 
 ```txt
-Price Position Score
+Analyst Count
 ```
 
-Only add if useful and not too crowded.
+Placement suggestion:
+
+```txt
+Opp.
+Fund.
+Price
+Day %
+Target
+Upside
+Rating
+```
+
+Do not overload the table.
+
+If too wide, put some fields in expandable row.
 
 ---
 
-## Scanner Updates
+## Scanner Filters / Sort
 
-Update `/scanner` to support Opportunity Score.
-
-### Add Column
-
-Add:
+Add sort options:
 
 ```txt
-Opportunity
+Analyst Upside %
+Target Price
+Analyst Rating
 ```
 
-Recommended placement:
+Add filter:
 
 ```txt
-Symbol
-Sector
-Price
-Day %
-Opportunity
-Fundamental
-Growth
-Profitability
-Valuation
-Health
-Risk
-...
+Min Analyst Upside
+Any / 0%+ / 10%+ / 20%+ / 30%+ / 50%+
 ```
 
-### Add Sort
-
-Add sort option:
+Add filter/pill:
 
 ```txt
-Opportunity Score
-```
-
-Do not make it the default yet unless approved.
-
-Recommended default remains:
-
-```txt
-Fundamental Score desc
-```
-
-Alternative after QA:
-
-```txt
-Opportunity Score desc
-```
-
-For this phase, keep default as Fundamental Score unless explicitly changed.
-
-### Add Filter Pill
-
-Add real-data pill:
-
-```txt
-High Opportunity
+High Analyst Upside
 ```
 
 Suggested logic:
 
 ```txt
-opportunityScore >= 75
+analystUpsidePercent >= 20
 ```
 
-### Add Threshold Filter
+Only add the pill if enough data exists.
 
-Add dropdown:
+---
+
+## Expandable Row
+
+Add analyst section:
 
 ```txt
-Min Opportunity
-Any / 50+ / 60+ / 70+ / 80+ / 90+
+Analyst Data
+Target Price
+Upside %
+Rating
+Analyst Count
+Source
+Last Synced
 ```
 
-### Expandable Details
-
-Add Opportunity Score to the score breakdown section.
-
-Show formula explanation briefly:
+If data missing:
 
 ```txt
-Opportunity combines fundamental quality, valuation, growth, risk/context, and price position.
+N/A
 ```
 
 ---
 
-## Dashboard Updates
+# 7. Dashboard Updates
 
-Update Dashboard minimally.
-
-Add:
-
-- Average Opportunity Score.
-- Stocks Above Opportunity 75.
-- Top Opportunities table or add Opportunity column to Top Fundamental Stocks.
-
-Recommended:
+Add analyst-related summary if data is available:
 
 ```txt
-Do not replace Top Fundamental Stocks yet.
-Add Opportunity Score as an additional column.
+Stocks with Analyst Data
+Average Analyst Upside
+High Upside Stocks
 ```
 
-If adding a separate table, keep it compact:
+Add optional table:
 
 ```txt
-Top Opportunities
-Top 10 by opportunityScore desc
+Top Analyst Upside
 ```
 
-Do not overbuild Dashboard.
+Columns:
+
+```txt
+Symbol
+Company
+Price
+Target Price
+Upside %
+Rating
+Analyst Count
+Opportunity Score
+Fundamental Score
+```
+
+Do not replace Top Fundamental Stocks unless approved.
 
 ---
 
-## Score Methodology Tab Update
+# 8. Score Methodology Update
 
-Update Admin `Score Methodology` tab.
-
-Add section:
+Update methodology documentation to mention:
 
 ```txt
-Opportunity Score v1
+Analyst data is collected but not yet included in Opportunity Score v1.
 ```
 
-Include:
+Add future note:
 
-- What Opportunity Score means.
-- Difference from Fundamental Score.
-- Weights:
-  - Fundamental Quality 35%
-  - Valuation 30%
-  - Growth 20%
-  - Risk / Context 10%
-  - Price Position 5%
-- 52-week price position explanation.
-- Missing data handling.
-- Version:
-  ```txt
-  opportunity-v1
-  ```
-- Future improvements:
-  - Analyst target/upside.
-  - Technical trend.
-  - Relative volume.
-  - News/catalyst.
-  - Sector-relative valuation.
+```txt
+Opportunity Score v2 may include analyst upside and recommendation strength.
+```
+
+Do not change Opportunity Score v1 formula in this phase.
 
 ---
 
-## Data Integrity Requirements
+# 9. No Opportunity Score v2 Yet
 
-Do not:
+Important:
 
-- Recalculate Fundamental Score.
-- Change Fundamental Score formula.
-- Create Opportunity Score for stocks missing fundamentalScore.
-- Use fake analyst upside.
-- Use mock catalyst data.
-- Treat missing components as zero.
-- Call providers from calculation.
-- Call providers from Scanner/Dashboard.
+Do not modify:
+
+```txt
+Opportunity Score formula
+Opportunity Score weights
+Opportunity Score calculation action
+```
+
+unless the user explicitly approves a new v2 phase.
+
+This phase only prepares analyst data.
 
 ---
 
-## Browser QA Checklist
+# 10. No Provider Calls From Scanner/Dashboard
 
-### Admin Sync
+Scanner and Dashboard must read analyst data from DB only.
 
-Open:
+Not allowed:
 
 ```txt
-/admin/sync → Sync Actions
+Calling Finnhub/FMP directly from Scanner
+Calling Finnhub/FMP directly from Dashboard
+Client-side provider calls
 ```
 
-Confirm:
+---
 
-1. Calculate Opportunity Scores button appears.
-2. Helper text says no external APIs.
-3. Run the action.
-4. Result shows requested/calculated/skipped/failed.
-5. Sync History records `opportunity-score-calculation`.
-6. Provider is `internal`.
+# 11. Data Quality QA
 
-### Data Inventory
-
-Confirm:
-
-1. Opportunity Score column appears.
-2. Opportunity Version appears.
-3. Opportunity Calculated timestamp appears.
-4. Scores are between 0 and 100.
-5. Missing values show N/A.
-
-### Scanner
-
-Confirm:
-
-1. Opportunity column appears.
-2. Sort by Opportunity works.
-3. High Opportunity pill works.
-4. Min Opportunity filter works.
-5. Expandable row shows Opportunity Score.
-6. No provider calls happen from Scanner.
-
-### Dashboard
-
-Confirm:
-
-1. Dashboard loads.
-2. Opportunity score is visible if implemented.
-3. Top tables still use real DB data.
-4. No old unsupported fields return.
-
-### Data Quality Spot Check
-
-Check several stocks, for example:
+Spot check:
 
 ```txt
 META
@@ -742,28 +700,91 @@ AAPL
 TSLA
 ```
 
-Confirm:
+For each:
 
-- opportunityScore exists.
-- Score is plausible.
-- Score is not null/NaN/negative.
-- Score is within 0–100.
-- Expensive stocks may have lower opportunity than fundamental quality if valuation is weak.
+- targetPrice is reasonable or N/A.
+- upsidePercent is correctly calculated.
+- rating is normalized.
+- analystCount is reasonable or N/A.
+- no negative/NaN values unless downside is real.
 
-### Regression
+Downside can be negative if targetPrice < current price.
 
-Confirm:
-
-- Fundamental Score calculation still works.
-- Market Data Sync still works.
-- Scanner still loads.
-- Dashboard still loads.
-- Admin Sync still loads.
-- No external provider calls were added.
+That is valid.
 
 ---
 
-## Validation
+# 12. Browser QA Checklist
+
+## Admin Sync
+
+Open:
+
+```txt
+/admin/sync → Sync Actions
+```
+
+Confirm:
+
+1. Analyst Data Sync section appears.
+2. Sync button appears.
+3. Helper text explains it does not change scores.
+4. Run sync.
+5. Result shows requested/updated/skipped/failed.
+6. Sync History records analyst-data sync.
+7. Provider is correct.
+8. No API keys are exposed.
+
+## Data Inventory
+
+Confirm:
+
+1. Target Price column appears.
+2. Analyst Upside % appears.
+3. Analyst Rating appears.
+4. Analyst Count appears.
+5. Source appears.
+6. Last Synced appears.
+7. Missing values show N/A.
+
+## Scanner
+
+Confirm:
+
+1. Analyst fields appear.
+2. Sort by Analyst Upside works.
+3. Min Analyst Upside filter works.
+4. Expandable row includes analyst section.
+5. No provider calls happen from Scanner.
+
+## Dashboard
+
+Confirm:
+
+1. Dashboard loads.
+2. Analyst summary/table appears if implemented.
+3. Missing analyst data displays as N/A.
+4. No legacy/demo analyst values appear.
+
+---
+
+# 13. Regression QA
+
+Confirm:
+
+- Market Data Sync still works.
+- Fundamental Score calculation still works.
+- Opportunity Score calculation still works.
+- Scanner still loads.
+- Dashboard still loads.
+- Admin Sync still loads.
+- Data Inventory still loads.
+- Score Methodology still loads.
+- No provider calls from Scanner/Dashboard render.
+
+---
+
+# 14. Validation
 
 Run:
 
@@ -774,49 +795,53 @@ npx prisma validate
 npx prisma migrate status
 ```
 
-Migration expected only for new `StockScore` fields.
+Migration expected only if `StockAnalystData` or analyst fields are added.
 
 ---
 
-## Required Implementation Report
+# 15. Required Implementation Report
 
 Return a concise report in English only with:
 
 1. Files inspected.
-2. Files changed.
-3. Migration name and fields.
-4. Opportunity formula implemented.
-5. Component weights.
-6. Missing component behavior.
-7. Price position scoring.
-8. Admin action added.
+2. Provider investigation result.
+3. Chosen provider and endpoint.
+4. Free-plan availability.
+5. Fields returned by provider.
+6. Files changed.
+7. Migration name and fields.
+8. Sync action added.
 9. SyncRun logging.
-10. Data Inventory updates.
-11. Scanner updates.
-12. Dashboard updates or deferral.
-13. Score Methodology update.
-14. Browser QA results.
-15. Data quality spot check.
-16. Automated check results.
-17. Known issues.
-18. Ready for commit or not.
+10. Rate-limit/chunking strategy.
+11. Data Inventory updates.
+12. Scanner updates.
+13. Dashboard updates.
+14. Score Methodology update.
+15. Browser QA results.
+16. Data quality spot check.
+17. Regression QA results.
+18. Automated check results.
+19. Known issues.
+20. Ready for commit or not.
 
 ---
 
 ## Acceptance Criteria
 
-Phase 13 is complete when:
+Phase 14 is complete when:
 
-- Opportunity Score v1 is calculated from existing DB data.
-- No external provider calls are added.
-- Opportunity Score is stored on `StockScore`.
-- Admin can calculate Opportunity Scores.
-- SyncRun logs the calculation.
-- Data Inventory shows Opportunity Score.
-- Scanner can display/filter/sort by Opportunity Score.
-- Dashboard shows Opportunity Score if implemented.
-- Score Methodology explains Opportunity Score.
-- Missing data is not treated as zero.
+- Analyst target/rating data source is investigated.
+- A provider is selected based on current plan availability.
+- Analyst data is stored in DB.
+- Analyst upside % is calculated or stored.
+- Admin can sync analyst data.
+- SyncRun logs the sync.
+- Data Inventory shows analyst fields.
+- Scanner shows analyst fields.
+- Dashboard shows analyst data if implemented.
+- Missing analyst values show N/A.
+- No provider calls happen from Scanner/Dashboard.
+- Opportunity Score v1 formula is unchanged.
 - Build passes.
 - TypeScript passes.
 - Prisma validates.
@@ -824,20 +849,22 @@ Phase 13 is complete when:
 
 ---
 
-## Future Improvements
+## Future Phase
 
-Future Opportunity Score versions may include:
+After Phase 14:
 
 ```txt
-Analyst target upside
-Technical trend / moving averages
-Relative volume
-News/catalyst
-Earnings timing
-Sector-relative valuation
-FCF yield
-ROIC
-Drawdown/rebound pattern
+Phase 15 — Opportunity Score v2 with Analyst Upside
+```
+
+Opportunity Score v2 may include:
+
+```txt
+Analyst Upside %
+Analyst Rating
+Analyst Count / confidence
+Target price spread
+Recommendation trend
 ```
 
 ---
@@ -869,3 +896,4 @@ Drawdown/rebound pattern
 - Phase 11 completed (2026-05-24): Scanner UX & Universe Selector Improvements. Fixed universe selector — Nasdaq 100 shown as active, Russell 1000 and S&P 500 shown as disabled "Coming soon" (backed by DB `hasData` count). Extended `HotStock` type with 20 new optional fields (detail metrics, score metadata, data freshness). Updated `getScannerData()` to map all new fields and compute `hasData` per universe via grouped Prisma query. Rewrote `ScannerTable` with score column tooltips (Info icon + title text), removed D/E and EPS Growth from main table, added expandable row chevron — clicking expands `ScannerExpandedRow` inline without opening the drawer. Created `ScannerExpandedRow` component with 6 grouped sections: Score Breakdown (progress bars + version + last calculated), Growth, Profitability, Valuation, Financial Health, and Data Freshness. Updated `ScannerViewPills` with 4 new active pills: High Fundamentals (≥75), High Growth (≥75), High Profitability (≥75), Reasonable Valuation (≥60). Updated `ScannerFilters` with 5 score threshold dropdowns (Any/50+/60+/70+/80+/90+) and Positive Day% toggle; exported `DEFAULT_FILTERS`. Updated `ScannerControls` with 5 new sort options (Risk Score, P/E, PEG, ROE, Revenue Growth — 13 total). Updated `ScannerPageClient` with new view/threshold filter logic, fixed universe selector rendering, improved empty states (no-match vs no-data). Dashboard deferred to Phase 12. No external provider calls, no schema changes, no Prisma migration. Build passes, TypeScript clean. Approved by user.
 - Phase 12 completed (2026-05-24): Dashboard Real Data Cleanup. Fully replaced the legacy/demo dashboard with a real-data overview screen. Rewrote `src/lib/data/dashboard.ts` — removed all seeded-data queries (MarketStat, DashboardSummaryCard, DiscoverSetup, AiInsight, RecentAlert, hotScore-based ordering) and replaced with real Prisma queries across Stock, StockQuote, StockMetric, StockScore, StockUniverseMember, and SyncRun. New `DashboardData` type exports: `DashboardSummary`, `DashboardFreshness`, `DashboardStockRow`, `DashboardSectorRow`, `DashboardWarning`, `DashboardWatchlistItem`. Created 5 new components: `DashboardSummaryCards.tsx` (8 real cards: Total Stocks, Scanner Ready, With Metrics, With Scores, Avg Fundamental, Stocks Above 75, Last Market Sync, Last Score Calc), `TopFundamentalStocksTable.tsx` (top 15 by fundamentalScore desc, with score bars and sub-scores), `SectorSummaryTable.tsx` (avg fundamental/growth/profitability per sector, top stock per sector), `DataCoverageSection.tsx` (progress bars for quotes/metrics/scores/scanner-ready with capped 100% display and "+N rows outside universe" note), `DataWarningsSection.tsx` (amber warnings for missing sync, missing metrics, missing scores, stale scores). Updated `DashboardHeader.tsx` (new subtitle), `DashboardGrid.tsx` (removed legacy widgets, wired new components), `WatchlistWidget.tsx` (shows fundamentalScore instead of hot/opp, uses `DashboardWatchlistItem` type), `app/page.tsx` (removed TodaysSignalCard, MarketStatsGrid, old SummaryCardsGrid; added new components). No Prisma migration added. No external provider calls. No scoring formula changes. Browser QA confirmed: 100 stocks, META top at Fund=89, all legacy fields absent, data warnings functional, coverage bars capped at 100%, sector summary present, watchlist shows Fund scores, Scanner and Admin Sync unbroken. Build passes, `tsc --noEmit` zero errors, `prisma validate` valid, `prisma migrate status` clean. Approved by user.
 - Phase 13 completed (2026-05-24): Opportunity Score v1. Added `oppScore Decimal?`, `oppScoreVersion String?`, `oppCalculatedAt DateTime?` to `StockScore` via migration `20260524135513_add_opportunity_score_fields`. Created `src/lib/scoring/opportunity-score.ts` — deterministic scoring engine with weighted average (fundamentalScore 35%, valuationScore 30%, growthScore 20%, riskContextScore 10%, pricePosition 5%), null-exclusion with weight re-normalization for missing components, price position scoring from 52W high/low (`(price - week52Low) / (week52High - week52Low)` → scored 30–100), version constant `OPPORTUNITY_SCORE_VERSION = "opportunity-v1"`. Added `calculateOpportunityScoresAction()` to `src/actions/market-data-actions.ts` — no external calls, skips stocks without fundamentalScore, upserts `StockScore.oppScore`, persists `SyncRun` (`type=opportunity-score-calculation`, `provider=internal`) + `SyncRunItem` per symbol. Fixed Turbopack stale cache bug (same as Phase 9I): cleared `.next/` and re-ran `prisma generate` before QA. Admin Sync Actions tab: added "Calculate Opportunity Scores" button with helper text and Internal badge. Score Methodology tab: added Opportunity Score v1 section with weights, price position table, missing data rules, version. Data Inventory: added Opp. Score, Opp. Version, Opp. Calc At columns. Scanner: added Opp. column (between Day% and Fund.), sort by Opportunity Score, "High Opportunity" pill (≥75), "Min Opp." threshold filter, expanded row shows Opportunity Score section with formula explanation. Dashboard: added "Avg Opportunity" and "High Opportunity" summary cards; added Opp. column to Top Fundamental Stocks table. No external provider calls added. Build passes, `tsc --noEmit` zero errors, `prisma validate` valid, `prisma migrate status` clean. Approved by user.
+- Phase 14 completed (2026-05-26): Analyst Data & Upside Integration. Added `StockAnalystData` Prisma model (targetPrice, analystUpsidePercent, analystRating, analystCount, targetHigh, targetLow, targetMedian, targetMean, strongBuy/buy/hold/sell/strongSell counts, source, lastSyncedAt, sourceUpdatedAt) via migration `20260525182611_add_stock_analyst_data`. Provider strategy: FMP `/stable/price-target-summary` for price targets (returns array — parsed correctly), Finnhub `/stock/recommendation` for analyst counts and derived rating; source stored as `fmp+finnhub`. Added `MarketDataProvider` union type extended to include `"fmp+finnhub"`. Created three chunked sync API routes: `POST /api/admin/analyst-sync/start` (start/restart), `POST /api/admin/analyst-sync/process-next` (chunk of 10, 1200ms pacing), `GET /api/admin/analyst-sync/latest` (polling). Sync result: 100/100 Nasdaq 100 stocks succeeded; 16 have FMP target price data (FMP free plan coverage limitation — 84 return empty array, stored as null); all 100 have Finnhub recommendation rating and count. Upside calculated internally from stored quote: `((targetMean - price) / price) × 100`. Admin Sync Actions tab: added Analyst Data Sync section with Start/Continue/Restart chunked UX. Sync History: records `analyst-data-nasdaq100-sync` with `provider=fmp+finnhub`. Data Inventory: added 9 analyst columns (Has Analyst, Target Price, Upside %, Rating, Count, Target High, Target Low, Source, Last Synced) with 2 new summary cards. Scanner: added Target, Upside, Rating columns; sort by Analyst Upside and Target Price; Min Analyst Upside filter; High Analyst Upside pill (≥20%); Analyst Data section in expanded row. Fixed ScannerTable React key prop warning (fragment changed from `<>` to `<React.Fragment key={...}>`). Dashboard: added 2 analyst summary cards (With Analyst Data, Avg Analyst Upside); added Top Analyst Upside table (top 10 by upside%). Score Methodology tab: added Analyst Data section noting data is collected but not yet scored. Dashboard freshness bug fixed: `lastScoreCalc` query was requiring `status="success"` but Fundamental Score action always writes `status="partial_success"` (skipped stocks without metrics); fixed to `status: { in: ["success","partial_success"] }, successCount: { gt: 0 }`; improved warning messages. Opportunity Score v1 formula unchanged. No provider calls from Scanner or Dashboard. Build passes, `tsc --noEmit` zero errors, `prisma validate` valid, `prisma migrate status` clean. Known issue: FMP free plan covers only 16 of 100 Nasdaq 100 symbols for price-target-summary; remaining 84 show N/A for target price and upside. Approved by user.

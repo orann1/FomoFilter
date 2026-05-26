@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import ClientAppShell from "@/src/components/layout/ClientAppShell";
 import SyncPageClient from "@/src/components/admin/SyncPageClient";
 import { getCurrentUserForDemo } from "@/src/lib/data/current-user";
-import { getRecentSyncRuns, getLatestChunkedSyncRun } from "@/src/lib/data/admin-sync";
+import { getRecentSyncRuns, getLatestChunkedSyncRun, getLatestAnalystSyncRun } from "@/src/lib/data/admin-sync";
 import { getUniverseOverview, getDbStockSummary } from "@/src/lib/data/admin-universes";
 import { getAdminStockDataInventory } from "@/src/lib/data/admin-stock-data";
 
@@ -12,13 +12,14 @@ function isKeyConfigured(key: string | undefined): boolean {
 }
 
 export default async function AdminSyncPage() {
-  const [user, recentSyncRuns, universeOverview, dbStockSummary, stockInventory, initialChunkedSync] = await Promise.all([
+  const [user, recentSyncRuns, universeOverview, dbStockSummary, stockInventory, initialChunkedSync, initialAnalystSync] = await Promise.all([
     getCurrentUserForDemo(),
     getRecentSyncRuns(10),
     getUniverseOverview(),
     getDbStockSummary(),
     getAdminStockDataInventory(),
     getLatestChunkedSyncRun(),
+    getLatestAnalystSyncRun(),
   ]);
 
   const providerStatus = {
@@ -52,6 +53,7 @@ export default async function AdminSyncPage() {
         dbStockSummary={dbStockSummary}
         stockInventory={stockInventory}
         initialChunkedSync={initialChunkedSync}
+        initialAnalystSync={initialAnalystSync}
       />
     </ClientAppShell>
   );

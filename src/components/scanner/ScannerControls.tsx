@@ -14,9 +14,12 @@ export type SortKey =
   | "peg-ratio"
   | "roe"
   | "revenue-growth"
+  | "analyst-upside"
+  | "analyst-target"
   | "symbol";
 
 const sortOptions: { value: SortKey; label: string }[] = [
+  { value: "analyst-upside", label: "Analyst Upside %" },
   { value: "opportunity-score", label: "Opportunity Score" },
   { value: "fundamental-score", label: "Fundamental Score" },
   { value: "growth-score", label: "Growth Score" },
@@ -30,6 +33,7 @@ const sortOptions: { value: SortKey; label: string }[] = [
   { value: "peg-ratio", label: "PEG Ratio" },
   { value: "roe", label: "ROE" },
   { value: "revenue-growth", label: "Revenue Growth" },
+  { value: "analyst-target", label: "Target Price" },
   { value: "symbol", label: "Symbol (A–Z)" },
 ];
 

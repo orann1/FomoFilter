@@ -22,6 +22,7 @@ export default async function Home() {
         summary={data.summary}
         freshness={data.freshness}
         alertRulesBySymbol={data.alertRulesBySymbol}
+        topAnalystUpsideStocks={data.topAnalystUpsideStocks}
       />
     </ClientAppShell>
   );

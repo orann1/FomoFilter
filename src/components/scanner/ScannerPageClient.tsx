@@ -53,6 +53,10 @@ function sortStocks(stocks: HotStock[], sortBy: SortKey): HotStock[] {
       return sorted.sort((a, b) => nullLast(a.roe, b.roe));
     case "revenue-growth":
       return sorted.sort((a, b) => nullLast(a.revenueGrowth, b.revenueGrowth));
+    case "analyst-upside":
+      return sorted.sort((a, b) => nullLast(a.analystUpsidePercent, b.analystUpsidePercent));
+    case "analyst-target":
+      return sorted.sort((a, b) => nullLast(a.analystTargetPrice, b.analystTargetPrice));
     case "symbol":
       return sorted.sort((a, b) => a.symbol.localeCompare(b.symbol));
     default:
@@ -89,6 +93,8 @@ function applyViewFilter(
       return stocks.filter((s) => (s.profitabilityScore ?? 0) >= 75);
     case "reasonable-valuation":
       return stocks.filter((s) => (s.valuationScore ?? 0) >= 60);
+    case "high-analyst-upside":
+      return stocks.filter((s) => (s.analystUpsidePercent ?? -Infinity) >= 20);
     case "in-watchlist":
       return stocks.filter((s) => s.inWatchlist);
     case "alert-active":
@@ -107,6 +113,7 @@ function applyScoreThresholds(stocks: HotStock[], filters: ScannerFilterState): 
     if (filters.minValuation > 0 && (s.valuationScore ?? 0) < filters.minValuation) return false;
     if (filters.minHealth > 0 && (s.financialHealthScore ?? 0) < filters.minHealth) return false;
     if (filters.positiveDay && s.change < 0) return false;
+    if (filters.minAnalystUpside > 0 && (s.analystUpsidePercent ?? -Infinity) < filters.minAnalystUpside) return false;
     return true;
   });
 }
