@@ -1793,8 +1793,10 @@ export default function SyncPageClient({
               </div>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
                 Refreshes daily-changing market data for all active stocks: quotes, price movement,
-                volume, 52-week context, and financial metrics. Runs in resumable chunks — progress
-                is saved after each stock so the sync can be continued if interrupted.
+                volume, and market context. Runs in resumable chunks — progress is saved after each
+                stock so the sync can be continued if interrupted. Current implementation still uses
+                the legacy Finnhub quote + basic metrics sync until the FMP daily-data migration is
+                completed.
               </p>
             </div>
 
@@ -1871,7 +1873,7 @@ export default function SyncPageClient({
                 <Info className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
                 <div className="text-xs space-y-0.5 text-slate-500">
                   <p>Run once per trading day, preferably after market close.</p>
-                  <p>Uses Finnhub. Syncs 2 calls per stock: quote + metrics. Chunk size: 10.</p>
+                  <p>Current provider: Finnhub legacy sync. Fetches quote + basic metrics per stock (2 calls). In the upcoming FMP migration, company metrics will move to Company Data Sync and this workflow will focus on daily market data only. Chunk size: 10.</p>
                   {nasdaq100MetricTotal !== null && (
                     <>
                       <p>
@@ -1892,9 +1894,10 @@ export default function SyncPageClient({
               <div className="flex items-start gap-2 border-t border-slate-700/60 pt-2">
                 <Info className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
                 <p className="text-xs text-slate-500 leading-relaxed">
-                  After market data sync finishes, run{" "}
-                  <span className="text-slate-400 font-medium">Calculate Fundamental Scores</span>{" "}
-                  to refresh scores.
+                  Current legacy sync may update basic metrics. After the FMP migration, Fundamental
+                  Scores should be refreshed after{" "}
+                  <span className="text-slate-400 font-medium">Company Data Sync</span>
+                  , not after a pure daily market data sync.
                 </p>
               </div>
             </div>
@@ -1902,7 +1905,10 @@ export default function SyncPageClient({
             {nasdaq100MetricTotal !== null && (
               <div className="rounded bg-slate-900/60 border border-slate-700/60 px-3 py-2.5 space-y-1.5">
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                  Metrics coverage
+                  Legacy metrics coverage
+                </p>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Current legacy Finnhub sync coverage. Company metrics will move to Company Data Sync after the FMP migration.
                 </p>
                 <div className="grid grid-cols-2 gap-3 text-xs">
                   <div>
