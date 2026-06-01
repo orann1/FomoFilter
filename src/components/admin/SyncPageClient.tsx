@@ -208,8 +208,8 @@ function ScoreCalcResultViewer({ result }: { result: ScoreCalcResult }) {
 
 const SYNC_ACTION_META: Record<string, { label: string; durationNote: string }> = {
   "sync-nasdaq100": {
-    label: "Sync Nasdaq 100 Universe",
-    durationNote: "Nasdaq 100 universe sync may take around 45–75 seconds.",
+    label: "Sync Stock Universe",
+    durationNote: "Universe sync may take around 45–75 seconds.",
   },
   "sync-quotes": {
     label: "Sync Quotes Sample",
@@ -1115,6 +1115,7 @@ export default function SyncPageClient({
   const [activeAction, setActiveAction] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [activeTab, setActiveTab] = useState<TabId>("overview");
+  const [devToolsExpanded, setDevToolsExpanded] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Market data chunked sync state
@@ -1665,10 +1666,9 @@ export default function SyncPageClient({
             Admin / Developer
           </span>
         </div>
-        <h1 className="text-xl font-bold text-white">Market Data Sync</h1>
+        <h1 className="text-xl font-bold text-white">Admin Sync</h1>
         <p className="text-sm text-slate-400 mt-1">
-          Internal tool for managing universe membership, testing data providers, and syncing
-          stock data in resumable chunks.
+          Manage universe membership, sync company and market data, calculate scores, and test data providers.
         </p>
       </div>
 
@@ -1713,19 +1713,22 @@ export default function SyncPageClient({
       {activeTab === "sync-actions" && (
         <div className="space-y-5">
 
-          {/* 1 — Universe Management */}
+          {/* 1 — Universe Sync */}
           <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
             <div>
               <div className="flex items-center gap-2 mb-0.5">
                 <Globe className="w-4 h-4 text-slate-400" />
-                <h2 className="text-sm font-semibold text-slate-200">Universe Management</h2>
+                <h2 className="text-sm font-semibold text-slate-200">Universe Sync</h2>
                 <span className="text-xs font-medium text-emerald-700 bg-emerald-900/40 border border-emerald-800/50 px-2 py-0.5 rounded ml-1">
                   Writes to DB
                 </span>
+                <span className="text-xs font-medium text-slate-500 bg-slate-700/60 px-2 py-0.5 rounded ml-1">
+                  Manual / Weekly
+                </span>
               </div>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Syncs Nasdaq 100 index membership only. Creates missing stocks, updates memberships,
-                deactivates removed symbols. Does not sync quotes. Never deletes stocks, watchlist, or alerts.
+                Builds and updates the active stock universe. Creates missing stocks, updates membership,
+                and marks removed symbols inactive. Does not sync market or financial data.
               </p>
             </div>
             <ActionButton
@@ -1733,8 +1736,8 @@ export default function SyncPageClient({
               onClick={() => runUniverseSync("sync-nasdaq100", syncNasdaq100UniverseAction)}
               disabled={isLoading || anyChunkedRunning}
               loading={activeAction === "sync-nasdaq100"}
-              label="Sync Nasdaq 100 Universe"
-              description="Syncs Nasdaq 100 membership from static fallback list. FMP is used only for profile enrichment. No quote sync."
+              label="Sync Stock Universe"
+              description="Syncs Nasdaq 100 membership from static fallback list. FMP is used only for profile enrichment. No quote or financial data sync."
             />
             {isSyncRunning && activeAction === "sync-nasdaq100" && activeSyncMeta && (
               <SyncInProgressPanel
@@ -1773,20 +1776,23 @@ export default function SyncPageClient({
             </div>
           </section>
 
-          {/* 2 — Nasdaq 100 Market Data Sync (chunked) */}
+          {/* 2 — Daily Market Data Sync (chunked) */}
           <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
             <div>
               <div className="flex items-center gap-2 mb-0.5">
                 <RefreshCw className="w-4 h-4 text-slate-400" />
-                <h2 className="text-sm font-semibold text-slate-200">Nasdaq 100 Market Data Sync</h2>
+                <h2 className="text-sm font-semibold text-slate-200">Daily Market Data Sync</h2>
                 <span className="text-xs font-medium text-emerald-700 bg-emerald-900/40 border border-emerald-800/50 px-2 py-0.5 rounded ml-1">
                   Writes to DB
                 </span>
+                <span className="text-xs font-medium text-slate-500 bg-slate-700/60 px-2 py-0.5 rounded ml-1">
+                  Daily
+                </span>
               </div>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Syncs quote snapshots and Finnhub basic financial metrics for all active Nasdaq 100
-                stocks. Runs in chunks of 10 stocks — progress is saved after each stock so the
-                sync can be continued if interrupted.
+                Refreshes daily-changing market data for all active stocks: quotes, price movement,
+                volume, 52-week context, and financial metrics. Runs in resumable chunks — progress
+                is saved after each stock so the sync can be continued if interrupted.
               </p>
             </div>
 
@@ -1803,7 +1809,7 @@ export default function SyncPageClient({
                   ) : (
                     <Play className="w-3.5 h-3.5" />
                   )}
-                  Sync All Nasdaq 100 Market Data
+                  Sync Daily Market Data
                 </button>
               ) : null}
 
@@ -1862,6 +1868,7 @@ export default function SyncPageClient({
               <div className="flex items-start gap-2">
                 <Info className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
                 <div className="text-xs space-y-0.5 text-slate-500">
+                  <p>Run once per trading day, preferably after market close.</p>
                   <p>Uses Finnhub. Syncs 2 calls per stock: quote + metrics. Chunk size: 10.</p>
                   {nasdaq100MetricTotal !== null && (
                     <>
@@ -1913,20 +1920,23 @@ export default function SyncPageClient({
             )}
           </section>
 
-          {/* 3 — Analyst Data Sync (chunked) */}
+          {/* 3 — Company Data Sync (chunked) */}
           <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
             <div>
               <div className="flex items-center gap-2 mb-0.5">
                 <Database className="w-4 h-4 text-slate-400" />
-                <h2 className="text-sm font-semibold text-slate-200">Analyst Data Sync</h2>
+                <h2 className="text-sm font-semibold text-slate-200">Company Data Sync</h2>
                 <span className="text-xs font-medium text-emerald-700 bg-emerald-900/40 border border-emerald-800/50 px-2 py-0.5 rounded ml-1">
                   Writes to DB
                 </span>
+                <span className="text-xs font-medium text-slate-500 bg-slate-700/60 px-2 py-0.5 rounded ml-1">
+                  Weekly / Slow-changing
+                </span>
               </div>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Fetches analyst target price and recommendation data from Finnhub for all active Nasdaq 100
-                stocks. Stores target price, upside %, rating, and analyst counts in{" "}
-                <span className="font-mono text-slate-400">StockAnalystData</span>. Does not change scores.
+                Syncs slower-changing company data for all active stocks: analyst target prices,
+                analyst recommendation counts, and upside %. Run weekly or after earnings updates.
+                Does not calculate scores automatically.
               </p>
             </div>
 
@@ -1943,7 +1953,7 @@ export default function SyncPageClient({
                   ) : (
                     <Play className="w-3.5 h-3.5" />
                   )}
-                  Sync Nasdaq 100 Analyst Data
+                  Sync Company Data
                 </button>
               ) : null}
 
@@ -2000,109 +2010,13 @@ export default function SyncPageClient({
                   <p>Uses Finnhub. 2 calls per stock: <span className="font-mono text-slate-400">/stock/price-target</span> + <span className="font-mono text-slate-400">/stock/recommendation</span>.</p>
                   <p>Chunk size: 10 stocks. Rate limited to ~50 calls/minute (≥1.2s between stocks).</p>
                   <p>Upside % is calculated internally: <span className="font-mono text-slate-400">((target - price) / price) × 100</span>.</p>
-                  <p className="text-amber-500">Does not change Opportunity Score v1. Scores will use analyst data in a future phase.</p>
+                  <p className="text-slate-400 font-medium">Phase 17 will migrate this workflow to FMP for full profile, fundamentals, and target consensus coverage.</p>
                 </div>
               </div>
             </div>
           </section>
 
-          {/* 4 — Analyst Target Discovery (Phase 15) */}
-          <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
-            <div>
-              <div className="flex items-center gap-2 mb-0.5">
-                <Database className="w-4 h-4 text-slate-400" />
-                <h2 className="text-sm font-semibold text-slate-200">Analyst Target Discovery</h2>
-                <span className="text-xs font-medium text-amber-700 bg-amber-900/40 border border-amber-800/50 px-2 py-0.5 rounded ml-1">
-                  FMP
-                </span>
-                <span className="text-xs font-medium text-blue-700 bg-blue-900/40 border border-blue-800/50 px-2 py-0.5 rounded ml-1">
-                  Quota Safe
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Attempts to discover missing analyst target prices using a conservative request budget.
-                Stops safely when the provider quota is reached and can continue later.
-                Does not change Opportunity Score. Target data remains display-only until coverage is high enough.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              {(targetDiscoveryNeverRun || (!targetDiscoveryAutoRunning && isTerminal(targetDiscoverySync))) && (
-                <button
-                  onClick={handleStartTargetDiscovery}
-                  disabled={isLoading || anyChunkedRunning}
-                  className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {targetDiscoveryAutoRunning ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Play className="w-3.5 h-3.5" />
-                  )}
-                  Start Target Discovery
-                </button>
-              )}
-
-              {targetDiscoveryShowContinue && (
-                <button
-                  onClick={handleContinueTargetDiscovery}
-                  disabled={isLoading || anyChunkedRunning}
-                  className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium bg-blue-700 hover:bg-blue-600 text-white border border-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <SkipForward className="w-3.5 h-3.5" />
-                  Continue Target Discovery
-                </button>
-              )}
-
-              {targetDiscoveryShowRestart && !targetDiscoveryAutoRunning && (
-                <button
-                  onClick={handleRestartTargetDiscovery}
-                  disabled={isLoading || anyChunkedRunning}
-                  className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium bg-slate-700 hover:bg-slate-600 text-slate-200 border border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  Restart Discovery Cycle
-                </button>
-              )}
-            </div>
-
-            {targetDiscoveryShowProgress && targetDiscoverySync && (
-              <ChunkedSyncProgressPanel
-                progress={targetDiscoverySync}
-                autoRunning={targetDiscoveryAutoRunning}
-                chunkError={targetDiscoveryChunkError}
-                elapsedMs={targetDiscoveryElapsedMs}
-              />
-            )}
-
-            {targetDiscoveryShowPaused && targetDiscoverySync && (
-              <PausedSyncPanel progress={targetDiscoverySync} chunkError={targetDiscoveryChunkError} />
-            )}
-
-            {targetDiscoveryChunkError && !targetDiscoverySync && (
-              <p className="text-xs text-red-400 bg-red-900/20 border border-red-800/40 rounded px-3 py-2">
-                {targetDiscoveryChunkError}
-              </p>
-            )}
-
-            {targetDiscoveryShowResult && targetDiscoverySync && (
-              <ChunkedSyncResultPanel progress={targetDiscoverySync} />
-            )}
-
-            <div className="rounded bg-slate-900/60 border border-slate-700/60 px-3 py-2.5 space-y-2">
-              <div className="flex items-start gap-2">
-                <Info className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
-                <div className="text-xs space-y-0.5 text-slate-500">
-                  <p>Uses FMP <span className="font-mono text-slate-400">/stable/price-target-summary</span>. 1 call per symbol.</p>
-                  <p>Run limits: max <span className="font-mono text-slate-400">40 attempts</span> or <span className="font-mono text-slate-400">16 targets found</span> per run. Chunk size: 10.</p>
-                  <p>Cooldowns: has_target → 14 days · no_target → 30 days · error → 1 day · plan_limited (HTTP 402) → 90 days.</p>
-                  <p>Existing target prices are never deleted when a new response is empty.</p>
-                  <p className="text-amber-500">Does not change Opportunity Score. Run across multiple days to improve coverage.</p>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* 5 — Score Calculation */}
+          {/* 4 — Score Calculation */}
           <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
             <div>
               <div className="flex items-center gap-2 mb-0.5">
@@ -2167,6 +2081,127 @@ export default function SyncPageClient({
                 <span className="font-mono text-slate-400">fundamentalScore</span>. No external provider calls.
               </p>
             </div>
+          </section>
+
+          {/* 5 — Developer / Legacy Tools */}
+          <section className="bg-slate-800/50 border border-slate-700/60 rounded-lg overflow-hidden">
+            <button
+              className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-slate-700/30 transition-colors"
+              onClick={() => setDevToolsExpanded((v) => !v)}
+            >
+              {devToolsExpanded ? (
+                <ChevronDown className="w-4 h-4 text-slate-500 shrink-0" />
+              ) : (
+                <ChevronRight className="w-4 h-4 text-slate-500 shrink-0" />
+              )}
+              <FlaskConical className="w-4 h-4 text-slate-500 shrink-0" />
+              <span className="text-sm font-medium text-slate-400">Developer / Legacy Tools</span>
+              <span className="text-xs font-medium text-slate-600 bg-slate-700/60 px-2 py-0.5 rounded ml-1">
+                Not production workflows
+              </span>
+            </button>
+
+            {devToolsExpanded && (
+              <div className="border-t border-slate-700/60 p-4 space-y-4">
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  These tools are legacy or developer-only utilities. They are not part of the main sync workflow.
+                  The Analyst Target Discovery workflow was used before FMP Starter was available.
+                  It will be replaced by the Company Data Sync in Phase 17.
+                </p>
+
+                {/* Analyst Target Discovery (Legacy) */}
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex items-center gap-2 mb-0.5">
+                      <Database className="w-4 h-4 text-slate-500" />
+                      <h3 className="text-sm font-medium text-slate-400">Analyst Target Discovery</h3>
+                      <span className="text-xs font-medium text-amber-700 bg-amber-900/40 border border-amber-800/50 px-2 py-0.5 rounded ml-1">
+                        Legacy
+                      </span>
+                      <span className="text-xs font-medium text-blue-700 bg-blue-900/40 border border-blue-800/50 px-2 py-0.5 rounded ml-1">
+                        Quota Safe
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600 mt-1 leading-relaxed">
+                      Free-plan fallback for discovering missing analyst targets via FMP. Replaces with Phase 17 FMP Starter consensus endpoint.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {(targetDiscoveryNeverRun || (!targetDiscoveryAutoRunning && isTerminal(targetDiscoverySync))) && (
+                      <button
+                        onClick={handleStartTargetDiscovery}
+                        disabled={isLoading || anyChunkedRunning}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium bg-slate-700 hover:bg-slate-600 text-slate-200 border border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {targetDiscoveryAutoRunning ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Play className="w-3.5 h-3.5" />
+                        )}
+                        Start Target Discovery
+                      </button>
+                    )}
+
+                    {targetDiscoveryShowContinue && (
+                      <button
+                        onClick={handleContinueTargetDiscovery}
+                        disabled={isLoading || anyChunkedRunning}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium bg-blue-700 hover:bg-blue-600 text-white border border-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <SkipForward className="w-3.5 h-3.5" />
+                        Continue Target Discovery
+                      </button>
+                    )}
+
+                    {targetDiscoveryShowRestart && !targetDiscoveryAutoRunning && (
+                      <button
+                        onClick={handleRestartTargetDiscovery}
+                        disabled={isLoading || anyChunkedRunning}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium bg-slate-700 hover:bg-slate-600 text-slate-200 border border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <RotateCcw className="w-3.5 h-3.5" />
+                        Restart Discovery Cycle
+                      </button>
+                    )}
+                  </div>
+
+                  {targetDiscoveryShowProgress && targetDiscoverySync && (
+                    <ChunkedSyncProgressPanel
+                      progress={targetDiscoverySync}
+                      autoRunning={targetDiscoveryAutoRunning}
+                      chunkError={targetDiscoveryChunkError}
+                      elapsedMs={targetDiscoveryElapsedMs}
+                    />
+                  )}
+
+                  {targetDiscoveryShowPaused && targetDiscoverySync && (
+                    <PausedSyncPanel progress={targetDiscoverySync} chunkError={targetDiscoveryChunkError} />
+                  )}
+
+                  {targetDiscoveryChunkError && !targetDiscoverySync && (
+                    <p className="text-xs text-red-400 bg-red-900/20 border border-red-800/40 rounded px-3 py-2">
+                      {targetDiscoveryChunkError}
+                    </p>
+                  )}
+
+                  {targetDiscoveryShowResult && targetDiscoverySync && (
+                    <ChunkedSyncResultPanel progress={targetDiscoverySync} />
+                  )}
+
+                  <div className="rounded bg-slate-900/60 border border-slate-700/60 px-3 py-2.5 space-y-1">
+                    <div className="flex items-start gap-2">
+                      <Info className="w-3.5 h-3.5 text-slate-600 shrink-0 mt-0.5" />
+                      <div className="text-xs space-y-0.5 text-slate-600">
+                        <p>Uses FMP <span className="font-mono text-slate-500">/stable/price-target-summary</span>. 1 call per symbol.</p>
+                        <p>Run limits: max 40 attempts or 16 targets found per run. Chunk size: 10.</p>
+                        <p>Cooldowns: has_target → 14d · no_target → 30d · error → 1d · plan_limited (HTTP 402) → 90d.</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </section>
 
           {/* Review Results (for universe sync and score calc) */}
