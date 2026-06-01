@@ -812,6 +812,19 @@ function UniverseSyncResultViewer({ result }: { result: UniverseSyncActionResult
 
 // ── Recent Sync Runs ──────────────────────────────────────────────────────────
 
+const SYNC_RUN_TYPE_LABELS: Record<string, string> = {
+  "analyst-data-nasdaq100-sync": "Company Data Sync",
+  "market-data-nasdaq100-batch": "Daily Market Data Sync",
+  "fundamental-score-calculation": "Fundamental Score Calc",
+  "opportunity-score-calculation": "Opportunity Score Calc",
+  "nasdaq100-universe-sync": "Universe Sync",
+  "analyst-target-discovery": "Target Discovery (Legacy)",
+};
+
+function syncRunTypeLabel(type: string): string {
+  return SYNC_RUN_TYPE_LABELS[type] ?? type;
+}
+
 function ItemStatusIcon({ status }: { status: string }) {
   if (status === "success") return <CheckCircle className="w-3 h-3 text-emerald-400 shrink-0" />;
   if (status === "skipped") return <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0" />;
@@ -844,7 +857,12 @@ function SyncRunRow({ run }: { run: SyncRunData }) {
             </span>
           </span>
         </td>
-        <td className="px-3 py-2.5 text-xs font-mono text-slate-300">{run.type}</td>
+        <td className="px-3 py-2.5 text-xs text-slate-300">
+          <span>{syncRunTypeLabel(run.type)}</span>
+          {SYNC_RUN_TYPE_LABELS[run.type] && (
+            <span className="ml-1 font-mono text-slate-600 text-[10px]">{run.type}</span>
+          )}
+        </td>
         <td className="px-3 py-2.5 text-xs text-slate-400">{run.provider}</td>
         <td className="px-3 py-2.5">
           <SyncStatusBadge status={run.status} />
@@ -1942,9 +1960,10 @@ export default function SyncPageClient({
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Syncs slower-changing company data for all active stocks: analyst target prices,
-                analyst recommendation counts, and upside %. Run weekly or after earnings updates.
-                Does not calculate scores automatically.
+                Syncs slower-changing company data for all active stocks. Current implementation
+                refreshes analyst target prices, recommendation counts, and upside %. Future FMP
+                migration will add fundamentals, ratios, growth, profile, and earnings data. Does
+                not calculate scores automatically.
               </p>
             </div>
 
@@ -2017,7 +2036,7 @@ export default function SyncPageClient({
                 <div className="text-xs space-y-0.5 text-slate-500">
                   <p>Target prices: FMP <span className="font-mono text-slate-400">/stable/price-target-consensus</span> (targetConsensus, targetHigh, targetLow, targetMedian).</p>
                   <p>Recommendation counts: Finnhub <span className="font-mono text-slate-400">/stock/recommendation</span> (strongBuy/buy/hold/sell/strongSell).</p>
-                  <p>Chunk size: 10 stocks. Rate limited to ~50 calls/minute (≥1.2s between stocks).</p>
+                  <p>Chunk size: 10 stocks. Uses ~1.2s pacing between symbols to stay within provider limits.</p>
                   <p>Upside % is calculated internally: <span className="font-mono text-slate-400">((targetConsensus - price) / price) × 100</span>.</p>
                 </div>
               </div>
