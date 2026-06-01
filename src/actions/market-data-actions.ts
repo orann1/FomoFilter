@@ -597,7 +597,7 @@ export async function syncNasdaq100UniverseAction(): Promise<UniverseSyncActionR
   let failedCount = 0;
   let skippedCount = 0;
 
-  // 1. Fetch constituents (static list + FMP profile enrichment)
+  // 1. Fetch constituents from static fallback list (enriched with FMP profile data)
   const constituentResult = await fetchFmpNasdaq100Constituents();
 
   if (!constituentResult.ok || !constituentResult.data) {
@@ -809,10 +809,8 @@ export async function syncNasdaq100UniverseAction(): Promise<UniverseSyncActionR
   const persisted = successCount > 0;
 
   const message = [
-    `Fetched ${constituents.length} symbols from static fallback list.`,
-    `FMP /stable/nasdaq-constituent returned HTTP 402 on current plan.`,
-    `Finnhub /indices/constituents returned HTML paywall.`,
-    `FMP was used only for profile enrichment.`,
+    `Fetched ${constituents.length} symbols from the static Nasdaq 100 fallback list.`,
+    `FMP index constituent endpoints require a higher plan tier, so static fallback remains the current source for universe membership.`,
     `Created stocks: ${createdStocks}.`,
     `Created memberships: ${createdMemberships}.`,
     `Reactivated: ${reactivated}.`,

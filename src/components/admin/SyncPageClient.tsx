@@ -1737,7 +1737,7 @@ export default function SyncPageClient({
               disabled={isLoading || anyChunkedRunning}
               loading={activeAction === "sync-nasdaq100"}
               label="Sync Stock Universe"
-              description="Syncs Nasdaq 100 membership from static fallback list. FMP is used only for profile enrichment. No quote or financial data sync."
+              description="Syncs Nasdaq 100 membership from the static fallback list. FMP index constituent endpoints require a higher plan tier, so static fallback is the current universe membership source. No quote or financial data sync."
             />
             {isSyncRunning && activeAction === "sync-nasdaq100" && activeSyncMeta && (
               <SyncInProgressPanel
@@ -1751,11 +1751,13 @@ export default function SyncPageClient({
                 <Info className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
                 <div className="text-xs space-y-0.5">
                   <p className="text-slate-300 font-medium">
-                    Current source: Static fallback list, manually validated
+                    Current source: Static fallback list
                   </p>
                   <p className="text-slate-500">
-                    FMP is used only for profile enrichment (name, sector, marketCap). Live FMP
-                    constituents require a paid endpoint.
+                    Nasdaq 100 membership currently uses a manually validated static fallback list
+                    because FMP index constituent endpoints require a higher plan tier. This affects
+                    universe membership only. FMP Starter is still used for company, market,
+                    financial, and analyst target data in other sync workflows.
                   </p>
                   <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1.5 text-slate-500 font-mono">
                     <span>compositionAsOf: <span className="text-slate-400">2026-01-20</span></span>
