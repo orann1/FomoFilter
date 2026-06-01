@@ -304,14 +304,16 @@ export default function ScoreMethodologyTab() {
         </div>
       </Section>
 
-      {/* ── Analyst Data (Phase 14) ─────────────────────────────────────── */}
+      {/* ── Analyst Data (Phase 17) ─────────────────────────────────────── */}
       <Section title="Analyst Data — Collected, Not Yet Scored" icon={<Info className="w-4 h-4" />}>
         <div className="space-y-3 text-sm text-slate-300 leading-relaxed">
           <p>
-            As of <span className="font-semibold text-white">Phase 14</span>, analyst consensus data is fetched from{" "}
-            <span className="font-mono text-slate-300">Finnhub</span> and stored in{" "}
-            <span className="font-mono text-slate-300">StockAnalystData</span>.
-            This data is displayed in the Scanner and Dashboard but is{" "}
+            As of <span className="font-semibold text-white">Phase 17</span>, analyst target data uses{" "}
+            <span className="font-mono text-slate-300">FMP /stable/price-target-consensus</span> as the primary source.
+            Recommendation counts remain sourced from{" "}
+            <span className="font-mono text-slate-300">Finnhub /stock/recommendation</span>.
+            Data is stored in <span className="font-mono text-slate-300">StockAnalystData</span> and displayed
+            in the Scanner and Dashboard but is{" "}
             <strong className="text-white">not yet included in Opportunity Score v1</strong>.
           </p>
 
@@ -320,11 +322,11 @@ export default function ScoreMethodologyTab() {
               <TableHeader headers={["Field", "Source", "How Derived", "Status"]} />
               <tbody>
                 {[
-                  { field: "Analyst Target Price", source: "Finnhub /stock/price-target", derived: "targetMean from provider", status: "Stored" },
-                  { field: "Analyst Upside %", source: "Internal calculation", derived: "((targetMean − price) / price) × 100", status: "Stored" },
+                  { field: "Analyst Target Price", source: "FMP /stable/price-target-consensus", derived: "targetConsensus (primary consensus price)", status: "Stored" },
+                  { field: "Target High / Low / Median", source: "FMP /stable/price-target-consensus", derived: "targetHigh, targetLow, targetMedian direct", status: "Stored" },
+                  { field: "Analyst Upside %", source: "Internal calculation", derived: "((targetConsensus − price) / price) × 100", status: "Stored" },
                   { field: "Analyst Rating", source: "Finnhub /stock/recommendation", derived: "Normalized from Buy/Hold/Sell counts", status: "Stored" },
                   { field: "Analyst Count", source: "Finnhub /stock/recommendation", derived: "strongBuy + buy + hold + sell + strongSell", status: "Stored" },
-                  { field: "Target High / Low", source: "Finnhub /stock/price-target", derived: "targetHigh / targetLow direct", status: "Stored" },
                 ].map((row) => (
                   <tr key={row.field} className="border-b border-slate-700/40">
                     <td className="px-3 py-2 font-medium text-slate-200">{row.field}</td>
@@ -339,25 +341,29 @@ export default function ScoreMethodologyTab() {
             </table>
           </div>
 
-          <div className="flex items-start gap-2 rounded bg-amber-900/20 border border-amber-800/40 px-3 py-2.5">
-            <Info className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
-            <p className="text-xs text-amber-300">
-              <strong>Coverage note:</strong> Analyst rating and count coverage is 100 / 100. Target price coverage is
-              limited by the FMP free plan. Phase 15 adds a quota-safe target discovery sync that gradually improves
-              coverage across multiple days. Analyst Upside remains display-only until coverage reaches ≥ 60%.
+          <div className="flex items-start gap-2 rounded bg-blue-900/20 border border-blue-800/40 px-3 py-2.5">
+            <Info className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
+            <p className="text-xs text-blue-300">
+              <strong>Phase 17 migration:</strong> Previously, Phase 14/15 used FMP{" "}
+              <span className="font-mono">price-target-summary</span> which returns averaging fields
+              (lastMonthAvgPriceTarget, etc.) — not the correct target consensus values.
+              Phase 17 corrects this by using{" "}
+              <span className="font-mono">price-target-consensus</span> which provides real targetConsensus,
+              targetHigh, targetLow, and targetMedian. Analyst Upside is display-only until Opportunity Score v2.
             </p>
           </div>
         </div>
       </Section>
 
-      {/* ── Target Discovery (Phase 15) ──────────────────────────────────── */}
-      <Section title="Analyst Target Discovery — Phase 15" icon={<Info className="w-4 h-4" />}>
+      {/* ── Target Discovery (Phase 15 — Legacy) ────────────────────────── */}
+      <Section title="Analyst Target Discovery — Legacy (Phase 15)" icon={<Info className="w-4 h-4" />}>
         <div className="space-y-3 text-sm text-slate-300 leading-relaxed">
           <p>
-            Phase 15 adds a <span className="font-semibold text-white">quota-safe target discovery sync</span> that
-            uses FMP <span className="font-mono text-slate-300">/stable/price-target-summary</span> to gradually
-            discover missing analyst target prices. Each run is conservative and stops safely when the provider
-            quota or run budget is reached.
+            Phase 15 added a <span className="font-semibold text-white">quota-safe target discovery sync</span> that
+            used FMP <span className="font-mono text-slate-300">/stable/price-target-summary</span> to gradually
+            discover missing analyst target prices. This is now a{" "}
+            <span className="font-semibold text-amber-300">legacy fallback</span> for limited/free FMP plans.
+            The Company Data Sync (Phase 17) is the primary target sync.
           </p>
 
           <div className="overflow-x-auto">

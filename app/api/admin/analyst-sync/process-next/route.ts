@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/src/lib/db/prisma";
 import { getAllActiveNasdaq100Symbols } from "@/src/lib/data/admin-universes";
+import { fetchFmpPriceTargetConsensus } from "@/src/lib/market-data/providers/fmp";
 import { fetchFinnhubAnalystData } from "@/src/lib/market-data/providers/finnhub";
 import { isValidNumber } from "@/src/lib/market-data/safe-update";
 
 const ANALYST_SYNC_TYPE = "analyst-data-nasdaq100-sync";
 const CHUNK_SIZE = 10;
-// Two parallel Finnhub calls per symbol → effectively 2 calls, but they hit same rate limit.
-// Use 1200ms between symbols to stay within 60 calls/min on free plan.
+// One FMP call + one Finnhub call per symbol, run in parallel.
+// Pacing respects Finnhub free plan (~60 calls/min): ≥1200ms between symbol starts.
 const SYMBOL_DELAY_MS = 1200;
 
 function sleep(ms: number) {
@@ -152,7 +153,7 @@ export async function POST() {
       continue;
     }
 
-    // Pace between symbols
+    // Pace between symbols to respect Finnhub rate limits
     const elapsed = Date.now() - lastSymbolEndedAt;
     if (lastSymbolEndedAt > 0 && elapsed < SYMBOL_DELAY_MS) {
       await sleep(SYMBOL_DELAY_MS - elapsed);
@@ -181,52 +182,83 @@ export async function POST() {
       continue;
     }
 
-    const result = await fetchFinnhubAnalystData(symbol);
+    // ── Provider composition ───────────────────────────────────────────────
+    // FMP: price-target-consensus → targetConsensus, targetHigh, targetLow, targetMedian
+    // Finnhub: /stock/recommendation → strongBuy/buy/hold/sell/strongSell counts + rating
+    // Both called in parallel; each failure handled independently.
+    const [fmpResult, finnhubResult] = await Promise.all([
+      fetchFmpPriceTargetConsensus(symbol),
+      fetchFinnhubAnalystData(symbol),
+    ]);
+
     lastSymbolEndedAt = Date.now();
 
-    if (!result.ok) {
-      if (result.error?.includes("rate limit") || result.error?.includes("429")) {
-        rateLimitHit = true;
-        newItems.push({
-          syncRunId: run.id,
-          symbol,
-          status: "skipped",
-          reason: "Finnhub rate limit reached",
-          dbAction: "kept_existing",
-        });
-        localSkipped++;
-        continue;
-      }
+    // Finnhub rate limit stops the chunk
+    if (!finnhubResult.ok && finnhubResult.error?.includes("429")) {
+      rateLimitHit = true;
+      newItems.push({
+        syncRunId: run.id,
+        symbol,
+        status: "skipped",
+        reason: "Finnhub rate limit reached",
+        dbAction: "kept_existing",
+      });
+      localSkipped++;
+      continue;
+    }
 
-      if (result.error?.includes("No analyst data available")) {
-        newItems.push({
-          syncRunId: run.id,
-          symbol,
-          status: "skipped",
-          reason: "No analyst data available",
-          dbAction: "skipped_no_data",
-        });
-        localSkipped++;
-        continue;
-      }
+    // FMP quota exceeded stops the chunk
+    if (!fmpResult.ok && fmpResult.quotaExceeded) {
+      rateLimitHit = true;
+      newItems.push({
+        syncRunId: run.id,
+        symbol,
+        status: "skipped",
+        reason: "FMP quota exceeded",
+        dbAction: "kept_existing",
+      });
+      localSkipped++;
+      continue;
+    }
 
+    // If both providers returned no usable data, count as failure
+    if (!fmpResult.ok && !finnhubResult.ok) {
       newItems.push({
         syncRunId: run.id,
         symbol,
         status: "failed",
-        reason: result.error ?? "Provider error",
+        reason: `FMP: ${fmpResult.error ?? "unknown"}; Finnhub: ${finnhubResult.error ?? "unknown"}`,
         dbAction: "kept_existing",
       });
       localFailed++;
       continue;
     }
 
-    const d = result.data!;
     const now = new Date();
 
-    // Calculate upside from current stored price
+    // ── Compose target data from FMP ───────────────────────────────────────
+    // targetConsensus is stored as both targetPrice and targetMean (primary consensus value)
+    const fmpData = fmpResult.ok ? (fmpResult.data ?? null) : null;
+    const targetConsensus = fmpData?.targetConsensus ?? null;
+    const targetHigh = fmpData?.targetHigh ?? null;
+    const targetLow = fmpData?.targetLow ?? null;
+    const targetMedian = fmpData?.targetMedian ?? null;
+
+    const targetPrice = isValidNumber(targetConsensus) ? targetConsensus : null;
+    const targetMean = targetPrice; // consensus = primary price, stored in both fields
+
+    // ── Compose recommendation data from Finnhub ───────────────────────────
+    const finnhubData = finnhubResult.ok ? (finnhubResult.data ?? null) : null;
+    const strongBuyCount = finnhubData?.strongBuyCount ?? null;
+    const buyCount = finnhubData?.buyCount ?? null;
+    const holdCount = finnhubData?.holdCount ?? null;
+    const sellCount = finnhubData?.sellCount ?? null;
+    const strongSellCount = finnhubData?.strongSellCount ?? null;
+    const analystCount = finnhubData?.analystCount ?? null;
+    const analystRating = finnhubData?.analystRating ?? null;
+
+    // ── Calculate upside internally from stored quote price ────────────────
     const currentPrice = stock.quote ? Number(stock.quote.price) : null;
-    const targetPrice = isValidNumber(d.targetMean) ? d.targetMean : null;
     let analystUpsidePercent: number | null = null;
     if (targetPrice !== null && currentPrice !== null && currentPrice > 0) {
       analystUpsidePercent = ((targetPrice - currentPrice) / currentPrice) * 100;
@@ -234,6 +266,17 @@ export async function POST() {
 
     const existing = stock.analystData;
     const isNew = !existing;
+    const hasTarget = targetPrice !== null;
+
+    // Determine targetStatus:
+    // - Valid consensus → "has_target" (also repairs old has_target+null-price rows)
+    // - No consensus, existing was "has_target" with null price (old bad row) → "no_target_available"
+    // - No consensus, other existing status → preserve existing status
+    const newTargetStatus = hasTarget
+      ? "has_target"
+      : existing?.targetStatus === "has_target" && existing?.targetPrice === null
+      ? "no_target_available"
+      : (existing?.targetStatus ?? null);
 
     const safeNum = (v: number | null) => (isValidNumber(v) ? v : null);
     const safeInt = (v: number | null) => (v !== null && Number.isFinite(v) ? Math.round(v) : null);
@@ -244,42 +287,50 @@ export async function POST() {
         create: {
           stockId: stock.id,
           targetPrice: safeNum(targetPrice),
-          analystUpsidePercent: analystUpsidePercent !== null && Number.isFinite(analystUpsidePercent) ? analystUpsidePercent : null,
-          analystRating: d.analystRating ?? null,
-          analystCount: safeInt(d.analystCount),
-          targetHigh: safeNum(d.targetHigh),
-          targetLow: safeNum(d.targetLow),
-          targetMedian: safeNum(d.targetMedian),
-          targetMean: safeNum(d.targetMean),
-          strongBuyCount: safeInt(d.strongBuyCount),
-          buyCount: safeInt(d.buyCount),
-          holdCount: safeInt(d.holdCount),
-          sellCount: safeInt(d.sellCount),
-          strongSellCount: safeInt(d.strongSellCount),
+          targetMean: safeNum(targetMean),
+          targetHigh: safeNum(targetHigh),
+          targetLow: safeNum(targetLow),
+          targetMedian: safeNum(targetMedian),
+          analystUpsidePercent:
+            analystUpsidePercent !== null && Number.isFinite(analystUpsidePercent)
+              ? analystUpsidePercent
+              : null,
+          analystRating: analystRating ?? null,
+          analystCount: safeInt(analystCount),
+          strongBuyCount: safeInt(strongBuyCount),
+          buyCount: safeInt(buyCount),
+          holdCount: safeInt(holdCount),
+          sellCount: safeInt(sellCount),
+          strongSellCount: safeInt(strongSellCount),
           source: "fmp+finnhub",
           lastSyncedAt: now,
-          sourceUpdatedAt: d.sourceUpdatedAt ? new Date(d.sourceUpdatedAt) : null,
+          sourceUpdatedAt: null,
+          targetStatus: newTargetStatus,
+          targetLastAttemptedAt: now,
+          targetLastFoundAt: hasTarget ? now : null,
         },
         update: {
           targetPrice: safeNum(targetPrice) ?? existing?.targetPrice ?? null,
+          targetMean: safeNum(targetMean) ?? existing?.targetMean ?? null,
+          targetHigh: safeNum(targetHigh) ?? existing?.targetHigh ?? null,
+          targetLow: safeNum(targetLow) ?? existing?.targetLow ?? null,
+          targetMedian: safeNum(targetMedian) ?? existing?.targetMedian ?? null,
           analystUpsidePercent:
             analystUpsidePercent !== null && Number.isFinite(analystUpsidePercent)
               ? analystUpsidePercent
               : (existing?.analystUpsidePercent ?? null),
-          analystRating: d.analystRating ?? existing?.analystRating ?? null,
-          analystCount: safeInt(d.analystCount) ?? existing?.analystCount ?? null,
-          targetHigh: safeNum(d.targetHigh) ?? existing?.targetHigh ?? null,
-          targetLow: safeNum(d.targetLow) ?? existing?.targetLow ?? null,
-          targetMedian: safeNum(d.targetMedian) ?? existing?.targetMedian ?? null,
-          targetMean: safeNum(d.targetMean) ?? existing?.targetMean ?? null,
-          strongBuyCount: safeInt(d.strongBuyCount) ?? existing?.strongBuyCount ?? null,
-          buyCount: safeInt(d.buyCount) ?? existing?.buyCount ?? null,
-          holdCount: safeInt(d.holdCount) ?? existing?.holdCount ?? null,
-          sellCount: safeInt(d.sellCount) ?? existing?.sellCount ?? null,
-          strongSellCount: safeInt(d.strongSellCount) ?? existing?.strongSellCount ?? null,
+          analystRating: analystRating ?? existing?.analystRating ?? null,
+          analystCount: safeInt(analystCount) ?? existing?.analystCount ?? null,
+          strongBuyCount: safeInt(strongBuyCount) ?? existing?.strongBuyCount ?? null,
+          buyCount: safeInt(buyCount) ?? existing?.buyCount ?? null,
+          holdCount: safeInt(holdCount) ?? existing?.holdCount ?? null,
+          sellCount: safeInt(sellCount) ?? existing?.sellCount ?? null,
+          strongSellCount: safeInt(strongSellCount) ?? existing?.strongSellCount ?? null,
           source: "fmp+finnhub",
           lastSyncedAt: now,
-          sourceUpdatedAt: d.sourceUpdatedAt ? new Date(d.sourceUpdatedAt) : (existing?.sourceUpdatedAt ?? null),
+          targetStatus: newTargetStatus,
+          targetLastAttemptedAt: now,
+          targetLastFoundAt: hasTarget ? now : (existing?.targetLastFoundAt ?? null),
         },
       });
 
@@ -339,7 +390,7 @@ export async function POST() {
       finishedAt,
       durationMs,
       message: rateLimitHit
-        ? "Finnhub rate limit reached. Continue the sync after waiting."
+        ? "Rate limit reached. Continue the sync after waiting."
         : `Completed. ${newSuccess} updated, ${newSkipped} skipped, ${newFailed} failed.`,
     };
   }

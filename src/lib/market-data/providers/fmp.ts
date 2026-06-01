@@ -281,6 +281,100 @@ export async function fetchFmpPriceTargetSummary(
   }
 }
 
+// ── Price Target Consensus ────────────────────────────────────────────────────
+//
+// FMP /stable/price-target-consensus is the correct endpoint for main target values.
+// It returns targetConsensus, targetHigh, targetLow, targetMedian.
+// price-target-summary only returns averaging data (lastMonthAvg, lastQuarterAvg, etc.)
+// and should NOT be used as the primary target source.
+
+export type FmpPriceTargetConsensus = {
+  symbol: string;
+  targetConsensus: number | null;
+  targetHigh: number | null;
+  targetLow: number | null;
+  targetMedian: number | null;
+};
+
+export type FmpPriceTargetConsensusResult =
+  | { ok: true; data: FmpPriceTargetConsensus }
+  | { ok: false; quotaExceeded: boolean; planLimited: boolean; error: string };
+
+export async function fetchFmpPriceTargetConsensus(
+  symbol: string
+): Promise<FmpPriceTargetConsensusResult> {
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    return { ok: false, quotaExceeded: false, planLimited: false, error: "Missing FMP_API_KEY" };
+  }
+
+  try {
+    const url = `${BASE_URL}/price-target-consensus?symbol=${encodeURIComponent(symbol)}&apikey=${apiKey}`;
+    const res = await fetch(url, { cache: "no-store" });
+
+    if (res.status === 429) {
+      return { ok: false, quotaExceeded: true, planLimited: false, error: "FMP quota exceeded (429)." };
+    }
+
+    if (res.status === 402) {
+      return {
+        ok: false,
+        quotaExceeded: false,
+        planLimited: true,
+        error: "FMP price target consensus is not available for this symbol on the current plan.",
+      };
+    }
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      const safe = body.slice(0, 200);
+      if (res.status === 403) {
+        return { ok: false, quotaExceeded: false, planLimited: false, error: `FMP HTTP 403 — key invalid or not authorized. Body: ${safe}` };
+      }
+      return { ok: false, quotaExceeded: false, planLimited: false, error: `FMP HTTP ${res.status}. Body: ${safe}` };
+    }
+
+    const json: unknown = await res.json();
+
+    // Response may be a single object or an array
+    let raw: Record<string, unknown> | undefined;
+    if (Array.isArray(json)) {
+      raw = json.length > 0 ? (json[0] as Record<string, unknown>) : undefined;
+    } else if (json && typeof json === "object") {
+      raw = json as Record<string, unknown>;
+    }
+
+    if (!raw) {
+      return { ok: false, quotaExceeded: false, planLimited: false, error: "empty" };
+    }
+
+    const asNum = (v: unknown) =>
+      typeof v === "number" && Number.isFinite(v) && v !== 0 ? v : null;
+
+    const targetConsensus = asNum(raw.targetConsensus);
+    const targetHigh = asNum(raw.targetHigh);
+    const targetLow = asNum(raw.targetLow);
+    const targetMedian = asNum(raw.targetMedian);
+
+    // All-null response means no data available
+    if (targetConsensus === null && targetHigh === null && targetLow === null) {
+      return { ok: false, quotaExceeded: false, planLimited: false, error: "empty" };
+    }
+
+    return {
+      ok: true,
+      data: { symbol, targetConsensus, targetHigh, targetLow, targetMedian },
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      quotaExceeded: false,
+      planLimited: false,
+      error: err instanceof Error ? err.message : "Unknown error fetching FMP price target consensus",
+    };
+  }
+}
+
 // ── Nasdaq 100 Constituent List ────────────────────────────────────────────────
 //
 // Investigation result (2026-05-21):

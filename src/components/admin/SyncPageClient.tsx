@@ -2007,10 +2007,10 @@ export default function SyncPageClient({
               <div className="flex items-start gap-2">
                 <Info className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
                 <div className="text-xs space-y-0.5 text-slate-500">
-                  <p>Uses Finnhub. 2 calls per stock: <span className="font-mono text-slate-400">/stock/price-target</span> + <span className="font-mono text-slate-400">/stock/recommendation</span>.</p>
+                  <p>Target prices: FMP <span className="font-mono text-slate-400">/stable/price-target-consensus</span> (targetConsensus, targetHigh, targetLow, targetMedian).</p>
+                  <p>Recommendation counts: Finnhub <span className="font-mono text-slate-400">/stock/recommendation</span> (strongBuy/buy/hold/sell/strongSell).</p>
                   <p>Chunk size: 10 stocks. Rate limited to ~50 calls/minute (≥1.2s between stocks).</p>
-                  <p>Upside % is calculated internally: <span className="font-mono text-slate-400">((target - price) / price) × 100</span>.</p>
-                  <p className="text-slate-400 font-medium">Phase 17 will migrate this workflow to FMP for full profile, fundamentals, and target consensus coverage.</p>
+                  <p>Upside % is calculated internally: <span className="font-mono text-slate-400">((targetConsensus - price) / price) × 100</span>.</p>
                 </div>
               </div>
             </div>
@@ -2105,8 +2105,8 @@ export default function SyncPageClient({
               <div className="border-t border-slate-700/60 p-4 space-y-4">
                 <p className="text-xs text-slate-500 leading-relaxed">
                   These tools are legacy or developer-only utilities. They are not part of the main sync workflow.
-                  The Analyst Target Discovery workflow was used before FMP Starter was available.
-                  It will be replaced by the Company Data Sync in Phase 17.
+                  Company Data Sync now uses FMP <span className="font-mono">price-target-consensus</span> as the primary target source.
+                  Analyst Target Discovery is a legacy fallback for limited/free FMP plans.
                 </p>
 
                 {/* Analyst Target Discovery (Legacy) */}
@@ -2123,7 +2123,7 @@ export default function SyncPageClient({
                       </span>
                     </div>
                     <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                      Free-plan fallback for discovering missing analyst targets via FMP. Replaces with Phase 17 FMP Starter consensus endpoint.
+                      Legacy fallback for limited/free plans. Company Data Sync now uses FMP price-target-consensus as the primary target source.
                     </p>
                   </div>
 

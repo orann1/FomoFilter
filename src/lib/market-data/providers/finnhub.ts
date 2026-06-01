@@ -226,32 +226,25 @@ export async function fetchFinnhubQuote(
   }
 }
 
-export type NormalizedAnalystData = {
+// Recommendation counts from Finnhub /stock/recommendation.
+// This type is Finnhub-only — no FMP fields.
+export type NormalizedFinnhubRecommendation = {
   symbol: string;
-  provider: "fmp+finnhub";
-  // Price target
-  targetHigh: number | null;
-  targetLow: number | null;
-  targetMean: number | null;
-  targetMedian: number | null;
-  // Recommendation counts (most recent period)
+  provider: "finnhub";
   strongBuyCount: number | null;
   buyCount: number | null;
   holdCount: number | null;
   sellCount: number | null;
   strongSellCount: number | null;
   analystCount: number | null;
-  // Derived rating (normalized)
   analystRating: string | null;
-  // Metadata
-  sourceUpdatedAt: string | null;
+  recommendationPeriod: string | null;
 };
 
 export async function fetchFinnhubAnalystData(
   symbol: string
-): Promise<ProviderTestResult<NormalizedAnalystData>> {
+): Promise<ProviderTestResult<NormalizedFinnhubRecommendation>> {
   const finnhubKey = getApiKey();
-  const fmpKey = process.env.FMP_API_KEY ?? "";
 
   if (!finnhubKey) {
     return {
@@ -262,151 +255,101 @@ export async function fetchFinnhubAnalystData(
     };
   }
 
-  const toNum = (v: unknown): number | null => {
-    if (v === null || v === undefined) return null;
-    const n = Number(v);
-    return isNaN(n) || n === 0 ? null : n;
-  };
-
   try {
-    // Fetch FMP price-target-summary and Finnhub recommendation in parallel
-    const fetchPromises: [Promise<Response>, Promise<Response>] = [
-      fmpKey
-        ? fetch(
-            `https://financialmodelingprep.com/stable/price-target-summary?symbol=${encodeURIComponent(symbol)}&apikey=${fmpKey}`,
-            { cache: "no-store" }
-          )
-        : Promise.resolve(new Response(null, { status: 0 })),
-      fetch(
-        `${BASE_URL}/stock/recommendation?symbol=${encodeURIComponent(symbol)}&token=${finnhubKey}`,
-        { cache: "no-store" }
-      ),
-    ];
+    const res = await fetch(
+      `${BASE_URL}/stock/recommendation?symbol=${encodeURIComponent(symbol)}&token=${finnhubKey}`,
+      { cache: "no-store" }
+    );
 
-    const [fmpRes, recRes] = await Promise.all(fetchPromises);
-
-    if (recRes.status === 429) {
+    if (res.status === 429) {
       return {
         ok: false,
-        provider: "fmp+finnhub",
+        provider: "finnhub",
         action: "analyst-data",
         error: "Finnhub rate limit exceeded (429)",
       };
     }
 
-    // Parse FMP price target data
-    let targetHigh: number | null = null;
-    let targetLow: number | null = null;
-    let targetMean: number | null = null;
-    let targetMedian: number | null = null;
-    let sourceUpdatedAt: string | null = null;
-
-    if (fmpKey && fmpRes.ok) {
-      const fmpRaw = await fmpRes.json() as unknown;
-      // FMP returns an array; take the first element
-      const fmpJson = (Array.isArray(fmpRaw) ? fmpRaw[0] : fmpRaw) as Record<string, unknown> | undefined;
-      if (fmpJson) {
-        // Use best available window: last month → last quarter → last year (for coverage)
-        targetMean =
-          toNum(fmpJson.lastMonthAvgPriceTarget) ??
-          toNum(fmpJson.lastQuarterAvgPriceTarget) ??
-          toNum(fmpJson.lastYearAvgPriceTarget);
-        // Store last quarter as "median" proxy
-        targetMedian = toNum(fmpJson.lastQuarterAvgPriceTarget);
-        // price-target-summary does not provide per-analyst high/low; leave as null
-        if (typeof fmpJson.updatedAt === "string") sourceUpdatedAt = fmpJson.updatedAt;
-        else if (typeof fmpJson.publishedDate === "string") sourceUpdatedAt = fmpJson.publishedDate;
-      }
-    }
-
-    // Parse Finnhub recommendation counts
-    let strongBuyCount: number | null = null;
-    let buyCount: number | null = null;
-    let holdCount: number | null = null;
-    let sellCount: number | null = null;
-    let strongSellCount: number | null = null;
-    let analystCount: number | null = null;
-    let analystRating: string | null = null;
-
-    if (recRes.ok) {
-      const recJson = await recRes.json() as unknown[];
-      if (Array.isArray(recJson) && recJson.length > 0) {
-        const recent = recJson[0] as Record<string, unknown>;
-        strongBuyCount = typeof recent.strongBuy === "number" ? recent.strongBuy : null;
-        buyCount = typeof recent.buy === "number" ? recent.buy : null;
-        holdCount = typeof recent.hold === "number" ? recent.hold : null;
-        sellCount = typeof recent.sell === "number" ? recent.sell : null;
-        strongSellCount = typeof recent.strongSell === "number" ? recent.strongSell : null;
-
-        const total =
-          (strongBuyCount ?? 0) +
-          (buyCount ?? 0) +
-          (holdCount ?? 0) +
-          (sellCount ?? 0) +
-          (strongSellCount ?? 0);
-        analystCount = total > 0 ? total : null;
-
-        if (analystCount && analystCount > 0) {
-          const bullish = (strongBuyCount ?? 0) + (buyCount ?? 0);
-          const bearish = (sellCount ?? 0) + (strongSellCount ?? 0);
-          const neutral = holdCount ?? 0;
-
-          if ((strongBuyCount ?? 0) > bullish * 0.5) {
-            analystRating = "Strong Buy";
-          } else if (bullish >= neutral && bullish >= bearish) {
-            analystRating = "Buy";
-          } else if (neutral >= bullish && neutral >= bearish) {
-            analystRating = "Hold";
-          } else if (bearish > bullish && (strongSellCount ?? 0) > bearish * 0.5) {
-            analystRating = "Strong Sell";
-          } else if (bearish > bullish) {
-            analystRating = "Sell";
-          } else {
-            analystRating = "Hold";
-          }
-        }
-      }
-    }
-
-    // Require at least some useful data
-    if (targetMean === null && analystCount === null) {
+    if (!res.ok) {
       return {
         ok: false,
-        provider: "fmp+finnhub",
+        provider: "finnhub",
         action: "analyst-data",
-        error: `No analyst data available for ${symbol}`,
+        error: `Finnhub responded with status ${res.status}`,
       };
     }
 
-    const data: NormalizedAnalystData = {
-      symbol,
-      provider: "fmp+finnhub",
-      targetHigh,
-      targetLow,
-      targetMean,
-      targetMedian,
-      strongBuyCount,
-      buyCount,
-      holdCount,
-      sellCount,
-      strongSellCount,
-      analystCount,
-      analystRating,
-      sourceUpdatedAt,
-    };
+    const recJson = (await res.json()) as unknown[];
+
+    if (!Array.isArray(recJson) || recJson.length === 0) {
+      return {
+        ok: false,
+        provider: "finnhub",
+        action: "analyst-data",
+        error: `No recommendation data available for ${symbol}`,
+      };
+    }
+
+    const recent = recJson[0] as Record<string, unknown>;
+    const strongBuyCount = typeof recent.strongBuy === "number" ? recent.strongBuy : null;
+    const buyCount = typeof recent.buy === "number" ? recent.buy : null;
+    const holdCount = typeof recent.hold === "number" ? recent.hold : null;
+    const sellCount = typeof recent.sell === "number" ? recent.sell : null;
+    const strongSellCount = typeof recent.strongSell === "number" ? recent.strongSell : null;
+    const recommendationPeriod = typeof recent.period === "string" ? recent.period : null;
+
+    const total =
+      (strongBuyCount ?? 0) +
+      (buyCount ?? 0) +
+      (holdCount ?? 0) +
+      (sellCount ?? 0) +
+      (strongSellCount ?? 0);
+    const analystCount = total > 0 ? total : null;
+
+    let analystRating: string | null = null;
+    if (analystCount && analystCount > 0) {
+      const bullish = (strongBuyCount ?? 0) + (buyCount ?? 0);
+      const bearish = (sellCount ?? 0) + (strongSellCount ?? 0);
+      const neutral = holdCount ?? 0;
+
+      if ((strongBuyCount ?? 0) > bullish * 0.5) {
+        analystRating = "Strong Buy";
+      } else if (bullish >= neutral && bullish >= bearish) {
+        analystRating = "Buy";
+      } else if (neutral >= bullish && neutral >= bearish) {
+        analystRating = "Hold";
+      } else if (bearish > bullish && (strongSellCount ?? 0) > bearish * 0.5) {
+        analystRating = "Strong Sell";
+      } else if (bearish > bullish) {
+        analystRating = "Sell";
+      } else {
+        analystRating = "Hold";
+      }
+    }
 
     return {
       ok: true,
-      provider: "fmp+finnhub",
+      provider: "finnhub",
       action: "analyst-data",
-      data,
+      data: {
+        symbol,
+        provider: "finnhub",
+        strongBuyCount,
+        buyCount,
+        holdCount,
+        sellCount,
+        strongSellCount,
+        analystCount,
+        analystRating,
+        recommendationPeriod,
+      },
     };
   } catch (err) {
     return {
       ok: false,
-      provider: "fmp+finnhub",
+      provider: "finnhub",
       action: "analyst-data",
-      error: err instanceof Error ? err.message : "Unknown error fetching analyst data",
+      error: err instanceof Error ? err.message : "Unknown error fetching Finnhub recommendation data",
     };
   }
 }
