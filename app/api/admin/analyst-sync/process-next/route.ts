@@ -1,18 +1,28 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/src/lib/db/prisma";
 import { getAllActiveNasdaq100Symbols } from "@/src/lib/data/admin-universes";
-import { fetchFmpPriceTargetConsensus } from "@/src/lib/market-data/providers/fmp";
+import {
+  fetchFmpPriceTargetConsensus,
+  fetchFmpCompanyProfile,
+  fetchFmpRatiosTtm,
+  fetchFmpFinancialGrowth,
+} from "@/src/lib/market-data/providers/fmp";
 import { fetchFinnhubAnalystData } from "@/src/lib/market-data/providers/finnhub";
 import { isValidNumber } from "@/src/lib/market-data/safe-update";
 
 const ANALYST_SYNC_TYPE = "analyst-data-nasdaq100-sync";
 const CHUNK_SIZE = 10;
-// One FMP call + one Finnhub call per symbol, run in parallel.
-// Pacing respects Finnhub free plan (~60 calls/min): ≥1200ms between symbol starts.
+// One FMP consensus + 3 FMP fundamentals + one Finnhub call per symbol, run in parallel.
+// Pacing: ≥1200ms between symbol starts to respect Finnhub free plan (~60 calls/min).
 const SYMBOL_DELAY_MS = 1200;
 
 function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+// Convert FMP decimal margin/ROE/ROA to % scale (0.45 → 45.0)
+function toPct(v: number | null): number | null {
+  return v !== null && Number.isFinite(v) ? v * 100 : null;
 }
 
 function serializeRun(run: {
@@ -166,7 +176,7 @@ export async function POST() {
 
     const stock = await prisma.stock.findUnique({
       where: { symbol },
-      include: { quote: true, analystData: true },
+      include: { quote: true, analystData: true, metric: true },
     });
 
     if (!stock) {
@@ -183,17 +193,20 @@ export async function POST() {
     }
 
     // ── Provider composition ───────────────────────────────────────────────
-    // FMP: price-target-consensus → targetConsensus, targetHigh, targetLow, targetMedian
-    // Finnhub: /stock/recommendation → strongBuy/buy/hold/sell/strongSell counts + rating
-    // Both called in parallel; each failure handled independently.
-    const [fmpResult, finnhubResult] = await Promise.all([
-      fetchFmpPriceTargetConsensus(symbol),
-      fetchFinnhubAnalystData(symbol),
-    ]);
+    // FMP (parallel): price-target-consensus + profile + ratios-ttm + financial-growth
+    // Finnhub (parallel): /stock/recommendation → rating counts
+    const [fmpTargetResult, fmpProfileResult, fmpRatiosResult, fmpGrowthResult, finnhubResult] =
+      await Promise.all([
+        fetchFmpPriceTargetConsensus(symbol),
+        fetchFmpCompanyProfile(symbol),
+        fetchFmpRatiosTtm(symbol),
+        fetchFmpFinancialGrowth(symbol),
+        fetchFinnhubAnalystData(symbol),
+      ]);
 
     lastSymbolEndedAt = Date.now();
 
-    // Finnhub rate limit stops the chunk
+    // Detect rate limits — stop chunk on Finnhub 429 or FMP 429
     if (!finnhubResult.ok && finnhubResult.error?.includes("429")) {
       rateLimitHit = true;
       newItems.push({
@@ -207,8 +220,21 @@ export async function POST() {
       continue;
     }
 
+    if (!fmpRatiosResult.ok && fmpRatiosResult.rateLimitHit) {
+      rateLimitHit = true;
+      newItems.push({
+        syncRunId: run.id,
+        symbol,
+        status: "skipped",
+        reason: "FMP rate limit reached",
+        dbAction: "kept_existing",
+      });
+      localSkipped++;
+      continue;
+    }
+
     // FMP quota exceeded stops the chunk
-    if (!fmpResult.ok && fmpResult.quotaExceeded) {
+    if (!fmpTargetResult.ok && fmpTargetResult.quotaExceeded) {
       rateLimitHit = true;
       newItems.push({
         syncRunId: run.id,
@@ -221,33 +247,19 @@ export async function POST() {
       continue;
     }
 
-    // If both providers returned no usable data, count as failure
-    if (!fmpResult.ok && !finnhubResult.ok) {
-      newItems.push({
-        syncRunId: run.id,
-        symbol,
-        status: "failed",
-        reason: `FMP: ${fmpResult.error ?? "unknown"}; Finnhub: ${finnhubResult.error ?? "unknown"}`,
-        dbAction: "kept_existing",
-      });
-      localFailed++;
-      continue;
-    }
-
     const now = new Date();
+    const safeNum = (v: number | null) => (isValidNumber(v) ? v : null);
+    const safeInt = (v: number | null) => (v !== null && Number.isFinite(v) ? Math.round(v) : null);
 
-    // ── Compose target data from FMP ───────────────────────────────────────
-    // targetConsensus is stored as both targetPrice and targetMean (primary consensus value)
-    const fmpData = fmpResult.ok ? (fmpResult.data ?? null) : null;
+    // ── Analyst data upsert (Phase 17 behavior — preserved) ───────────────
+    const fmpData = fmpTargetResult.ok ? (fmpTargetResult.data ?? null) : null;
     const targetConsensus = fmpData?.targetConsensus ?? null;
     const targetHigh = fmpData?.targetHigh ?? null;
     const targetLow = fmpData?.targetLow ?? null;
     const targetMedian = fmpData?.targetMedian ?? null;
-
     const targetPrice = isValidNumber(targetConsensus) ? targetConsensus : null;
-    const targetMean = targetPrice; // consensus = primary price, stored in both fields
+    const targetMean = targetPrice;
 
-    // ── Compose recommendation data from Finnhub ───────────────────────────
     const finnhubData = finnhubResult.ok ? (finnhubResult.data ?? null) : null;
     const strongBuyCount = finnhubData?.strongBuyCount ?? null;
     const buyCount = finnhubData?.buyCount ?? null;
@@ -257,7 +269,6 @@ export async function POST() {
     const analystCount = finnhubData?.analystCount ?? null;
     const analystRating = finnhubData?.analystRating ?? null;
 
-    // ── Calculate upside internally from stored quote price ────────────────
     const currentPrice = stock.quote ? Number(stock.quote.price) : null;
     let analystUpsidePercent: number | null = null;
     if (targetPrice !== null && currentPrice !== null && currentPrice > 0) {
@@ -265,22 +276,16 @@ export async function POST() {
     }
 
     const existing = stock.analystData;
-    const isNew = !existing;
+    const isNewAnalyst = !existing;
     const hasTarget = targetPrice !== null;
 
-    // Determine targetStatus:
-    // - Valid consensus → "has_target" (also repairs old has_target+null-price rows)
-    // - No consensus, existing was "has_target" with null price (old bad row) → "no_target_available"
-    // - No consensus, other existing status → preserve existing status
     const newTargetStatus = hasTarget
       ? "has_target"
       : existing?.targetStatus === "has_target" && existing?.targetPrice === null
       ? "no_target_available"
       : (existing?.targetStatus ?? null);
 
-    const safeNum = (v: number | null) => (isValidNumber(v) ? v : null);
-    const safeInt = (v: number | null) => (v !== null && Number.isFinite(v) ? Math.round(v) : null);
-
+    let analystDbAction = "kept_existing";
     try {
       await prisma.stockAnalystData.upsert({
         where: { stockId: stock.id },
@@ -333,22 +338,174 @@ export async function POST() {
           targetLastFoundAt: hasTarget ? now : (existing?.targetLastFoundAt ?? null),
         },
       });
+      analystDbAction = isNewAnalyst ? "created_analyst" : "updated_analyst";
+    } catch {
+      // Analyst upsert failed — log but continue to metric upsert
+      analystDbAction = "analyst_db_error";
+    }
 
+    // ── Stock profile update from FMP ──────────────────────────────────────
+    const fmpProfile = fmpProfileResult.ok ? fmpProfileResult.data : null;
+    if (fmpProfile) {
+      const profileUpdate: Record<string, string | null | undefined> = {};
+      if (fmpProfile.name && fmpProfile.name.trim().length > 0) {
+        profileUpdate.name = fmpProfile.name;
+      }
+      if (fmpProfile.sector && fmpProfile.sector.trim().length > 0) {
+        profileUpdate.sector = fmpProfile.sector;
+      }
+      if (Object.keys(profileUpdate).length > 0) {
+        try {
+          await prisma.stock.update({ where: { id: stock.id }, data: profileUpdate });
+        } catch {
+          // Non-fatal: profile update failure doesn't block metric upsert
+        }
+      }
+    }
+
+    // ── FMP Fundamentals → StockMetric upsert ─────────────────────────────
+    const fmpRatios = fmpRatiosResult.ok ? fmpRatiosResult.data : null;
+    const fmpGrowth = fmpGrowthResult.ok ? fmpGrowthResult.data : null;
+    const existingMetric = stock.metric;
+
+    // Profitability — FMP returns as decimal (0.45 = 45%), multiply by 100
+    const grossMarginTTM     = safeNum(toPct(fmpRatios?.grossProfitMarginTTM ?? null));
+    const operatingMarginTTM = safeNum(toPct(fmpRatios?.operatingProfitMarginTTM ?? null));
+    const netProfitMarginTTM = safeNum(toPct(fmpRatios?.netProfitMarginTTM ?? null));
+    const roeTTM             = safeNum(toPct(fmpRatios?.returnOnEquityTTM ?? null));
+    const roaTTM             = safeNum(toPct(fmpRatios?.returnOnAssetsTTM ?? null));
+
+    // Financial health — plain ratios
+    const totalDebtToEquityAnnual   = safeNum(fmpRatios?.debtEquityRatioTTM ?? null);
+    const currentRatioAnnual        = safeNum(fmpRatios?.currentRatioTTM ?? null);
+    const quickRatioAnnual          = safeNum(fmpRatios?.quickRatioTTM ?? null);
+    const netInterestCoverageAnnual = safeNum(fmpRatios?.interestCoverageTTM ?? null);
+
+    // Valuation — plain ratios/multiples
+    const peBasicExclExtraTTM          = safeNum(fmpRatios?.priceEarningsRatioTTM ?? null);
+    const psTTM                        = safeNum(fmpRatios?.priceToSalesRatioTTM ?? null);
+    const pbAnnual                     = safeNum(fmpRatios?.priceToBookRatioTTM ?? null);
+    const evEbitdaTTM                  = safeNum(fmpRatios?.enterpriseValueMultipleTTM ?? null);
+    const pegTTM                       = safeNum(fmpRatios?.priceEarningsToGrowthRatioTTM ?? null);
+
+    // Profile-derived
+    const beta               = safeNum(fmpProfile?.beta ?? null);
+    const marketCapitalization = safeNum(fmpProfile?.marketCap ?? null);
+
+    // Growth — FMP returns as decimal (0.075 = 7.5%), multiply by 100
+    const revenueGrowthTTMYoy = safeNum(toPct(fmpGrowth?.revenueGrowth ?? null));
+    const epsGrowthTTMYoy     = safeNum(toPct(fmpGrowth?.epsgrowth ?? null));
+    const revenueGrowth3Y     = safeNum(toPct(fmpGrowth?.threeYRevenueGrowthPerShare ?? null));
+    const epsGrowth3Y         = safeNum(toPct(fmpGrowth?.threeYNetIncomeGrowthPerShare ?? null));
+
+    const hasFmpMetrics = fmpProfile !== null || fmpRatios !== null || fmpGrowth !== null;
+
+    let metricDbAction = "kept_existing";
+    if (hasFmpMetrics) {
+      try {
+        await prisma.stockMetric.upsert({
+          where: { stockId: stock.id },
+          create: {
+            stockId: stock.id,
+            provider: "fmp",
+            // Growth
+            revenueGrowthTTMYoy: revenueGrowthTTMYoy ?? undefined,
+            epsGrowthTTMYoy: epsGrowthTTMYoy ?? undefined,
+            revenueGrowth3Y: revenueGrowth3Y ?? undefined,
+            epsGrowth3Y: epsGrowth3Y ?? undefined,
+            // Profitability
+            grossMarginTTM: grossMarginTTM ?? undefined,
+            operatingMarginTTM: operatingMarginTTM ?? undefined,
+            netProfitMarginTTM: netProfitMarginTTM ?? undefined,
+            roeTTM: roeTTM ?? undefined,
+            roaTTM: roaTTM ?? undefined,
+            // Financial health
+            totalDebtToEquityAnnual: totalDebtToEquityAnnual ?? undefined,
+            currentRatioAnnual: currentRatioAnnual ?? undefined,
+            quickRatioAnnual: quickRatioAnnual ?? undefined,
+            netInterestCoverageAnnual: netInterestCoverageAnnual ?? undefined,
+            // Valuation
+            peBasicExclExtraTTM: peBasicExclExtraTTM ?? undefined,
+            psTTM: psTTM ?? undefined,
+            pbAnnual: pbAnnual ?? undefined,
+            evEbitdaTTM: evEbitdaTTM ?? undefined,
+            pegTTM: pegTTM ?? undefined,
+            // Market/risk
+            beta: beta ?? undefined,
+            marketCapitalization: marketCapitalization ?? undefined,
+            lastSyncedAt: now,
+          },
+          update: {
+            provider: "fmp",
+            // Growth
+            revenueGrowthTTMYoy:    revenueGrowthTTMYoy    ?? existingMetric?.revenueGrowthTTMYoy    ?? null,
+            epsGrowthTTMYoy:        epsGrowthTTMYoy        ?? existingMetric?.epsGrowthTTMYoy        ?? null,
+            revenueGrowth3Y:        revenueGrowth3Y        ?? existingMetric?.revenueGrowth3Y        ?? null,
+            epsGrowth3Y:            epsGrowth3Y            ?? existingMetric?.epsGrowth3Y            ?? null,
+            // Profitability
+            grossMarginTTM:         grossMarginTTM         ?? existingMetric?.grossMarginTTM         ?? null,
+            operatingMarginTTM:     operatingMarginTTM     ?? existingMetric?.operatingMarginTTM     ?? null,
+            netProfitMarginTTM:     netProfitMarginTTM     ?? existingMetric?.netProfitMarginTTM     ?? null,
+            roeTTM:                 roeTTM                 ?? existingMetric?.roeTTM                 ?? null,
+            roaTTM:                 roaTTM                 ?? existingMetric?.roaTTM                 ?? null,
+            // Financial health
+            totalDebtToEquityAnnual:   totalDebtToEquityAnnual   ?? existingMetric?.totalDebtToEquityAnnual   ?? null,
+            currentRatioAnnual:        currentRatioAnnual        ?? existingMetric?.currentRatioAnnual        ?? null,
+            quickRatioAnnual:          quickRatioAnnual          ?? existingMetric?.quickRatioAnnual          ?? null,
+            netInterestCoverageAnnual: netInterestCoverageAnnual ?? existingMetric?.netInterestCoverageAnnual ?? null,
+            // Valuation
+            peBasicExclExtraTTM: peBasicExclExtraTTM ?? existingMetric?.peBasicExclExtraTTM ?? null,
+            psTTM:               psTTM               ?? existingMetric?.psTTM               ?? null,
+            pbAnnual:            pbAnnual            ?? existingMetric?.pbAnnual            ?? null,
+            evEbitdaTTM:         evEbitdaTTM         ?? existingMetric?.evEbitdaTTM         ?? null,
+            pegTTM:              pegTTM              ?? existingMetric?.pegTTM              ?? null,
+            // Market/risk — preserve forwardPE, forwardPEG, week52High/Low from Finnhub daily sync
+            beta:                beta                ?? existingMetric?.beta                ?? null,
+            marketCapitalization: marketCapitalization ?? existingMetric?.marketCapitalization ?? null,
+            lastSyncedAt: now,
+            // Fields NOT updated here (remain from Finnhub daily sync):
+            //   forwardPE, forwardPEG, week52High, week52Low,
+            //   revenueGrowthQuarterlyYoy, epsGrowthQuarterlyYoy,
+            //   dividendYieldIndicatedAnnual, epsTTM
+          },
+        });
+        metricDbAction = existingMetric ? "updated_metric" : "created_metric";
+      } catch {
+        metricDbAction = "metric_db_error";
+      }
+    }
+
+    // ── Determine overall outcome ──────────────────────────────────────────
+    const analystOk = analystDbAction !== "analyst_db_error" && analystDbAction !== "kept_existing";
+    const metricOk  = metricDbAction  !== "metric_db_error"  && metricDbAction  !== "kept_existing";
+    const anySuccess = analystOk || metricOk;
+    const bothFailed = analystDbAction === "analyst_db_error" && metricDbAction === "metric_db_error";
+
+    if (anySuccess) {
       localSuccess++;
       newItems.push({
         syncRunId: run.id,
         symbol,
         status: "success",
-        reason: isNew ? "created_analyst_data" : "updated_analyst_data",
-        dbAction: isNew ? "created" : "updated",
+        reason: `${analystDbAction}, ${metricDbAction}`,
+        dbAction: [analystDbAction, metricDbAction].filter((a) => a !== "kept_existing").join("+") || "updated",
       });
-    } catch {
+    } else if (bothFailed) {
       localFailed++;
       newItems.push({
         syncRunId: run.id,
         symbol,
         status: "failed",
-        reason: "DB upsert error",
+        reason: "Analyst and metric DB upsert both failed",
+        dbAction: "kept_existing",
+      });
+    } else {
+      localSkipped++;
+      newItems.push({
+        syncRunId: run.id,
+        symbol,
+        status: "skipped",
+        reason: `${analystDbAction}, ${metricDbAction}`,
         dbAction: "kept_existing",
       });
     }

@@ -96,6 +96,7 @@ export async function fetchFmpCompanyProfile(
       industry: typeof raw.industry === "string" ? raw.industry : null,
       // stable endpoint uses "marketCap", not "mktCap"
       marketCap: typeof raw.marketCap === "number" ? raw.marketCap : null,
+      beta: typeof raw.beta === "number" && Number.isFinite(raw.beta) ? raw.beta : null,
       currency: typeof raw.currency === "string" ? raw.currency : null,
       country: typeof raw.country === "string" ? raw.country : null,
       website: typeof raw.website === "string" ? raw.website : null,
@@ -455,4 +456,298 @@ export async function fetchFmpNasdaq100Constituents(): Promise<
     action: "nasdaq100-constituents",
     data: constituents,
   };
+}
+
+// ── FMP Fundamental Endpoints (Phase 18) ──────────────────────────────────────
+//
+// All margin/ROE/ROA fields from ratios-ttm are returned as decimal fractions
+// (e.g. 0.45 = 45%). Callers must multiply by 100 to store as % scale.
+// Ratio fields (P/E, D/E, current ratio, etc.) are already plain ratios — no normalization.
+// Growth fields from financial-growth are also decimal fractions — callers multiply by 100.
+
+// ── Generic FMP result type ───────────────────────────────────────────────────
+
+type FmpSimpleResult<T> =
+  | { ok: true; data: T; rateLimitHit?: false }
+  | { ok: false; error: string; rateLimitHit?: boolean };
+
+function fmpSimpleError<T>(error: string, rateLimitHit = false): FmpSimpleResult<T> {
+  return { ok: false, error, rateLimitHit };
+}
+
+async function fmpFetch(
+  path: string,
+  apiKey: string
+): Promise<{ ok: true; json: unknown } | { ok: false; error: string; rateLimitHit: boolean }> {
+  const url = `${BASE_URL}/${path}&apikey=${apiKey}`;
+  const res = await fetch(url, { cache: "no-store" });
+  if (res.status === 429) {
+    return { ok: false, error: "FMP rate limit exceeded (429)", rateLimitHit: true };
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    return { ok: false, error: `FMP HTTP ${res.status}. Body: ${body.slice(0, 200)}`, rateLimitHit: false };
+  }
+  const json: unknown = await res.json();
+  return { ok: true, json };
+}
+
+// ── Key Metrics (annual, most recent) ────────────────────────────────────────
+
+export type FmpKeyMetrics = {
+  symbol: string;
+  marketCap: number | null;
+  enterpriseValue: number | null;
+  peRatio: number | null;
+  pbRatio: number | null;
+  priceToSalesRatio: number | null;
+  enterpriseValueOverEBITDA: number | null;
+  debtToEquity: number | null;
+  currentRatio: number | null;
+  interestCoverage: number | null;
+  roeTTM: number | null;
+  netIncomePerShare: number | null;
+};
+
+export async function fetchFmpKeyMetrics(symbol: string): Promise<FmpSimpleResult<FmpKeyMetrics>> {
+  const apiKey = getApiKey();
+  if (!apiKey) return fmpSimpleError("Missing FMP_API_KEY");
+  try {
+    const res = await fmpFetch(`key-metrics?symbol=${encodeURIComponent(symbol)}&limit=1`, apiKey);
+    if (!res.ok) return fmpSimpleError(res.error, res.rateLimitHit);
+    const arr = Array.isArray(res.json) ? res.json : [];
+    if (arr.length === 0) return fmpSimpleError("No key metrics data");
+    const raw = arr[0] as Record<string, unknown>;
+    const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+    return {
+      ok: true,
+      data: {
+        symbol,
+        marketCap: n(raw.marketCap),
+        enterpriseValue: n(raw.enterpriseValue),
+        peRatio: n(raw.peRatio),
+        pbRatio: n(raw.pbRatio),
+        priceToSalesRatio: n(raw.priceToSalesRatio),
+        enterpriseValueOverEBITDA: n(raw.enterpriseValueOverEBITDA),
+        debtToEquity: n(raw.debtToEquity),
+        currentRatio: n(raw.currentRatio),
+        interestCoverage: n(raw.interestCoverage),
+        roeTTM: n(raw.roe),
+        netIncomePerShare: n(raw.netIncomePerShare),
+      },
+    };
+  } catch (err) {
+    return fmpSimpleError(err instanceof Error ? err.message : "Unknown error");
+  }
+}
+
+// ── Key Metrics TTM ───────────────────────────────────────────────────────────
+
+export type FmpKeyMetricsTtm = {
+  symbol: string;
+  marketCapTTM: number | null;
+  peRatioTTM: number | null;
+  pbRatioTTM: number | null;
+  priceToSalesRatioTTM: number | null;
+  enterpriseValueOverEBITDATTM: number | null;
+  netIncomePerShareTTM: number | null;
+  roeTTM: number | null;
+  debtToEquityTTM: number | null;
+  currentRatioTTM: number | null;
+  interestCoverageTTM: number | null;
+};
+
+export async function fetchFmpKeyMetricsTtm(symbol: string): Promise<FmpSimpleResult<FmpKeyMetricsTtm>> {
+  const apiKey = getApiKey();
+  if (!apiKey) return fmpSimpleError("Missing FMP_API_KEY");
+  try {
+    const res = await fmpFetch(`key-metrics-ttm?symbol=${encodeURIComponent(symbol)}`, apiKey);
+    if (!res.ok) return fmpSimpleError(res.error, res.rateLimitHit);
+    // Response can be an array or a single object depending on endpoint version
+    const raw = Array.isArray(res.json) && (res.json as unknown[]).length > 0
+      ? (res.json as Record<string, unknown>[])[0]
+      : typeof res.json === "object" && res.json !== null
+      ? (res.json as Record<string, unknown>)
+      : null;
+    if (!raw) return fmpSimpleError("Empty key-metrics-ttm response");
+    const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+    return {
+      ok: true,
+      data: {
+        symbol,
+        marketCapTTM: n(raw.marketCapTTM),
+        peRatioTTM: n(raw.peRatioTTM),
+        pbRatioTTM: n(raw.pbRatioTTM),
+        priceToSalesRatioTTM: n(raw.priceToSalesRatioTTM),
+        enterpriseValueOverEBITDATTM: n(raw.enterpriseValueOverEBITDATTM),
+        netIncomePerShareTTM: n(raw.netIncomePerShareTTM),
+        roeTTM: n(raw.roeTTM),
+        debtToEquityTTM: n(raw.debtToEquityTTM),
+        currentRatioTTM: n(raw.currentRatioTTM),
+        interestCoverageTTM: n(raw.interestCoverageTTM),
+      },
+    };
+  } catch (err) {
+    return fmpSimpleError(err instanceof Error ? err.message : "Unknown error");
+  }
+}
+
+// ── Ratios (annual, most recent) ──────────────────────────────────────────────
+
+export type FmpRatios = {
+  symbol: string;
+  // Margins (decimal — 0.45 = 45%, callers multiply by 100)
+  grossProfitMargin: number | null;
+  operatingProfitMargin: number | null;
+  netProfitMargin: number | null;
+  returnOnEquity: number | null;
+  returnOnAssets: number | null;
+  // Health (plain ratios)
+  debtEquityRatio: number | null;
+  currentRatio: number | null;
+  quickRatio: number | null;
+  interestCoverage: number | null;
+  // Valuation
+  priceEarningsRatio: number | null;
+  priceToSalesRatio: number | null;
+  priceToBookRatio: number | null;
+  enterpriseValueMultiple: number | null;
+  priceEarningsToGrowthRatio: number | null;
+};
+
+export async function fetchFmpRatios(symbol: string): Promise<FmpSimpleResult<FmpRatios>> {
+  const apiKey = getApiKey();
+  if (!apiKey) return fmpSimpleError("Missing FMP_API_KEY");
+  try {
+    const res = await fmpFetch(`ratios?symbol=${encodeURIComponent(symbol)}&limit=1`, apiKey);
+    if (!res.ok) return fmpSimpleError(res.error, res.rateLimitHit);
+    const arr = Array.isArray(res.json) ? res.json : [];
+    if (arr.length === 0) return fmpSimpleError("No ratios data");
+    const raw = arr[0] as Record<string, unknown>;
+    const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+    return {
+      ok: true,
+      data: {
+        symbol,
+        grossProfitMargin: n(raw.grossProfitMargin),
+        operatingProfitMargin: n(raw.operatingProfitMargin),
+        netProfitMargin: n(raw.netProfitMargin),
+        returnOnEquity: n(raw.returnOnEquity),
+        returnOnAssets: n(raw.returnOnAssets),
+        debtEquityRatio: n(raw.debtEquityRatio),
+        currentRatio: n(raw.currentRatio),
+        quickRatio: n(raw.quickRatio),
+        interestCoverage: n(raw.interestCoverage),
+        priceEarningsRatio: n(raw.priceEarningsRatio),
+        priceToSalesRatio: n(raw.priceToSalesRatio),
+        priceToBookRatio: n(raw.priceToBookRatio),
+        enterpriseValueMultiple: n(raw.enterpriseValueMultiple),
+        priceEarningsToGrowthRatio: n(raw.priceEarningsToGrowthRatio),
+      },
+    };
+  } catch (err) {
+    return fmpSimpleError(err instanceof Error ? err.message : "Unknown error");
+  }
+}
+
+// ── Ratios TTM ────────────────────────────────────────────────────────────────
+
+export type FmpRatiosTtm = {
+  symbol: string;
+  // Margins (decimal — callers multiply by 100 for % scale)
+  grossProfitMarginTTM: number | null;
+  operatingProfitMarginTTM: number | null;
+  netProfitMarginTTM: number | null;
+  returnOnEquityTTM: number | null;
+  returnOnAssetsTTM: number | null;
+  // Health (plain ratios, no normalization)
+  debtEquityRatioTTM: number | null;
+  currentRatioTTM: number | null;
+  quickRatioTTM: number | null;
+  interestCoverageTTM: number | null;
+  // Valuation (plain ratios/multiples)
+  priceEarningsRatioTTM: number | null;
+  priceToSalesRatioTTM: number | null;
+  priceToBookRatioTTM: number | null;
+  enterpriseValueMultipleTTM: number | null;
+  priceEarningsToGrowthRatioTTM: number | null;
+};
+
+export async function fetchFmpRatiosTtm(symbol: string): Promise<FmpSimpleResult<FmpRatiosTtm>> {
+  const apiKey = getApiKey();
+  if (!apiKey) return fmpSimpleError("Missing FMP_API_KEY");
+  try {
+    const res = await fmpFetch(`ratios-ttm?symbol=${encodeURIComponent(symbol)}`, apiKey);
+    if (!res.ok) return fmpSimpleError(res.error, res.rateLimitHit);
+    // ratios-ttm returns a single object or an array with one entry
+    const raw = Array.isArray(res.json) && (res.json as unknown[]).length > 0
+      ? (res.json as Record<string, unknown>[])[0]
+      : typeof res.json === "object" && res.json !== null
+      ? (res.json as Record<string, unknown>)
+      : null;
+    if (!raw) return fmpSimpleError("Empty ratios-ttm response");
+    const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+    return {
+      ok: true,
+      data: {
+        symbol,
+        grossProfitMarginTTM: n(raw.grossProfitMarginTTM),
+        operatingProfitMarginTTM: n(raw.operatingProfitMarginTTM),
+        netProfitMarginTTM: n(raw.netProfitMarginTTM),
+        returnOnEquityTTM: n(raw.returnOnEquityTTM),
+        returnOnAssetsTTM: n(raw.returnOnAssetsTTM),
+        debtEquityRatioTTM: n(raw.debtEquityRatioTTM),
+        currentRatioTTM: n(raw.currentRatioTTM),
+        quickRatioTTM: n(raw.quickRatioTTM),
+        interestCoverageTTM: n(raw.interestCoverageTTM),
+        priceEarningsRatioTTM: n(raw.priceEarningsRatioTTM),
+        priceToSalesRatioTTM: n(raw.priceToSalesRatioTTM),
+        priceToBookRatioTTM: n(raw.priceToBookRatioTTM),
+        enterpriseValueMultipleTTM: n(raw.enterpriseValueMultipleTTM),
+        priceEarningsToGrowthRatioTTM: n(raw.priceEarningsToGrowthRatioTTM),
+      },
+    };
+  } catch (err) {
+    return fmpSimpleError(err instanceof Error ? err.message : "Unknown error");
+  }
+}
+
+// ── Financial Growth (annual, most recent) ────────────────────────────────────
+
+export type FmpFinancialGrowth = {
+  symbol: string;
+  // Growth (decimal fraction — callers multiply by 100 for % scale)
+  revenueGrowth: number | null;
+  epsgrowth: number | null;
+  threeYRevenueGrowthPerShare: number | null;
+  threeYNetIncomeGrowthPerShare: number | null;
+  netIncomeGrowth: number | null;
+  freeCashFlowGrowth: number | null;
+};
+
+export async function fetchFmpFinancialGrowth(symbol: string): Promise<FmpSimpleResult<FmpFinancialGrowth>> {
+  const apiKey = getApiKey();
+  if (!apiKey) return fmpSimpleError("Missing FMP_API_KEY");
+  try {
+    const res = await fmpFetch(`financial-growth?symbol=${encodeURIComponent(symbol)}&limit=1`, apiKey);
+    if (!res.ok) return fmpSimpleError(res.error, res.rateLimitHit);
+    const arr = Array.isArray(res.json) ? res.json : [];
+    if (arr.length === 0) return fmpSimpleError("No financial-growth data");
+    const raw = arr[0] as Record<string, unknown>;
+    const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+    return {
+      ok: true,
+      data: {
+        symbol,
+        revenueGrowth: n(raw.revenueGrowth),
+        epsgrowth: n(raw.epsgrowth),
+        threeYRevenueGrowthPerShare: n(raw.threeYRevenueGrowthPerShare),
+        threeYNetIncomeGrowthPerShare: n(raw.threeYNetIncomeGrowthPerShare),
+        netIncomeGrowth: n(raw.netIncomeGrowth),
+        freeCashFlowGrowth: n(raw.freeCashFlowGrowth),
+      },
+    };
+  } catch (err) {
+    return fmpSimpleError(err instanceof Error ? err.message : "Unknown error");
+  }
 }

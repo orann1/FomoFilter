@@ -29,6 +29,7 @@ export type NormalizedCompanyProfile = {
   sector: string | null;
   industry: string | null;
   marketCap: number | null;
+  beta?: number | null;
   currency: string | null;
   country: string | null;
   website?: string | null;
