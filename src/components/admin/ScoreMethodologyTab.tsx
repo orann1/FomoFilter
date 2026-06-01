@@ -75,7 +75,10 @@ export default function ScoreMethodologyTab() {
         <div className="space-y-2 text-sm text-slate-300 leading-relaxed">
           <p>
             <span className="font-semibold text-white">Fundamental Score v1</span> rates company quality from{" "}
-            <span className="font-mono text-emerald-300">0 to 100</span> using available Finnhub basic financial metrics.
+            <span className="font-mono text-emerald-300">0 to 100</span> using FMP Starter financial metrics
+            (ratios TTM, financial growth, company profile). Finnhub provides analyst recommendation counts.
+            Metric values are stored in <span className="font-mono text-slate-300">StockMetric</span> during{" "}
+            <span className="font-mono text-slate-300">Company Data Sync</span>.
           </p>
           <p className="text-slate-400">
             It is <strong className="text-slate-200">deterministic</strong> and{" "}
@@ -304,15 +307,15 @@ export default function ScoreMethodologyTab() {
         </div>
       </Section>
 
-      {/* ── Analyst Data (Phase 17) ─────────────────────────────────────── */}
+      {/* ── Analyst Data (Phase 17/18) ──────────────────────────────────── */}
       <Section title="Analyst Data — Collected, Not Yet Scored" icon={<Info className="w-4 h-4" />}>
         <div className="space-y-3 text-sm text-slate-300 leading-relaxed">
           <p>
-            As of <span className="font-semibold text-white">Phase 17</span>, analyst target data uses{" "}
-            <span className="font-mono text-slate-300">FMP /stable/price-target-consensus</span> as the primary source.
+            <span className="font-semibold text-white">Company Data Sync</span> (Phase 18) uses FMP Starter as the
+            primary source for all financial metrics, ratios, growth, company profile, and analyst targets.
             Recommendation counts remain sourced from{" "}
             <span className="font-mono text-slate-300">Finnhub /stock/recommendation</span>.
-            Data is stored in <span className="font-mono text-slate-300">StockAnalystData</span> and displayed
+            Analyst data is stored in <span className="font-mono text-slate-300">StockAnalystData</span> and displayed
             in the Scanner and Dashboard but is{" "}
             <strong className="text-white">not yet included in Opportunity Score v1</strong>.
           </p>

@@ -1960,10 +1960,10 @@ export default function SyncPageClient({
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Syncs slower-changing company data for all active stocks. Current implementation
-                refreshes analyst target prices, recommendation counts, and upside %. Future FMP
-                migration will add fundamentals, ratios, growth, profile, and earnings data. Does
-                not calculate scores automatically.
+                Syncs slower-changing company and financial data for all active stocks. Fetches FMP
+                company profile, financial ratios (TTM), financial growth, and analyst target prices.
+                Fetches Finnhub analyst recommendation counts. Updates StockMetric and StockAnalystData.
+                Does not calculate scores automatically — run Score Calculation after sync.
               </p>
             </div>
 
@@ -2034,10 +2034,16 @@ export default function SyncPageClient({
               <div className="flex items-start gap-2">
                 <Info className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
                 <div className="text-xs space-y-0.5 text-slate-500">
-                  <p>Target prices: FMP <span className="font-mono text-slate-400">/stable/price-target-consensus</span> (targetConsensus, targetHigh, targetLow, targetMedian).</p>
-                  <p>Recommendation counts: Finnhub <span className="font-mono text-slate-400">/stock/recommendation</span> (strongBuy/buy/hold/sell/strongSell).</p>
-                  <p>Chunk size: 10 stocks. Uses ~1.2s pacing between symbols to stay within provider limits.</p>
-                  <p>Upside % is calculated internally: <span className="font-mono text-slate-400">((targetConsensus - price) / price) × 100</span>.</p>
+                  <p className="text-slate-400 font-medium">FMP calls per stock (4):</p>
+                  <p>• <span className="font-mono text-slate-400">/stable/profile</span> → sector, name, beta, marketCap</p>
+                  <p>• <span className="font-mono text-slate-400">/stable/ratios-ttm</span> → margins, ROE/ROA, D/E, P/E, P/S, EV/EBITDA, PEG</p>
+                  <p>• <span className="font-mono text-slate-400">/stable/financial-growth</span> → revenue/EPS growth, 3Y growth</p>
+                  <p>• <span className="font-mono text-slate-400">/stable/price-target-consensus</span> → targetConsensus, high, low, median</p>
+                  <p className="text-slate-400 font-medium mt-1">Finnhub calls per stock (1):</p>
+                  <p>• <span className="font-mono text-slate-400">/stock/recommendation</span> → strongBuy/buy/hold/sell/strongSell counts</p>
+                  <p className="mt-1">Total for 100 stocks: ~500 calls (400 FMP + 100 Finnhub). Chunk size: 10. Pacing: ~1.2s between symbols. Estimated duration: 3–5 minutes.</p>
+                  <p>Upside % calculated internally: <span className="font-mono text-slate-400">((targetConsensus − price) / price) × 100</span>.</p>
+                  <p>Margins/ROE/ROA stored as % scale. Growth stored as % scale. Safe update — existing values are never overwritten with null.</p>
                 </div>
               </div>
             </div>
