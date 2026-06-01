@@ -399,11 +399,21 @@ model StockAnalystData {
   lastSyncedAt         DateTime?
   sourceUpdatedAt      DateTime?
 
+  // Target discovery tracking (Phase 15)
+  targetStatus            String?
+  targetLastAttemptedAt   DateTime?
+  targetLastFoundAt       DateTime?
+  targetNextRetryAt       DateTime?
+  targetAttemptCount      Int       @default(0)
+  targetLastMessage       String?
+
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
   @@index([lastSyncedAt])
   @@index([analystRating])
+  @@index([targetStatus])
+  @@index([targetNextRetryAt])
 }
 
 model SyncRun {

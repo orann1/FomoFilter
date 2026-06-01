@@ -126,17 +126,17 @@ export default function DashboardSummaryCards({ summary, freshness }: DashboardS
       />
       <SummaryCard
         icon={<BadgeDollarSign size={16} />}
-        label="With Analyst Data"
-        value={String(summary.withAnalystData)}
-        sub={summary.withAnalystData > 0 ? `${summary.stocksWithHighUpside} with ≥20% upside` : "Run Analyst Sync"}
-        accent={summary.withAnalystData > 0 ? "blue" : "slate"}
+        label="Rating Coverage"
+        value={`${summary.ratingCoverage} / ${summary.totalStocks}`}
+        sub={summary.stocksWithHighUpside > 0 ? `${summary.stocksWithHighUpside} with ≥20% upside` : "Run Analyst Sync"}
+        accent={summary.ratingCoverage > 0 ? "blue" : "slate"}
       />
       <SummaryCard
         icon={<TrendingUp size={16} />}
-        label="Avg Analyst Upside"
-        value={summary.averageAnalystUpside != null ? `${summary.averageAnalystUpside > 0 ? "+" : ""}${summary.averageAnalystUpside}%` : "N/A"}
-        sub="Consensus target vs price"
-        accent={summary.averageAnalystUpside != null && summary.averageAnalystUpside > 0 ? "emerald" : "slate"}
+        label="Target Coverage"
+        value={`${summary.targetCoverage} / ${summary.totalStocks}`}
+        sub={summary.noTargetAvailable > 0 ? `${summary.noTargetAvailable} no data · ${summary.eligibleForTargetRetry} eligible` : "Run Target Discovery"}
+        accent={summary.targetCoverage >= 60 ? "emerald" : summary.targetCoverage > 0 ? "amber" : "slate"}
       />
       <SummaryCard
         icon={<RefreshCw size={16} />}

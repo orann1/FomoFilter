@@ -339,12 +339,56 @@ export default function ScoreMethodologyTab() {
             </table>
           </div>
 
-          <div className="flex items-start gap-2 rounded bg-blue-900/20 border border-blue-800/40 px-3 py-2.5">
-            <Info className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
-            <p className="text-xs text-blue-300">
-              <strong>Future:</strong> Opportunity Score v2 may incorporate analyst upside %, rating strength,
-              analyst count (confidence), and recommendation trend. This is tracked as a planned Phase 15 improvement.
+          <div className="flex items-start gap-2 rounded bg-amber-900/20 border border-amber-800/40 px-3 py-2.5">
+            <Info className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+            <p className="text-xs text-amber-300">
+              <strong>Coverage note:</strong> Analyst rating and count coverage is 100 / 100. Target price coverage is
+              limited by the FMP free plan. Phase 15 adds a quota-safe target discovery sync that gradually improves
+              coverage across multiple days. Analyst Upside remains display-only until coverage reaches ≥ 60%.
             </p>
+          </div>
+        </div>
+      </Section>
+
+      {/* ── Target Discovery (Phase 15) ──────────────────────────────────── */}
+      <Section title="Analyst Target Discovery — Phase 15" icon={<Info className="w-4 h-4" />}>
+        <div className="space-y-3 text-sm text-slate-300 leading-relaxed">
+          <p>
+            Phase 15 adds a <span className="font-semibold text-white">quota-safe target discovery sync</span> that
+            uses FMP <span className="font-mono text-slate-300">/stable/price-target-summary</span> to gradually
+            discover missing analyst target prices. Each run is conservative and stops safely when the provider
+            quota or run budget is reached.
+          </p>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <TableHeader headers={["Parameter", "Value", "Notes"]} />
+              <tbody>
+                {[
+                  { param: "Max attempts per run", value: "40", notes: "Stops to protect daily FMP quota" },
+                  { param: "Max targets found per run", value: "16", notes: "Stops early when enough targets found" },
+                  { param: "Chunk size", value: "10 symbols", notes: "Processed per HTTP request cycle" },
+                  { param: "has_target cooldown", value: "14 days", notes: "Refreshes stale targets" },
+                  { param: "no_target_available cooldown", value: "30 days", notes: "Avoids wasteful re-checks" },
+                  { param: "provider_error cooldown", value: "1 day", notes: "Retries transient errors next day" },
+                  { param: "quota_blocked cooldown", value: "Next day", notes: "Continues after quota resets" },
+                ].map((row) => (
+                  <tr key={row.param} className="border-b border-slate-700/40">
+                    <td className="px-3 py-2 font-mono text-slate-300">{row.param}</td>
+                    <td className="px-3 py-2 font-medium text-slate-200">{row.value}</td>
+                    <td className="px-3 py-2 text-slate-400">{row.notes}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex items-start gap-2 rounded bg-slate-900/60 border border-slate-700/60 px-3 py-2.5">
+            <Info className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+            <div className="text-xs text-slate-400 space-y-1">
+              <p>Existing target prices are <strong className="text-slate-300">never deleted</strong> by an empty response — only overwritten when new valid data is found.</p>
+              <p>Opportunity Score v1 is <strong className="text-slate-300">unchanged</strong>. Analyst Upside will be added to scoring once coverage reaches ≥ 60% (preferred ≥ 80%).</p>
+            </div>
           </div>
         </div>
       </Section>

@@ -110,6 +110,7 @@ interface SyncPageClientProps {
   stockInventory: AdminStockDataInventoryRow[];
   initialChunkedSync: ChunkedSyncProgress | null;
   initialAnalystSync: ChunkedSyncProgress | null;
+  initialTargetDiscoverySync: ChunkedSyncProgress | null;
 }
 
 type LastResult =
@@ -1107,6 +1108,7 @@ export default function SyncPageClient({
   stockInventory,
   initialChunkedSync,
   initialAnalystSync,
+  initialTargetDiscoverySync,
 }: SyncPageClientProps) {
   const router = useRouter();
   const [lastResult, setLastResult] = useState<LastResult>(null);
@@ -1134,6 +1136,16 @@ export default function SyncPageClient({
   const [analystElapsedMs, setAnalystElapsedMs] = useState(0);
   const analystTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Target discovery chunked sync state
+  const [targetDiscoverySync, setTargetDiscoverySync] = useState<ChunkedSyncProgress | null>(initialTargetDiscoverySync);
+  const [targetDiscoveryAutoRunning, setTargetDiscoveryAutoRunning] = useState(false);
+  const [targetDiscoveryChunkError, setTargetDiscoveryChunkError] = useState<string | null>(null);
+  const targetDiscoveryAutoRunRef = useRef(false);
+  const targetDiscoveryPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const targetDiscoverySyncStartedAtRef = useRef<number>(0);
+  const [targetDiscoveryElapsedMs, setTargetDiscoveryElapsedMs] = useState(0);
+  const targetDiscoveryTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -1142,6 +1154,9 @@ export default function SyncPageClient({
       if (analystTimerRef.current) clearInterval(analystTimerRef.current);
       if (analystPollRef.current) clearInterval(analystPollRef.current);
       analystAutoRunRef.current = false;
+      if (targetDiscoveryTimerRef.current) clearInterval(targetDiscoveryTimerRef.current);
+      if (targetDiscoveryPollRef.current) clearInterval(targetDiscoveryPollRef.current);
+      targetDiscoveryAutoRunRef.current = false;
     };
   }, []);
 
@@ -1407,6 +1422,146 @@ export default function SyncPageClient({
     await startAnalystAutoRun();
   }
 
+  // ── Target discovery helpers ───────────────────────────────────────────────
+
+  function startTargetDiscoveryPolling() {
+    if (targetDiscoveryPollRef.current) return;
+    targetDiscoveryPollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch("/api/admin/analyst-target-discovery/latest", { cache: "no-store" });
+        if (res.ok) {
+          const progress: ChunkedSyncProgress | null = await res.json();
+          if (progress) setTargetDiscoverySync(progress);
+        }
+      } catch {
+        // network error — keep polling
+      }
+    }, 2000);
+  }
+
+  function stopTargetDiscoveryPolling() {
+    if (targetDiscoveryPollRef.current) {
+      clearInterval(targetDiscoveryPollRef.current);
+      targetDiscoveryPollRef.current = null;
+    }
+  }
+
+  function startTargetDiscoveryElapsedTimer() {
+    targetDiscoverySyncStartedAtRef.current = Date.now();
+    if (targetDiscoveryTimerRef.current) clearInterval(targetDiscoveryTimerRef.current);
+    targetDiscoveryTimerRef.current = setInterval(() => {
+      setTargetDiscoveryElapsedMs(Date.now() - targetDiscoverySyncStartedAtRef.current);
+    }, 500);
+  }
+
+  function stopTargetDiscoveryElapsedTimer() {
+    if (targetDiscoveryTimerRef.current) {
+      clearInterval(targetDiscoveryTimerRef.current);
+      targetDiscoveryTimerRef.current = null;
+    }
+  }
+
+  const startTargetDiscoveryAutoRun = useCallback(async () => {
+    targetDiscoveryAutoRunRef.current = true;
+    setTargetDiscoveryAutoRunning(true);
+    setTargetDiscoveryChunkError(null);
+    startTargetDiscoveryPolling();
+    startTargetDiscoveryElapsedTimer();
+
+    try {
+      while (targetDiscoveryAutoRunRef.current) {
+        const res = await fetch("/api/admin/analyst-target-discovery/process-next", { method: "POST" });
+        const data = await res.json();
+
+        if (!res.ok) {
+          setTargetDiscoveryChunkError(data.error ?? "Chunk processing failed.");
+          break;
+        }
+
+        if (data.progress) setTargetDiscoverySync(data.progress);
+
+        if (data.done || !targetDiscoveryAutoRunRef.current) break;
+        if (data.progress?.status !== "running") break;
+      }
+    } catch (err) {
+      setTargetDiscoveryChunkError(err instanceof Error ? err.message : "Network error during chunk.");
+    }
+
+    stopTargetDiscoveryPolling();
+    stopTargetDiscoveryElapsedTimer();
+    targetDiscoveryAutoRunRef.current = false;
+    setTargetDiscoveryAutoRunning(false);
+
+    try {
+      const finalRes = await fetch("/api/admin/analyst-target-discovery/latest", { cache: "no-store" });
+      if (finalRes.ok) {
+        const finalProgress = await finalRes.json();
+        if (finalProgress) setTargetDiscoverySync(finalProgress);
+      }
+    } catch {
+      // ignore
+    }
+
+    router.refresh();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router]);
+
+  async function handleStartTargetDiscovery() {
+    setTargetDiscoveryChunkError(null);
+    const res = await fetch("/api/admin/analyst-target-discovery/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "start" }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setTargetDiscoveryChunkError(data.error ?? "Failed to start target discovery.");
+      return;
+    }
+    setTargetDiscoverySync(data);
+    await startTargetDiscoveryAutoRun();
+  }
+
+  async function handleContinueTargetDiscovery() {
+    setTargetDiscoveryChunkError(null);
+    // If the run hit the attempt limit (processedCount >= MAX_ATTEMPTS_PER_RUN),
+    // process-next would immediately return done without processing anything.
+    // Create a new run so the next batch of eligible symbols is processed.
+    const MAX_ATTEMPTS = 40;
+    const hitLimit = targetDiscoverySync !== null && targetDiscoverySync.processedCount >= MAX_ATTEMPTS;
+    if (hitLimit) {
+      const res = await fetch("/api/admin/analyst-target-discovery/start", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "start" }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setTargetDiscoveryChunkError(data.error ?? "Failed to continue target discovery.");
+        return;
+      }
+      setTargetDiscoverySync(data);
+    }
+    await startTargetDiscoveryAutoRun();
+  }
+
+  async function handleRestartTargetDiscovery() {
+    if (!confirm("This will start a new target discovery cycle. Existing target data will be updated safely where new data is found. Continue?")) return;
+    setTargetDiscoveryChunkError(null);
+    const res = await fetch("/api/admin/analyst-target-discovery/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mode: "restart" }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setTargetDiscoveryChunkError(data.error ?? "Failed to restart target discovery.");
+      return;
+    }
+    setTargetDiscoverySync(data);
+    await startTargetDiscoveryAutoRun();
+  }
+
   // ── Other sync/test helpers ────────────────────────────────────────────────
 
   function runTest(label: string, fn: () => Promise<ProviderTestResult>) {
@@ -1490,7 +1645,14 @@ export default function SyncPageClient({
   const analystShowContinue = !analystAutoRunning && isIncomplete(analystSync);
   const analystShowRestart = !analystAutoRunning && analystSync !== null;
 
-  const anyChunkedRunning = autoRunning || analystAutoRunning;
+  const targetDiscoveryShowProgress = targetDiscoveryAutoRunning;
+  const targetDiscoveryShowPaused = !targetDiscoveryAutoRunning && isIncomplete(targetDiscoverySync);
+  const targetDiscoveryShowResult = !targetDiscoveryAutoRunning && targetDiscoverySync && isTerminal(targetDiscoverySync);
+  const targetDiscoveryShowContinue = !targetDiscoveryAutoRunning && isIncomplete(targetDiscoverySync);
+  const targetDiscoveryShowRestart = !targetDiscoveryAutoRunning && targetDiscoverySync !== null;
+  const targetDiscoveryNeverRun = targetDiscoverySync === null;
+
+  const anyChunkedRunning = autoRunning || analystAutoRunning || targetDiscoveryAutoRunning;
 
   return (
     <div className="max-w-4xl mx-auto space-y-5">
@@ -1844,7 +2006,103 @@ export default function SyncPageClient({
             </div>
           </section>
 
-          {/* 4 — Score Calculation */}
+          {/* 4 — Analyst Target Discovery (Phase 15) */}
+          <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
+            <div>
+              <div className="flex items-center gap-2 mb-0.5">
+                <Database className="w-4 h-4 text-slate-400" />
+                <h2 className="text-sm font-semibold text-slate-200">Analyst Target Discovery</h2>
+                <span className="text-xs font-medium text-amber-700 bg-amber-900/40 border border-amber-800/50 px-2 py-0.5 rounded ml-1">
+                  FMP
+                </span>
+                <span className="text-xs font-medium text-blue-700 bg-blue-900/40 border border-blue-800/50 px-2 py-0.5 rounded ml-1">
+                  Quota Safe
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                Attempts to discover missing analyst target prices using a conservative request budget.
+                Stops safely when the provider quota is reached and can continue later.
+                Does not change Opportunity Score. Target data remains display-only until coverage is high enough.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {(targetDiscoveryNeverRun || (!targetDiscoveryAutoRunning && isTerminal(targetDiscoverySync))) && (
+                <button
+                  onClick={handleStartTargetDiscovery}
+                  disabled={isLoading || anyChunkedRunning}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {targetDiscoveryAutoRunning ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Play className="w-3.5 h-3.5" />
+                  )}
+                  Start Target Discovery
+                </button>
+              )}
+
+              {targetDiscoveryShowContinue && (
+                <button
+                  onClick={handleContinueTargetDiscovery}
+                  disabled={isLoading || anyChunkedRunning}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium bg-blue-700 hover:bg-blue-600 text-white border border-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <SkipForward className="w-3.5 h-3.5" />
+                  Continue Target Discovery
+                </button>
+              )}
+
+              {targetDiscoveryShowRestart && !targetDiscoveryAutoRunning && (
+                <button
+                  onClick={handleRestartTargetDiscovery}
+                  disabled={isLoading || anyChunkedRunning}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium bg-slate-700 hover:bg-slate-600 text-slate-200 border border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Restart Discovery Cycle
+                </button>
+              )}
+            </div>
+
+            {targetDiscoveryShowProgress && targetDiscoverySync && (
+              <ChunkedSyncProgressPanel
+                progress={targetDiscoverySync}
+                autoRunning={targetDiscoveryAutoRunning}
+                chunkError={targetDiscoveryChunkError}
+                elapsedMs={targetDiscoveryElapsedMs}
+              />
+            )}
+
+            {targetDiscoveryShowPaused && targetDiscoverySync && (
+              <PausedSyncPanel progress={targetDiscoverySync} chunkError={targetDiscoveryChunkError} />
+            )}
+
+            {targetDiscoveryChunkError && !targetDiscoverySync && (
+              <p className="text-xs text-red-400 bg-red-900/20 border border-red-800/40 rounded px-3 py-2">
+                {targetDiscoveryChunkError}
+              </p>
+            )}
+
+            {targetDiscoveryShowResult && targetDiscoverySync && (
+              <ChunkedSyncResultPanel progress={targetDiscoverySync} />
+            )}
+
+            <div className="rounded bg-slate-900/60 border border-slate-700/60 px-3 py-2.5 space-y-2">
+              <div className="flex items-start gap-2">
+                <Info className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
+                <div className="text-xs space-y-0.5 text-slate-500">
+                  <p>Uses FMP <span className="font-mono text-slate-400">/stable/price-target-summary</span>. 1 call per symbol.</p>
+                  <p>Run limits: max <span className="font-mono text-slate-400">40 attempts</span> or <span className="font-mono text-slate-400">16 targets found</span> per run. Chunk size: 10.</p>
+                  <p>Cooldowns: has_target → 14 days · no_target → 30 days · error → 1 day · plan_limited (HTTP 402) → 90 days.</p>
+                  <p>Existing target prices are never deleted when a new response is empty.</p>
+                  <p className="text-amber-500">Does not change Opportunity Score. Run across multiple days to improve coverage.</p>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          {/* 5 — Score Calculation */}
           <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
             <div>
               <div className="flex items-center gap-2 mb-0.5">

@@ -66,6 +66,12 @@ export type DashboardSummary = {
   withAnalystData: number;
   averageAnalystUpside: number | null;
   stocksWithHighUpside: number;
+  // Target discovery (Phase 15)
+  withTargetPrice: number;
+  ratingCoverage: number;
+  targetCoverage: number;
+  noTargetAvailable: number;
+  eligibleForTargetRetry: number;
 };
 
 export type DashboardAnalystRow = {
@@ -221,6 +227,21 @@ export async function getDashboardData(): Promise<DashboardData> {
       : null;
   const stocksWithHighUpside = analystUpsideArr.filter((v) => v >= 20).length;
 
+  // Target discovery coverage (Phase 15)
+  const now = new Date();
+  const withTargetPrice = dbStocks.filter((s) => s.analystData?.targetPrice != null).length;
+  const ratingCoverage = dbStocks.filter((s) => s.analystData?.analystRating != null).length;
+  const targetCoverage = withTargetPrice;
+  const noTargetAvailable = dbStocks.filter((s) => s.analystData?.targetStatus === "no_target_available").length;
+  const eligibleForTargetRetry = dbStocks.filter((s) => {
+    const ad = s.analystData;
+    if (!ad || !ad.targetStatus || ad.targetStatus === "not_checked") return true;
+    if (ad.targetStatus === "provider_error" || ad.targetStatus === "quota_blocked" || ad.targetStatus === "no_target_available") {
+      return !ad.targetNextRetryAt || ad.targetNextRetryAt <= now;
+    }
+    return false;
+  }).length;
+
   const summary: DashboardSummary = {
     totalStocks,
     scannerReadyStocks,
@@ -236,6 +257,11 @@ export async function getDashboardData(): Promise<DashboardData> {
     withAnalystData,
     averageAnalystUpside,
     stocksWithHighUpside,
+    withTargetPrice,
+    ratingCoverage,
+    targetCoverage,
+    noTargetAvailable,
+    eligibleForTargetRetry,
   };
 
   // ── Freshness ─────────────────────────────────────────────────────────────────
