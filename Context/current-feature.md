@@ -1,4 +1,4 @@
-# Phase 15 — Quota-Safe Analyst Target Discovery Sync
+# Phase 16 — Sync Architecture Cleanup & Workflow Refactor
 
 ## Status
 
@@ -8,814 +8,946 @@ Completed
 
 ## Goal
 
-Build a quota-safe and resumable analyst target discovery process.
+Clean up and refactor the Admin Sync architecture into a small number of clear, consistent, product-level workflows.
 
-The purpose is to gradually improve analyst target price coverage without relying on a paid provider upgrade yet.
+The project currently has several sync actions that were created during development and testing phases. Some are still useful, some are temporary workarounds, and some are now confusing because FMP Starter changes the provider strategy.
 
-This phase should add a special Admin sync flow that attempts to discover analyst target prices using the currently available provider access, while respecting quota limits and storing progress over multiple days.
+Phase 16 should reorganize Admin Sync around three main workflows:
 
-This phase does **not** change Opportunity Score.
+```txt
+1. Universe Sync
+2. Company Data Sync
+3. Daily Market Data Sync
+```
+
+Future optional workflow:
+
+```txt
+4. Intraday / Frequent Market Refresh Sync
+```
+
+This phase is primarily about:
+
+```txt
+Architecture cleanup
+UI cleanup
+Workflow naming
+Refactoring existing sync logic
+Removing obsolete/development-era clutter
+Preserving existing good sync mechanics
+Avoiding duplicate DB tables and duplicate logic
+```
 
 ---
 
 ## Why This Phase Is Needed
 
-Phase 14 added analyst data using:
+The app was built incrementally through multiple phases:
+
+- Universe sync.
+- Quote sync.
+- Market data sync.
+- Analyst data sync.
+- Analyst target discovery.
+- Fundamental score calculation.
+- Opportunity score calculation.
+- Dashboard cleanup.
+- Scanner real-data integration.
+- FMP Starter endpoint testing.
+
+This created a functional but increasingly confusing Admin Sync area.
+
+Current examples of development-era sync actions:
 
 ```txt
-FMP price target data
+Sync Nasdaq 100 Universe
+Sync All Nasdaq 100 Market Data
+Sync Nasdaq 100 Analyst Data
+Analyst Target Discovery
+Sample DB Writes
+Provider Tests
+```
+
+These names describe implementation phases and provider experiments, not clean product workflows.
+
+Now that FMP Starter has been purchased and tested, the sync architecture should be cleaned before adding more features.
+
+---
+
+## Critical Product Decision
+
+Do not keep adding patches.
+
+Do not build more parallel sync actions.
+
+Do not create duplicate DB tables.
+
+Do not create duplicate provider logic.
+
+Do not create duplicate progress mechanisms.
+
+Instead:
+
+```txt
+Refactor existing logic into clean workflows.
+Reuse existing models and sync infrastructure.
+Remove or hide obsolete UI actions.
+Keep the system consistent before adding new data types.
+```
+
+---
+
+## Important Rules
+
+This phase must be implemented carefully and incrementally.
+
+### Do
+
+- Audit first.
+- Refactor existing code.
+- Reuse existing SyncRun and SyncRunItem.
+- Reuse existing progress UI patterns.
+- Reuse existing chunked sync patterns.
+- Reuse existing provider functions if still valid.
+- Keep Continue / Restart behavior where applicable.
+- Keep Sync History logging.
+- Keep Data Inventory useful.
+- Keep Provider Tests available, but move developer-only tools out of the main workflow.
+- Delete temporary, obsolete, and debug files.
+- Keep old working logic until replacement is verified.
+
+### Do Not
+
+- Do not add new scoring formulas.
+- Do not change Fundamental Score.
+- Do not change Opportunity Score.
+- Do not add Analyst Sentiment Score yet.
+- Do not add Momentum Score yet.
+- Do not add Catalyst Score yet.
+- Do not add new providers.
+- Do not add Yahoo.
+- Do not install packages.
+- Do not create duplicate Prisma models if existing tables can be reused.
+- Do not create new sync actions that duplicate old actions.
+- Do not delete production logic blindly.
+- Do not break Scanner or Dashboard.
+- Do not remove Sync History.
+- Do not remove progress UI.
+- Do not expose API keys or raw payloads.
+
+---
+
+## Current Provider Strategy After FMP Starter Test
+
+FMP Starter endpoint verification showed:
+
+### FMP Starter can be primary provider for:
+
+```txt
+Profile
+Quotes
+Historical daily prices
+Key metrics
+Ratios
+Ratios TTM
+Key metrics TTM
+Financial growth
+Financial statements
+Price target consensus
+Price target summary
+News
+Earnings
+```
+
+### Finnhub should remain for:
+
+```txt
+Analyst recommendation counts
+Strong Buy / Buy / Hold / Sell / Strong Sell
+Analyst count
+```
+
+### Do not rely on FMP Starter for:
+
+```txt
+Analyst ratings / grades endpoints
+Technical indicator endpoint
+Batch quote by comma-separated symbols
+```
+
+### Technical indicators should be calculated internally from:
+
+```txt
+FMP historical daily candles
+```
+
+---
+
+## New Admin Sync Structure
+
+The Sync Actions tab should be reorganized around these sections:
+
+```txt
+1. Universe Sync
+2. Company Data Sync
+3. Daily Market Data Sync
+4. Score Calculation
+5. Developer / Provider Tools
+```
+
+---
+
+# 1. Universe Sync
+
+## Purpose
+
+Build and maintain the list of stocks the system tracks.
+
+Initial scope:
+
+```txt
+Nasdaq 100
+```
+
+Future scope:
+
+```txt
+S&P 500
+Russell 1000
+Russell 2000
+Custom watchlists
+All US Stocks
+```
+
+## What It Should Do
+
+```txt
+Create missing Stock rows
+Update StockUniverse rows
+Update StockUniverseMember rows
+Mark removed symbols inactive for that universe
+Keep historical stock rows
+```
+
+## What It Should Not Do
+
+```txt
+Do not sync quotes
+Do not sync financial metrics
+Do not sync analyst data
+Do not sync news
+Do not calculate scores
+Do not delete stocks
+```
+
+## Frequency
+
+Manual:
+
+```txt
+Weekly or monthly
+```
+
+## Existing Logic To Refactor
+
+Current action:
+
+```txt
+Sync Nasdaq 100 Universe
+```
+
+Should become:
+
+```txt
+Sync Stock Universe
+```
+
+or:
+
+```txt
+Sync Universe — Nasdaq 100
+```
+
+## UI Copy
+
+Suggested title:
+
+```txt
+Universe Sync
+```
+
+Suggested button:
+
+```txt
+Sync Stock Universe
+```
+
+Suggested description:
+
+```txt
+Builds and updates the active stock universe. Creates missing stocks, updates membership, and marks removed symbols inactive. Does not sync market or financial data.
+```
+
+Suggested badge:
+
+```txt
+Manual / Weekly
+```
+
+---
+
+# 2. Company Data Sync
+
+## Purpose
+
+Sync slower-changing company and financial data for all active stocks in the selected universe.
+
+This workflow replaces scattered development-era actions that separately handled metrics, analyst data, and target discovery.
+
+## Data Included
+
+Recommended v1 data types:
+
+```txt
+Company profile
+Sector
+Industry
+Description
+Market cap baseline
+Beta
+Financial statements
+Key metrics
+Key metrics TTM
+Ratios
+Ratios TTM
+Financial growth
+Analyst price target consensus
+Analyst price target summary
 Finnhub recommendation counts
+Earnings data
 ```
 
-Final Phase 14 coverage:
+## Provider Sources
+
+| Data Type | Provider |
+| --- | --- |
+| Profile | FMP |
+| Key Metrics | FMP |
+| Key Metrics TTM | FMP |
+| Ratios | FMP |
+| Ratios TTM | FMP |
+| Financial Growth | FMP |
+| Financial Statements | FMP |
+| Analyst Target Consensus | FMP |
+| Analyst Target Summary | FMP |
+| Earnings | FMP |
+| Analyst Recommendation Counts | Finnhub |
+
+## Frequency
+
+Manual or scheduled later:
 
 ```txt
-Analyst rating/count coverage: 100 / 100
-Target price coverage: 16 / 100
+Weekly
+After earnings season
+After major provider refresh
 ```
 
-The low target price coverage creates a problem:
+## Existing Logic To Refactor / Merge
+
+Current actions to evaluate:
 
 ```txt
-Analyst Upside cannot be used in Opportunity Score yet,
-because most stocks do not have target price data.
+Sync Nasdaq 100 Analyst Data
+Analyst Target Discovery
+Parts of Sync All Nasdaq 100 Market Data
+Profile sample sync
+Any FMP profile/metric sync helpers
 ```
 
-However, target price data does not change daily. It can be discovered gradually.
+## Important Notes
 
-The user is willing to scan target data over multiple days or weeks if needed.
-
-Therefore, Phase 15 should create a controlled discovery workflow:
+The old Analyst Target Discovery workflow was useful for the free FMP plan, but after FMP Starter testing, the main target source should become:
 
 ```txt
-Try to find missing analyst targets gradually.
-Stop safely when quota is reached.
-Continue from where it stopped on the next day.
-Track which symbols were checked, found, empty, failed, or quota-blocked.
+FMP /stable/price-target-consensus
 ```
 
----
-
-## Key Product Decision
-
-Do **not** blindly scan exactly 16 stocks per day.
-
-Instead, implement a smarter quota-safe discovery process.
-
-The process should stop based on:
-
-```txt
-max attempts per run
-max targets found per run
-provider quota / 429
-no more eligible symbols
-```
-
-Recommended defaults:
-
-```txt
-maxAttemptsPerRun = 40
-maxTargetsFoundPerRun = 16
-chunkSize = 10
-```
-
-This is better than scanning exactly 16 symbols because many symbols may return no target data.
-
----
-
-## Scope
-
-Phase 15 includes:
-
-1. Admin button for quota-safe target discovery.
-2. FMP target-only discovery flow.
-3. DB-backed progress tracking.
-4. Continue next day from unprocessed/eligible symbols.
-5. Restart discovery cycle.
-6. Target discovery status per stock.
-7. Data Inventory visibility.
-8. Dashboard/Scanner continue to display target data already discovered.
-9. No Opportunity Score changes.
-
----
-
-## Non-Scope
-
-Do not build:
-
-- Analyst Sentiment Score.
-- Opportunity Score v2.
-- Technical/momentum data.
-- News/catalyst data.
-- Yahoo Finance integration.
-- New provider package installation.
-- Paid provider integration.
-- Automatic daily cron.
-- External calls from Scanner/Dashboard.
-- Changes to Fundamental Score or Opportunity Score formulas.
-
----
-
-# 1. Provider Decision
-
-Use FMP target endpoint only for this phase.
-
-Current Phase 14 selected:
+This should replace the old reliance on:
 
 ```txt
 FMP /stable/price-target-summary
 ```
 
-for price target data.
+for primary target fields.
 
-Finnhub recommendation data is already working and should remain unchanged.
-
-Do not re-sync Finnhub recommendations in this phase unless the existing analyst sync requires it. This phase is specifically about target discovery.
-
----
-
-## Why Not Yahoo Now
-
-Yahoo was tested and found unreliable in the current server-side environment.
-
-Observed issues:
+Correct mapping:
 
 ```txt
-401 Invalid Crumb
-Requires browser-like cookie/session handling
-Requires yahoo-finance2 or equivalent package
-No official SLA
-Fragile auth flow
+targetConsensus → primary target price / targetMean
+targetHigh → targetHigh
+targetLow → targetLow
+targetMedian → targetMedian
 ```
 
-So Yahoo should not be added in this phase.
-
----
-
-## Why Not Analyst Upside Score Yet
-
-Current target coverage is too low:
+Price Target Summary should only be used as recency support:
 
 ```txt
-16 / 100
+lastMonthAvgPriceTarget
+lastQuarterAvgPriceTarget
+lastYearAvgPriceTarget
+allTimeAvgPriceTarget
 ```
 
-Until target coverage reaches an acceptable threshold, analyst target/upside should remain display-only.
+## What To Do With Analyst Target Discovery
 
-Recommended threshold before scoring:
+Do not delete immediately unless safe.
+
+Recommended:
 
 ```txt
->= 60% minimum
->= 80% preferred
+Move to Developer / Legacy Tools
+or hide from the main Sync Actions workflow
+or mark as legacy/free-plan fallback
 ```
 
----
+It should no longer be the main target workflow if FMP Starter consensus coverage is confirmed.
 
-# 2. New Admin Action
+## UI Copy
 
-Add a new button:
+Suggested title:
 
 ```txt
-Sync Analyst Targets — Quota Safe
+Company Data Sync
 ```
 
-Location:
+Suggested button:
 
 ```txt
-/admin/sync → Sync Actions → Analyst Data Sync
+Sync Company Data
 ```
 
-or inside a separate subsection:
+Suggested description:
 
 ```txt
-Analyst Target Discovery
+Syncs slower-changing company data: profile, fundamentals, ratios, financial growth, analyst targets, analyst recommendation counts, and earnings data.
 ```
 
-Helper text:
+Suggested badge:
 
 ```txt
-Attempts to discover missing analyst target prices using a conservative request budget. Stops safely when the provider quota is reached and can continue later.
+Weekly / Slow-changing
 ```
 
-Important note:
+Suggested note:
 
 ```txt
-This does not change Opportunity Score. Target data remains display-only until coverage is high enough.
+Run weekly or after earnings updates. Does not calculate scores automatically.
 ```
 
 ---
 
-## Button States
+# 3. Daily Market Data Sync
 
-The UI should support:
+## Purpose
 
-```txt
-Start Target Discovery
-Continue Target Discovery
-Restart Target Discovery Cycle
-```
+Sync market data that changes daily.
 
-### Start Target Discovery
+This should be separate from Company Data Sync.
 
-Creates a new discovery SyncRun.
+## Data Included
 
-### Continue Target Discovery
-
-Continues an incomplete discovery run or starts from eligible remaining symbols.
-
-### Restart Target Discovery Cycle
-
-Starts a fresh cycle from the beginning without deleting existing analyst data.
-
-Confirmation message:
+Recommended v1:
 
 ```txt
-This will start a new target discovery cycle. Existing target data will be updated safely where new data is found. Continue?
+Current price
+Day change %
+Open
+Day high
+Day low
+Previous close
+Volume
+Year high
+Year low
+priceAvg50
+priceAvg200
+Historical daily candles
+Recent volume history
+Daily price change windows
 ```
 
----
-
-# 3. SyncRun Type
-
-Use a dedicated SyncRun type:
+Derived internally later:
 
 ```txt
-analyst-target-discovery-sync
+Relative volume
+SMA
+EMA
+RSI
+MACD
+Momentum inputs
+Trend strength
 ```
 
-Provider:
+## Provider Sources
 
-```txt
-fmp
-```
-
-Do not reuse the Phase 14 full analyst sync type if it exists.
-
-Reason:
-
-```txt
-Phase 14 = full analyst sync: ratings + target where available
-Phase 15 = target discovery only, quota-safe, multi-day
-```
-
----
-
-# 4. Target Discovery Status
-
-Add discovery tracking fields.
-
-Preferred location:
-
-```txt
-StockAnalystData
-```
-
-Recommended fields:
-
-```prisma
-targetStatus String?
-targetLastAttemptedAt DateTime?
-targetLastFoundAt DateTime?
-targetNextRetryAt DateTime?
-targetAttemptCount Int @default(0)
-targetLastMessage String?
-```
-
-Possible `targetStatus` values:
-
-```txt
-not_checked
-has_target
-no_target_available
-provider_error
-quota_blocked
-stale_target
-```
-
-If `StockAnalystData` may not exist yet for a stock, create one with null target fields and discovery status when attempting.
-
----
-
-## Status Meaning
-
-### not_checked
-
-No target discovery attempt has been made yet.
-
-### has_target
-
-Provider returned usable target data.
-
-### no_target_available
-
-Provider returned a valid response but no target data, for example:
-
-```txt
-[]
-```
-
-### provider_error
-
-Provider returned an error that is not quota-related.
-
-### quota_blocked
-
-Run stopped due to quota/429.
-
-### stale_target
-
-Existing target is older than refresh threshold and eligible for refresh.
-
----
-
-# 5. Retry / Cooldown Rules
-
-Target data does not change daily, so avoid wasteful repeated checks.
-
-Recommended cooldowns:
-
-| Status | Retry Rule |
+| Data Type | Provider |
 | --- | --- |
-| has_target | refresh after 14 days |
-| no_target_available | retry after 30 days |
-| provider_error | retry after 1 day |
-| quota_blocked | retry next day |
-| not_checked | eligible immediately |
+| Quote | FMP |
+| Quote short | FMP |
+| Historical daily EOD | FMP |
+| Stock price change windows | FMP |
+| Derived indicators | Internal |
 
-These are defaults and can be constants in code.
+## Frequency
 
----
-
-# 6. Eligible Symbol Selection
-
-The discovery run should select active Nasdaq 100 stocks.
-
-Base universe:
+Manual initially:
 
 ```txt
-StockUniverseMember.isActive = true
-universe.slug = "nasdaq-100"
+Daily
 ```
 
-Then prioritize eligible symbols:
+Future:
 
-1. `not_checked` or no `StockAnalystData`.
-2. `provider_error` where `targetNextRetryAt <= now`.
-3. existing target older than 14 days.
-4. `no_target_available` where `targetNextRetryAt <= now`.
+```txt
+Scheduled after market close
+```
 
-Do not repeatedly scan symbols with recent `no_target_available`.
+## Existing Logic To Refactor
+
+Current action:
+
+```txt
+Sync All Nasdaq 100 Market Data
+```
+
+This should be split and renamed.
+
+The daily part should become:
+
+```txt
+Sync Daily Market Data
+```
+
+## UI Copy
+
+Suggested title:
+
+```txt
+Daily Market Data Sync
+```
+
+Suggested button:
+
+```txt
+Sync Daily Market Data
+```
+
+Suggested description:
+
+```txt
+Refreshes daily-changing market data for all active stocks: quotes, price movement, volume, 52-week context, daily candles, and derived daily market indicators.
+```
+
+Suggested badge:
+
+```txt
+Daily
+```
+
+Suggested note:
+
+```txt
+Run once per trading day, preferably after market close.
+```
 
 ---
 
-## Source of Truth for Run Progress
+# 4. Score Calculation
 
-Use both:
+## Purpose
+
+Keep scoring actions separate from data sync.
+
+## Current Buttons To Keep
 
 ```txt
+Calculate Fundamental Scores
+Calculate Opportunity Scores
+```
+
+## Future Buttons
+
+Not in this phase:
+
+```txt
+Calculate Analyst Sentiment Score
+Calculate Momentum Score
+Calculate Catalyst Score
+```
+
+## Rules
+
+Scores should not be recalculated automatically by data sync unless explicitly approved later.
+
+Each score calculation should remain internal:
+
+```txt
+provider = internal
+```
+
+Each score action should log SyncRun and SyncRunItem where appropriate.
+
+---
+
+# 5. Developer / Provider Tools
+
+## Purpose
+
+Keep testing utilities available without cluttering the main workflow.
+
+Move or keep under Provider Tests tab:
+
+```txt
+Provider Tests
+Sample DB Writes
+Legacy Analyst Target Discovery if kept
+Any old sample sync buttons
+```
+
+## Rules
+
+These should not appear as main production workflows.
+
+They should be clearly labeled:
+
+```txt
+Developer utility
+Test only
+Writes sample data
+Legacy fallback
+```
+
+---
+
+## Required Audit Before Implementation
+
+Before changing code, inspect and document:
+
+### Admin UI
+
+```txt
+src/components/admin/SyncPageClient.tsx
+src/components/admin/DataInventoryTab.tsx
+src/components/admin/ScoreMethodologyTab.tsx
+app/admin/sync/page.tsx
+```
+
+### Data Loaders
+
+```txt
+src/lib/data/admin-sync.ts
+src/lib/data/admin-universes.ts
+src/lib/data/admin-stock-data.ts
+src/lib/data/dashboard.ts
+src/lib/data/scanner.ts
+```
+
+### Actions / API Routes
+
+```txt
+src/actions/market-data-actions.ts
+app/api/admin/sync-runs/*
+app/api/admin/analyst-sync/*
+app/api/admin/analyst-target-discovery/*
+any other admin sync API routes
+```
+
+### Providers
+
+```txt
+src/lib/market-data/providers/fmp.ts
+src/lib/market-data/providers/finnhub.ts
+src/lib/market-data/providers/twelve-data.ts
+```
+
+### Prisma Models
+
+```txt
+Stock
+StockQuote
+StockMetric
+StockAnalystData
+StockScore
+StockUniverse
+StockUniverseMember
+SyncRun
 SyncRunItem
-StockAnalystData targetStatus fields
 ```
 
-For a specific SyncRun:
+### Temporary / Obsolete Files
+
+Search for:
 
 ```txt
-processed symbols = SyncRunItem.symbol for this run
+tmp/
+debug scripts
+QA scripts
+screenshot artifacts
+old provider test files
+dev logs
+Playwright artifacts
+debug API routes
+raw provider payload dumps
 ```
 
-For cross-day discovery state:
+Delete only files that are clearly temporary or obsolete.
 
-```txt
-StockAnalystData.targetStatus
-targetLastAttemptedAt
-targetNextRetryAt
-```
+Do not delete production logic unless confirmed safe.
 
 ---
 
-# 7. Run Limits
+## Refactor Principles
 
-Use conservative run limits.
+### Prefer Renaming / Reorganizing Before Rewriting
 
-Recommended constants:
-
-```txt
-MAX_ATTEMPTS_PER_RUN = 40
-MAX_TARGETS_FOUND_PER_RUN = 16
-CHUNK_SIZE = 10
-```
-
-A run should stop when any of these happens:
-
-```txt
-attempted >= MAX_ATTEMPTS_PER_RUN
-targetsFound >= MAX_TARGETS_FOUND_PER_RUN
-provider quota / 429 reached
-no eligible symbols left
-```
-
----
-
-# 8. Processing Logic
-
-For each symbol:
-
-1. Mark current symbol in SyncRun.
-2. Call FMP target endpoint.
-3. If target data returned:
-   - update target fields.
-   - calculate analystUpsidePercent using current StockQuote.price.
-   - set targetStatus = `has_target`.
-   - set targetLastFoundAt = now.
-   - set targetNextRetryAt = now + 14 days.
-   - increment targetsFound.
-4. If response is empty array:
-   - keep target fields unchanged unless currently null.
-   - set targetStatus = `no_target_available`.
-   - set targetNextRetryAt = now + 30 days.
-5. If provider error:
-   - set targetStatus = `provider_error`.
-   - set targetNextRetryAt = now + 1 day.
-6. If quota/429:
-   - set run status partial/interrupted.
-   - set message:
-     ```txt
-     FMP quota reached. Continue target discovery tomorrow.
-     ```
-   - stop processing.
-7. Create SyncRunItem for every attempted symbol.
-8. Update SyncRun counts after every symbol.
-
----
-
-## Preserve Existing Data
-
-If a stock already has a target price and the new response is empty:
-
-```txt
-Do not delete the existing target.
-```
-
-Instead:
-
-```txt
-Keep old target.
-Update targetLastAttemptedAt.
-Set targetLastMessage if needed.
-```
-
-Only replace target fields when new valid target data is returned.
-
----
-
-# 9. Counts To Track
-
-The progress UI and SyncRun should show:
-
-```txt
-attempted
-targetsFound
-noTargetAvailable
-providerErrors
-quotaStopped
-processed / eligible total
-```
-
-Map these into existing SyncRun fields where possible:
-
-```txt
-requestedCount = eligible count or run budget
-processedCount = attempted
-successCount = targetsFound
-skippedCount = noTargetAvailable
-failedCount = providerErrors
-```
-
-If more detail is needed, include in message or SyncRunItem reasons.
-
----
-
-# 10. Progress UI
-
-The progress panel should behave like other chunked syncs.
-
-Show:
-
-```txt
-Current symbol
-Attempted this run
-Targets found
-No target available
-Provider errors
-Quota stopped
-Processed / eligible
-Elapsed time
-Estimated remaining time
-Progress bar
-```
+If an existing action already works, do not duplicate it.
 
 Example:
 
 ```txt
-Target Discovery in progress
-Current symbol: MSFT
-Attempted: 24 / 40
-Targets found: 3 / 16
-No target available: 20
-Errors: 0
-Quota stopped: No
-Eligible remaining: 62
-Elapsed: 02:15
+Sync Nasdaq 100 Universe → rename/reframe as Universe Sync
+```
+
+### Prefer Reusing SyncRun
+
+All main workflows should use:
+
+```txt
+SyncRun
+SyncRunItem
+```
+
+Do not introduce new tracking tables unless absolutely necessary.
+
+### Prefer Reusing Progress UI
+
+All workflows should show consistent progress:
+
+```txt
+current symbol
+processed / total
+success / skipped / failed
+elapsed time
+progress bar
+final result
+continue
+restart
+history
+```
+
+### Prefer Clean Provider Boundaries
+
+Provider functions should be:
+
+```txt
+small
+typed
+normalized
+safe
+no API key leaks
+```
+
+### Do Not Keep Development Naming
+
+Avoid UI names like:
+
+```txt
+Nasdaq 100 Quote Snapshots
+Analyst Target Discovery
+Full Sync
+Sample Sync
+```
+
+in the main product workflow.
+
+Use product names:
+
+```txt
+Universe Sync
+Company Data Sync
+Daily Market Data Sync
 ```
 
 ---
 
-## End States
+## Data Ownership by Workflow
 
-### success
+| Data / Feature | Workflow |
+| --- | --- |
+| Stock universe | Universe Sync |
+| Stock membership | Universe Sync |
+| Profile | Company Data Sync |
+| Sector / Industry | Company Data Sync |
+| Description | Company Data Sync |
+| Statements | Company Data Sync |
+| Key Metrics | Company Data Sync |
+| Ratios | Company Data Sync |
+| Financial Growth | Company Data Sync |
+| Analyst Targets | Company Data Sync |
+| Analyst Ratings / Recommendations | Company Data Sync |
+| Earnings | Company Data Sync |
+| Quote | Daily Market Data Sync |
+| Volume | Daily Market Data Sync |
+| 52-week context | Daily Market Data Sync |
+| Daily candles | Daily Market Data Sync |
+| Relative volume | Daily Market Data Sync / Internal |
+| Momentum base data | Daily Market Data Sync / Internal |
+| News | Future Daily or Catalyst Sync |
+| Scores | Score Calculation |
 
-Use when:
+---
+
+## What Should Be Cleaned From Main Sync UI
+
+Main Sync Actions should no longer prominently show development-era buttons:
 
 ```txt
-Run completed without quota block and no errors.
+Sync Nasdaq 100 Quote Snapshots
+Sync Nasdaq 100 Quotes + Metrics — Next 25
+Sync All Nasdaq 100 Market Data
+Sync Nasdaq 100 Analyst Data
+Analyst Target Discovery
+Sample Sync
+Sample DB Writes
 ```
 
-### partial_success
+Expected handling:
 
-Use when:
+| Old Item | New Handling |
+| --- | --- |
+| Sync Nasdaq 100 Universe | Refactor into Universe Sync |
+| Sync All Nasdaq 100 Market Data | Split into Daily Market Data Sync + Company Data Sync |
+| Sync Nasdaq 100 Analyst Data | Merge into Company Data Sync |
+| Analyst Target Discovery | Move to Developer/Legacy or hide after replacement |
+| Sample Sync | Provider Tests / Developer Tools only |
+| Provider Tests | Keep in Provider Tests tab |
+| Sample DB Writes | Keep in Provider Tests tab, clearly labeled |
+
+---
+
+## Phase 16 Implementation Scope
+
+This phase should focus on cleanup and structure.
+
+### Required
 
 ```txt
-Some targets found or attempts completed, but quota reached or run stopped by limit.
+Admin Sync UI reorganized into the new workflow sections.
+Old/development-era main buttons hidden, renamed, or moved.
+Descriptions and helper text updated.
+Existing progress mechanisms preserved.
+Sync History still works.
+Data Inventory still works.
+Provider Tests still available.
+Temporary obsolete files removed.
+No duplicate DB tables added.
 ```
 
-### failed
-
-Use when:
+### Optional Only If Safe
 
 ```txt
-No symbols attempted or all attempts failed due to provider/system error.
+Rename SyncRun type labels in UI, without changing historical data.
+Add display labels for old SyncRun types.
+Move legacy tools into a collapsible Developer Tools section.
+Add config constants for workflow names.
+```
+
+### Not Required Yet
+
+```txt
+Implement full FMP Company Data migration.
+Implement full FMP Daily Market Data migration.
+Add historical candles table.
+Add Momentum Score.
+Add Catalyst Score.
+Remove old DB fields.
+Remove old routes that may still be referenced.
 ```
 
 ---
 
-# 11. Messages
+## Acceptance Criteria
 
-Use clear messages.
+Phase 16 is complete when:
 
-### Targets found limit reached
-
-```txt
-Target discovery paused after finding 16 targets. Continue later to scan more symbols.
-```
-
-### Attempts limit reached
-
-```txt
-Target discovery paused after 40 attempts to protect provider quota. Continue later.
-```
-
-### Quota reached
-
-```txt
-FMP quota reached. Continue target discovery tomorrow.
-```
-
-### No eligible symbols
-
-```txt
-No eligible symbols to scan. Targets are fresh or waiting for retry cooldown.
-```
-
-### Completed
-
-```txt
-Target discovery completed for all currently eligible symbols.
-```
+- Admin Sync has a clean workflow-based structure.
+- Main workflows are:
+  - Universe Sync
+  - Company Data Sync
+  - Daily Market Data Sync
+  - Score Calculation
+- Old development-era buttons are not cluttering the main workflow.
+- Legacy/test tools are clearly moved or labeled.
+- Existing working sync logic is preserved.
+- Progress bar and progress details remain available.
+- Continue / Restart behavior remains available where applicable.
+- Sync History remains accurate.
+- No duplicate Prisma models/tables are created.
+- Temporary/debug files are removed.
+- Scanner still loads.
+- Dashboard still loads.
+- Data Inventory still loads.
+- Score Methodology still loads.
+- Provider Tests still load.
+- Build passes.
+- TypeScript passes.
+- Prisma validates.
+- Migration status is clean.
 
 ---
 
-# 12. Data Inventory Updates
-
-Add or show fields:
-
-```txt
-Target Status
-Target Last Attempted
-Target Last Found
-Target Next Retry
-Target Attempt Count
-Target Last Message
-```
-
-Add filters:
-
-```txt
-Missing Target
-Has Target
-No Target Available
-Eligible for Target Retry
-Provider Error
-```
-
-This helps understand why only some stocks have target data.
-
----
-
-# 13. Scanner Updates
-
-Minimal changes only.
-
-Scanner already shows:
-
-```txt
-Target
-Upside
-Rating
-```
-
-No major Scanner redesign.
-
-Optional:
-
-In expandable row, add:
-
-```txt
-Target Status
-Target Last Attempted
-Target Next Retry
-```
-
-If not too crowded.
-
----
-
-# 14. Dashboard Updates
-
-Add or improve analyst coverage display.
-
-Recommended:
-
-```txt
-Target Coverage: X / 100
-Rating Coverage: 100 / 100
-Targets Found This Cycle: X
-No Target Available: Y
-Eligible for Retry: Z
-```
-
-Do not make Dashboard too complex.
-
----
-
-# 15. Score Methodology Update
-
-Add note:
-
-```txt
-Analyst target data is discovered gradually due to provider quota and coverage limits.
-Analyst Upside remains display-only until target coverage is high enough.
-```
-
-Do not change Opportunity Score v1.
-
-Do not add Analyst Upside to Opportunity Score yet.
-
----
-
-# 16. API Routes / Actions
-
-If using API routes, suggested endpoints:
-
-```txt
-POST /api/admin/analyst-target-discovery/start
-POST /api/admin/analyst-target-discovery/process-next
-GET  /api/admin/analyst-target-discovery/latest
-```
-
-Reusing analyst sync endpoints is acceptable only if the behavior remains clear and not confusing.
-
-Recommended:
-
-```txt
-Use separate routes for target discovery.
-```
-
-This keeps Phase 14 full analyst sync separate from Phase 15 target discovery.
-
----
-
-# 17. Rate Limit / Quota Handling
-
-FMP daily quota may return:
-
-```txt
-429
-```
-
-or another quota-specific error.
-
-Detect it safely.
-
-Do not retry forever.
-
-When quota is reached:
-
-1. Persist progress.
-2. Mark run partial/interrupted.
-3. Store message.
-4. Show Continue tomorrow.
-5. Do not lose data already found.
-
----
-
-# 18. Security
-
-Do not expose:
-
-```txt
-API keys
-raw provider payloads
-provider URLs with keys
-debug dumps
-```
-
-Temporary test files must be deleted before final report.
-
----
-
-# 19. Browser QA Checklist
-
-## Admin Sync
+## Browser QA Checklist
 
 Open:
 
 ```txt
-/admin/sync → Sync Actions
+/admin/sync
 ```
 
 Confirm:
 
-1. Sync Analyst Targets — Quota Safe button appears.
-2. Helper text explains daily/quota-safe behavior.
-3. Start target discovery.
-4. Progress panel appears.
-5. Attempted count updates.
-6. Targets found count updates.
-7. No target count updates.
-8. Stops on limit or quota.
-9. Continue button appears if incomplete.
-10. Restart cycle button works.
+1. Sync Actions tab is clean and organized.
+2. Universe Sync section appears.
+3. Company Data Sync section appears.
+4. Daily Market Data Sync section appears.
+5. Score Calculation section appears.
+6. Old buttons are not shown in the main workflow.
+7. Legacy/developer tools are moved or clearly labeled.
+8. Descriptions explain frequency and data ownership.
+9. Progress panel still works for existing actions.
+10. Continue / Restart behavior still works where applicable.
+11. Sync History still displays previous runs.
+12. Provider Tests tab still works.
+13. Data Inventory tab still works.
+14. Score Methodology tab still works.
 
-## Data Inventory
+Open:
 
-Confirm:
-
-1. Target Status appears.
-2. Target Last Attempted appears.
-3. Target Last Found appears.
-4. Target Next Retry appears.
-5. Target Attempt Count appears.
-6. Missing Target filter works.
-7. Has Target filter works.
-8. Eligible for Retry filter works.
-
-## Scanner
+```txt
+/scanner
+/
+```
 
 Confirm:
 
-1. Target/Upside still show existing data.
-2. Missing values show N/A.
-3. Optional target status is visible in expanded row if implemented.
-4. No provider calls from Scanner.
-
-## Dashboard
-
-Confirm:
-
-1. Target coverage appears.
-2. Rating coverage remains correct.
-3. Missing target data is represented honestly.
-4. No provider calls from Dashboard.
+1. Scanner loads.
+2. Dashboard loads.
+3. No provider calls happen from Scanner/Dashboard render.
+4. No UI regression.
 
 ---
 
-# 20. Regression QA
-
-Confirm:
-
-- Full analyst sync from Phase 14 still works or is unchanged.
-- Market Data Sync still works.
-- Fundamental Score calculation still works.
-- Opportunity Score calculation still works.
-- Scanner loads.
-- Dashboard loads.
-- Admin Sync loads.
-- Data Inventory loads.
-- Score Methodology loads.
-
----
-
-# 21. Validation
+## Validation
 
 Run:
 
@@ -826,76 +958,47 @@ npx prisma validate
 npx prisma migrate status
 ```
 
-Migration is expected if new tracking fields are added.
+No migration is expected in this phase.
+
+If a migration is needed, stop and explain why before adding it.
 
 ---
 
-# 22. Required Implementation Report
+## Required Implementation Report
 
 Return a concise report in English only with:
 
 1. Files inspected.
-2. Files changed.
-3. Migration name and fields if added.
-4. New target discovery action/routes.
-5. Run limits used.
-6. Eligible symbol selection logic.
-7. Retry/cooldown logic.
-8. Quota handling.
-9. Progress UI behavior.
-10. Data Inventory updates.
-11. Scanner updates if any.
-12. Dashboard updates.
-13. Score Methodology update.
-14. Browser QA results.
-15. Target discovery run result.
-16. Coverage change after run.
-17. Regression QA results.
-18. Automated check results.
-19. Known issues.
-20. Ready for commit or not.
+2. Current sync actions found.
+3. Obsolete/development-era items found.
+4. Files deleted.
+5. Files changed.
+6. Main UI restructuring performed.
+7. What was kept.
+8. What was moved to Developer/Provider tools.
+9. What was hidden or removed from main UI.
+10. Whether any API routes/actions were deleted or only hidden.
+11. Confirmation no duplicate DB tables/models were created.
+12. Confirmation progress/continue/history behavior was preserved.
+13. Browser QA results.
+14. Regression QA results.
+15. Automated check results.
+16. Known issues.
+17. Ready for commit or not.
 
 ---
 
-## Acceptance Criteria
+## Future Phases After This Cleanup
 
-Phase 15 is complete when:
-
-- A quota-safe target discovery sync exists.
-- It does not blindly scan all symbols in one run.
-- It stops safely on run budget or provider quota.
-- It saves progress.
-- It can continue later.
-- It can restart a fresh discovery cycle.
-- It tracks target status per stock.
-- Data Inventory shows discovery status.
-- Dashboard shows target coverage honestly.
-- Existing target data is not deleted by empty responses.
-- Opportunity Score is unchanged.
-- No Yahoo dependency is added.
-- No provider calls from Scanner/Dashboard are added.
-- Build passes.
-- TypeScript passes.
-- Prisma validates.
-- Migration status is clean.
-
----
-
-## Future Phase
-
-After this phase:
+After Phase 16, continue with implementation phases:
 
 ```txt
-Phase 16 — Analyst Sentiment Score
+Phase 17 — FMP Company Data Sync Migration
+Phase 18 — FMP Daily Market Data Sync Migration
+Phase 19 — Opportunity Score v2 with Analyst Targets
+Phase 20 — Historical Daily + Momentum Foundation
+Phase 21 — News and Earnings Catalyst Foundation
 ```
-
-or, if target coverage improves enough:
-
-```txt
-Phase 16 — Opportunity Score v2 with Analyst Signals
-```
-
-Decision should depend on target coverage after several discovery runs.
 
 ---
 
@@ -928,3 +1031,4 @@ Decision should depend on target coverage after several discovery runs.
 - Phase 13 completed (2026-05-24): Opportunity Score v1. Added `oppScore Decimal?`, `oppScoreVersion String?`, `oppCalculatedAt DateTime?` to `StockScore` via migration `20260524135513_add_opportunity_score_fields`. Created `src/lib/scoring/opportunity-score.ts` — deterministic scoring engine with weighted average (fundamentalScore 35%, valuationScore 30%, growthScore 20%, riskContextScore 10%, pricePosition 5%), null-exclusion with weight re-normalization for missing components, price position scoring from 52W high/low (`(price - week52Low) / (week52High - week52Low)` → scored 30–100), version constant `OPPORTUNITY_SCORE_VERSION = "opportunity-v1"`. Added `calculateOpportunityScoresAction()` to `src/actions/market-data-actions.ts` — no external calls, skips stocks without fundamentalScore, upserts `StockScore.oppScore`, persists `SyncRun` (`type=opportunity-score-calculation`, `provider=internal`) + `SyncRunItem` per symbol. Fixed Turbopack stale cache bug (same as Phase 9I): cleared `.next/` and re-ran `prisma generate` before QA. Admin Sync Actions tab: added "Calculate Opportunity Scores" button with helper text and Internal badge. Score Methodology tab: added Opportunity Score v1 section with weights, price position table, missing data rules, version. Data Inventory: added Opp. Score, Opp. Version, Opp. Calc At columns. Scanner: added Opp. column (between Day% and Fund.), sort by Opportunity Score, "High Opportunity" pill (≥75), "Min Opp." threshold filter, expanded row shows Opportunity Score section with formula explanation. Dashboard: added "Avg Opportunity" and "High Opportunity" summary cards; added Opp. column to Top Fundamental Stocks table. No external provider calls added. Build passes, `tsc --noEmit` zero errors, `prisma validate` valid, `prisma migrate status` clean. Approved by user.
 - Phase 14 completed (2026-05-26): Analyst Data & Upside Integration. Added `StockAnalystData` Prisma model (targetPrice, analystUpsidePercent, analystRating, analystCount, targetHigh, targetLow, targetMedian, targetMean, strongBuy/buy/hold/sell/strongSell counts, source, lastSyncedAt, sourceUpdatedAt) via migration `20260525182611_add_stock_analyst_data`. Provider strategy: FMP `/stable/price-target-summary` for price targets (returns array — parsed correctly), Finnhub `/stock/recommendation` for analyst counts and derived rating; source stored as `fmp+finnhub`. Added `MarketDataProvider` union type extended to include `"fmp+finnhub"`. Created three chunked sync API routes: `POST /api/admin/analyst-sync/start` (start/restart), `POST /api/admin/analyst-sync/process-next` (chunk of 10, 1200ms pacing), `GET /api/admin/analyst-sync/latest` (polling). Sync result: 100/100 Nasdaq 100 stocks succeeded; 16 have FMP target price data (FMP free plan coverage limitation — 84 return empty array, stored as null); all 100 have Finnhub recommendation rating and count. Upside calculated internally from stored quote: `((targetMean - price) / price) × 100`. Admin Sync Actions tab: added Analyst Data Sync section with Start/Continue/Restart chunked UX. Sync History: records `analyst-data-nasdaq100-sync` with `provider=fmp+finnhub`. Data Inventory: added 9 analyst columns (Has Analyst, Target Price, Upside %, Rating, Count, Target High, Target Low, Source, Last Synced) with 2 new summary cards. Scanner: added Target, Upside, Rating columns; sort by Analyst Upside and Target Price; Min Analyst Upside filter; High Analyst Upside pill (≥20%); Analyst Data section in expanded row. Fixed ScannerTable React key prop warning (fragment changed from `<>` to `<React.Fragment key={...}>`). Dashboard: added 2 analyst summary cards (With Analyst Data, Avg Analyst Upside); added Top Analyst Upside table (top 10 by upside%). Score Methodology tab: added Analyst Data section noting data is collected but not yet scored. Dashboard freshness bug fixed: `lastScoreCalc` query was requiring `status="success"` but Fundamental Score action always writes `status="partial_success"` (skipped stocks without metrics); fixed to `status: { in: ["success","partial_success"] }, successCount: { gt: 0 }`; improved warning messages. Opportunity Score v1 formula unchanged. No provider calls from Scanner or Dashboard. Build passes, `tsc --noEmit` zero errors, `prisma validate` valid, `prisma migrate status` clean. Known issue: FMP free plan covers only 16 of 100 Nasdaq 100 symbols for price-target-summary; remaining 84 show N/A for target price and upside. Approved by user.
 - Phase 15 completed (2026-06-01): Quota-Safe Analyst Target Discovery Sync. Added `targetStatus`, `targetLastAttemptedAt`, `targetLastFoundAt`, `targetNextRetryAt`, `targetAttemptCount`, `targetLastMessage` fields to `StockAnalystData` via migration `20260528133632_add_target_discovery_fields`. Created three API routes (`POST /api/admin/analyst-target-discovery/start`, `POST /api/admin/analyst-target-discovery/process-next`, `GET /api/admin/analyst-target-discovery/latest`) and `src/lib/data/admin-analyst-target.ts` with eligible symbol selector and cooldown constants. Run limits: MAX_ATTEMPTS_PER_RUN=40, MAX_TARGETS_FOUND_PER_RUN=16, CHUNK_SIZE=10. Eligible symbol priority: not_checked → provider_error (1d retry) → stale has_target (14d) → no_target_available (30d) → plan_limited (90d). FMP HTTP 402 classified as `plan_limited` (not `provider_error`) with 90-day retry, counted as skipped not failed, existing target data preserved. FMP 429 stops run as `quota_blocked` with 1-day retry. 5xx/network errors remain `provider_error` with 1-day retry. Admin Sync Actions tab: added Analyst Target Discovery section with Start/Continue/Restart chunked UX, quota-safe badge, and cooldown info including plan_limited note. Data Inventory: added `plan-limited` filter pill, Plan Limited summary card (blue), `plan_limited` status rendered in blue distinct from red `provider_error`; `eligible-target-retry` filter explicitly excludes `plan_limited`. Dashboard and Scanner unchanged — no provider calls added, Opportunity Score unchanged. QA result: 40 symbols classified as `plan_limited` in first run (0 provider_error today), targetNextRetryAt ≈ 2026-08-30 for all plan_limited records, has_target records untouched (HAS_TARGET_TOUCHED_TODAY=0). Known issue (pre-existing, not caused by this phase): 19 has_target records from May 28 have null targetMean/targetPrice — suggests FMP may return target data under a different field name than expected; to investigate before Phase 16. Build passes, tsc --noEmit zero errors, prisma validate valid. Approved by user.
+- Phase 16 completed (2026-06-01): Sync Architecture Cleanup & Workflow Refactor. Reorganized Admin Sync UI into clean product-level workflows. Renamed page title from "Market Data Sync" to "Admin Sync". Restructured Sync Actions tab into four clearly labeled sections: Universe Sync (badge: Manual / Weekly, button: "Sync Stock Universe"), Daily Market Data Sync (badge: Daily, button: "Sync Daily Market Data"), Company Data Sync (badge: Weekly / Slow-changing, button: "Sync Company Data"), and Score Calculation. Moved Analyst Target Discovery out of the main workflow into a new collapsible "Developer / Legacy Tools" section (collapsed by default, labeled "Not production workflows", "Legacy" badge). All existing sync handlers, progress panels (ChunkedSyncProgressPanel, PausedSyncPanel, ChunkedSyncResultPanel), Continue/Restart behavior, elapsed timers, polling logic, and Sync History remain fully intact. No API routes changed. No Prisma migration. No duplicate models. No temporary files. Build passes, tsc --noEmit zero errors, prisma validate valid, prisma migrate status clean (12 migrations, up to date). Browser QA passed: /admin/sync, /scanner, and / all load correctly. Approved by user.
