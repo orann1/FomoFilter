@@ -458,6 +458,67 @@ export async function fetchFmpNasdaq100Constituents(): Promise<
   };
 }
 
+// ── FMP Quote (Phase 19) ──────────────────────────────────────────────────────
+//
+// /stable/quote returns a daily market snapshot per symbol.
+// FMP uses "changePercentage" (not "changesPercentage").
+// timestamp is Unix seconds — callers multiply by 1000 for Date conversion.
+
+export type FmpQuote = {
+  symbol: string;
+  price: number | null;
+  change: number | null;
+  changePercentage: number | null;
+  open: number | null;
+  dayHigh: number | null;
+  dayLow: number | null;
+  previousClose: number | null;
+  volume: number | null;
+  marketCap: number | null;
+  yearHigh: number | null;
+  yearLow: number | null;
+  priceAvg50: number | null;
+  priceAvg200: number | null;
+  exchange: string | null;
+  timestamp: number | null;
+};
+
+export async function fetchFmpQuote(symbol: string): Promise<FmpSimpleResult<FmpQuote>> {
+  const apiKey = getApiKey();
+  if (!apiKey) return fmpSimpleError("Missing FMP_API_KEY");
+  try {
+    const res = await fmpFetch(`quote?symbol=${encodeURIComponent(symbol)}`, apiKey);
+    if (!res.ok) return fmpSimpleError(res.error, res.rateLimitHit);
+    const arr = Array.isArray(res.json) ? res.json : [];
+    if (arr.length === 0) return fmpSimpleError(`No quote data for ${symbol}`);
+    const raw = arr[0] as Record<string, unknown>;
+    const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+    return {
+      ok: true,
+      data: {
+        symbol: typeof raw.symbol === "string" ? raw.symbol : symbol,
+        price: n(raw.price),
+        change: n(raw.change),
+        changePercentage: n(raw.changePercentage),
+        open: n(raw.open),
+        dayHigh: n(raw.dayHigh),
+        dayLow: n(raw.dayLow),
+        previousClose: n(raw.previousClose),
+        volume: n(raw.volume),
+        marketCap: n(raw.marketCap),
+        yearHigh: n(raw.yearHigh),
+        yearLow: n(raw.yearLow),
+        priceAvg50: n(raw.priceAvg50),
+        priceAvg200: n(raw.priceAvg200),
+        exchange: typeof raw.exchange === "string" ? raw.exchange : null,
+        timestamp: n(raw.timestamp),
+      },
+    };
+  } catch (err) {
+    return fmpSimpleError(err instanceof Error ? err.message : "Unknown error fetching FMP quote");
+  }
+}
+
 // ── FMP Fundamental Endpoints (Phase 18) ──────────────────────────────────────
 //
 // All margin/ROE/ROA fields from ratios-ttm are returned as decimal fractions

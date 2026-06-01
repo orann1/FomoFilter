@@ -33,7 +33,7 @@ export async function POST(req: Request) {
   const run = await prisma.syncRun.create({
     data: {
       type: CHUNKED_SYNC_TYPE,
-      provider: "finnhub",
+      provider: "fmp",
       status: "running",
       requestedCount: symbols.length,
       processedCount: 0,

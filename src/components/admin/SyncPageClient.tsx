@@ -814,7 +814,8 @@ function UniverseSyncResultViewer({ result }: { result: UniverseSyncActionResult
 
 const SYNC_RUN_TYPE_LABELS: Record<string, string> = {
   "analyst-data-nasdaq100-sync": "Company Data Sync",
-  "market-data-nasdaq100-batch": "Daily Market Data Sync",
+  "market-data-nasdaq100-chunked-sync": "Daily Market Data Sync",
+  "market-data-nasdaq100-batch": "Daily Market Data Sync (legacy)",
   "fundamental-score-calculation": "Fundamental Score Calc",
   "opportunity-score-calculation": "Opportunity Score Calc",
   "nasdaq100-universe-sync": "Universe Sync",
@@ -1638,11 +1639,11 @@ export default function SyncPageClient({
   const isSyncRunning = activeSyncMeta !== null;
 
   const nasdaq100Overview = universeOverview.find((r) => r.universeSlug === "nasdaq-100") ?? null;
-  const nasdaq100MetricSynced = nasdaq100Overview
-    ? nasdaq100Overview.activeMembers - nasdaq100Overview.missingMetrics
+  const nasdaq100QuoteTotal = nasdaq100Overview?.activeMembers ?? null;
+  const nasdaq100QuoteSynced = nasdaq100Overview
+    ? nasdaq100Overview.activeMembers - nasdaq100Overview.missingQuotes
     : null;
-  const nasdaq100MetricMissing = nasdaq100Overview?.missingMetrics ?? null;
-  const nasdaq100MetricTotal = nasdaq100Overview?.activeMembers ?? null;
+  const nasdaq100QuoteMissing = nasdaq100Overview?.missingQuotes ?? null;
 
   const lastSyncResult =
     lastResult?.kind === "sync" ||
@@ -1811,10 +1812,9 @@ export default function SyncPageClient({
               </div>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
                 Refreshes daily-changing market data for all active stocks: quotes, price movement,
-                volume, and market context. Runs in resumable chunks — progress is saved after each
-                stock so the sync can be continued if interrupted. Current implementation still uses
-                the legacy Finnhub quote + basic metrics sync until the FMP daily-data migration is
-                completed.
+                volume, 52-week context, and moving-average context from FMP. Does not sync company
+                financial metrics. Runs in resumable chunks — progress is saved after each stock so
+                the sync can be continued if interrupted.
               </p>
             </div>
 
@@ -1891,54 +1891,54 @@ export default function SyncPageClient({
                 <Info className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
                 <div className="text-xs space-y-0.5 text-slate-500">
                   <p>Run once per trading day, preferably after market close.</p>
-                  <p>Current provider: Finnhub legacy sync. Fetches quote + basic metrics per stock (2 calls). In the upcoming FMP migration, company metrics will move to Company Data Sync and this workflow will focus on daily market data only. Chunk size: 10.</p>
-                  {nasdaq100MetricTotal !== null && (
+                  <p>Current provider: FMP /stable/quote. Fetches one quote snapshot per active stock. Company metrics are handled by Company Data Sync. Chunk size: 10.</p>
+                  {nasdaq100QuoteTotal !== null && (
                     <>
                       <p>
                         Active Nasdaq 100 stocks:{" "}
-                        <span className="text-slate-300 font-mono">{nasdaq100MetricTotal}</span>
+                        <span className="text-slate-300 font-mono">{nasdaq100QuoteTotal}</span>
                       </p>
                       <p>
-                        Estimated Finnhub calls:{" "}
-                        <span className="text-slate-300 font-mono">{nasdaq100MetricTotal * 2}</span>
+                        Estimated FMP calls:{" "}
+                        <span className="text-slate-300 font-mono">{nasdaq100QuoteTotal}</span>
                       </p>
                     </>
                   )}
-                  <p>Estimated duration: ~3–5 minutes for 100 stocks.</p>
-                  <p>Rate limited to ~54 calls/minute (≥1.1s between calls).</p>
+                  <p>Estimated duration: ~30 seconds for 100 stocks.</p>
+                  <p>Rate limited to ~250ms between calls (conservative pacing for FMP Starter).</p>
                   <p className="text-amber-500">Please keep this page open while the sync runs.</p>
                 </div>
               </div>
               <div className="flex items-start gap-2 border-t border-slate-700/60 pt-2">
                 <Info className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
                 <p className="text-xs text-slate-500 leading-relaxed">
-                  Current legacy sync may update basic metrics. After the FMP migration, Fundamental
-                  Scores should be refreshed after{" "}
+                  Daily Market Data Sync updates quotes only. Fundamental Scores should be
+                  refreshed after{" "}
                   <span className="text-slate-400 font-medium">Company Data Sync</span>
-                  , not after a pure daily market data sync.
+                  , not after a daily market data sync.
                 </p>
               </div>
             </div>
 
-            {nasdaq100MetricTotal !== null && (
+            {nasdaq100QuoteTotal !== null && (
               <div className="rounded bg-slate-900/60 border border-slate-700/60 px-3 py-2.5 space-y-1.5">
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                  Legacy metrics coverage
+                  Quote Coverage
                 </p>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Current legacy Finnhub sync coverage. Company metrics will move to Company Data Sync after the FMP migration.
+                  Provider source: FMP. Company metrics are owned by Company Data Sync.
                 </p>
                 <div className="grid grid-cols-2 gap-3 text-xs">
                   <div>
-                    <p className="text-slate-500 mb-0.5">Have metrics</p>
-                    <p className={`font-mono font-semibold ${nasdaq100MetricSynced === nasdaq100MetricTotal ? "text-emerald-400" : "text-slate-200"}`}>
-                      {nasdaq100MetricSynced} / {nasdaq100MetricTotal}
+                    <p className="text-slate-500 mb-0.5">Have quote</p>
+                    <p className={`font-mono font-semibold ${nasdaq100QuoteSynced === nasdaq100QuoteTotal ? "text-emerald-400" : "text-slate-200"}`}>
+                      {nasdaq100QuoteSynced} / {nasdaq100QuoteTotal}
                     </p>
                   </div>
                   <div>
-                    <p className="text-slate-500 mb-0.5">Missing metrics</p>
-                    <p className={`font-mono font-semibold ${nasdaq100MetricMissing! > 0 ? "text-amber-400" : "text-slate-600"}`}>
-                      {nasdaq100MetricMissing}
+                    <p className="text-slate-500 mb-0.5">Missing quote</p>
+                    <p className={`font-mono font-semibold ${nasdaq100QuoteMissing! > 0 ? "text-amber-400" : "text-slate-600"}`}>
+                      {nasdaq100QuoteMissing}
                     </p>
                   </div>
                 </div>

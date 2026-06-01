@@ -108,6 +108,11 @@ model StockQuote {
   dayLow          Decimal?
   previousClose   Decimal?
 
+  week52High      Decimal?
+  week52Low       Decimal?
+  priceAvg50      Decimal?
+  priceAvg200     Decimal?
+
   source          String?
   lastSyncedAt    DateTime?
   sourceUpdatedAt DateTime?
