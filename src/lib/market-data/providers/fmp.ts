@@ -197,6 +197,90 @@ export async function fetchFmpAnalystTarget(
   }
 }
 
+// ── Price Target Summary ───────────────────────────────────────────────────────
+//
+// FMP /stable/price-target-summary returns an array of price target objects
+// for a given symbol. This is the endpoint used in Phase 15 for target discovery.
+
+export type FmpPriceTargetSummary = {
+  symbol: string;
+  targetHigh: number | null;
+  targetLow: number | null;
+  targetMean: number | null;
+  targetMedian: number | null;
+  targetConsensus: number | null;
+};
+
+export type FmpPriceTargetResult =
+  | { ok: true; data: FmpPriceTargetSummary }
+  | { ok: false; quotaExceeded: boolean; planLimited: boolean; error: string };
+
+export async function fetchFmpPriceTargetSummary(
+  symbol: string
+): Promise<FmpPriceTargetResult> {
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    return { ok: false, quotaExceeded: false, planLimited: false, error: "Missing FMP_API_KEY" };
+  }
+
+  try {
+    const url = `${BASE_URL}/price-target-summary?symbol=${encodeURIComponent(symbol)}&apikey=${apiKey}`;
+    const res = await fetch(url, { cache: "no-store" });
+
+    if (res.status === 429) {
+      return { ok: false, quotaExceeded: true, planLimited: false, error: "FMP quota exceeded (429)." };
+    }
+
+    if (res.status === 402) {
+      return {
+        ok: false,
+        quotaExceeded: false,
+        planLimited: true,
+        error: "FMP price target data is not available for this symbol on the current plan.",
+      };
+    }
+
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      const safe = body.slice(0, 200);
+      if (res.status === 403) {
+        return { ok: false, quotaExceeded: false, planLimited: false, error: `FMP HTTP 403 — key invalid or not authorized. Body: ${safe}` };
+      }
+      return { ok: false, quotaExceeded: false, planLimited: false, error: `FMP HTTP ${res.status}. Body: ${safe}` };
+    }
+
+    const json: unknown = await res.json();
+
+    // Response is an array; empty array means no target data
+    if (!Array.isArray(json) || json.length === 0) {
+      return { ok: false, quotaExceeded: false, planLimited: false, error: "empty" };
+    }
+
+    const raw = json[0] as Record<string, unknown>;
+
+    const asNum = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+
+    return {
+      ok: true,
+      data: {
+        symbol,
+        targetHigh: asNum(raw.targetHigh),
+        targetLow: asNum(raw.targetLow),
+        targetMean: asNum(raw.targetMean),
+        targetMedian: asNum(raw.targetMedian),
+        targetConsensus: asNum(raw.targetConsensus),
+      },
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      quotaExceeded: false,
+      planLimited: false,
+      error: err instanceof Error ? err.message : "Unknown error fetching FMP price target",
+    };
+  }
+}
+
 // ── Nasdaq 100 Constituent List ────────────────────────────────────────────────
 //
 // Investigation result (2026-05-21):

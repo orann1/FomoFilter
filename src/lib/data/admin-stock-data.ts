@@ -85,6 +85,14 @@ export type AdminStockDataInventoryRow = {
   analystSource: string | null;
   analystLastSyncedAt: string | null;
 
+  // Target Discovery (Phase 15)
+  targetStatus: string | null;
+  targetLastAttemptedAt: string | null;
+  targetLastFoundAt: string | null;
+  targetNextRetryAt: string | null;
+  targetAttemptCount: number;
+  targetLastMessage: string | null;
+
   inWatchlist: boolean;
   hasActiveAlert: boolean;
 };
@@ -254,6 +262,14 @@ export async function getAdminStockDataInventory(): Promise<AdminStockDataInvent
       analystTargetLow: fmtDecimal(stock.analystData?.targetLow),
       analystSource: stock.analystData?.source ?? null,
       analystLastSyncedAt: formatShortDate(stock.analystData?.lastSyncedAt),
+
+      // Target Discovery (Phase 15)
+      targetStatus: stock.analystData?.targetStatus ?? null,
+      targetLastAttemptedAt: formatShortDate(stock.analystData?.targetLastAttemptedAt),
+      targetLastFoundAt: formatShortDate(stock.analystData?.targetLastFoundAt),
+      targetNextRetryAt: formatShortDate(stock.analystData?.targetNextRetryAt),
+      targetAttemptCount: stock.analystData?.targetAttemptCount ?? 0,
+      targetLastMessage: stock.analystData?.targetLastMessage ?? null,
 
       inWatchlist: stock.watchlistItems.length > 0,
       hasActiveAlert: stock.alertRules.some((r) => r.isActive),

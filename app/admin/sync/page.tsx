@@ -3,7 +3,7 @@ export const dynamic = "force-dynamic";
 import ClientAppShell from "@/src/components/layout/ClientAppShell";
 import SyncPageClient from "@/src/components/admin/SyncPageClient";
 import { getCurrentUserForDemo } from "@/src/lib/data/current-user";
-import { getRecentSyncRuns, getLatestChunkedSyncRun, getLatestAnalystSyncRun } from "@/src/lib/data/admin-sync";
+import { getRecentSyncRuns, getLatestChunkedSyncRun, getLatestAnalystSyncRun, getLatestTargetDiscoverySyncRun } from "@/src/lib/data/admin-sync";
 import { getUniverseOverview, getDbStockSummary } from "@/src/lib/data/admin-universes";
 import { getAdminStockDataInventory } from "@/src/lib/data/admin-stock-data";
 
@@ -12,7 +12,7 @@ function isKeyConfigured(key: string | undefined): boolean {
 }
 
 export default async function AdminSyncPage() {
-  const [user, recentSyncRuns, universeOverview, dbStockSummary, stockInventory, initialChunkedSync, initialAnalystSync] = await Promise.all([
+  const [user, recentSyncRuns, universeOverview, dbStockSummary, stockInventory, initialChunkedSync, initialAnalystSync, initialTargetDiscoverySync] = await Promise.all([
     getCurrentUserForDemo(),
     getRecentSyncRuns(10),
     getUniverseOverview(),
@@ -20,6 +20,7 @@ export default async function AdminSyncPage() {
     getAdminStockDataInventory(),
     getLatestChunkedSyncRun(),
     getLatestAnalystSyncRun(),
+    getLatestTargetDiscoverySyncRun(),
   ]);
 
   const providerStatus = {
@@ -54,6 +55,7 @@ export default async function AdminSyncPage() {
         stockInventory={stockInventory}
         initialChunkedSync={initialChunkedSync}
         initialAnalystSync={initialAnalystSync}
+        initialTargetDiscoverySync={initialTargetDiscoverySync}
       />
     </ClientAppShell>
   );

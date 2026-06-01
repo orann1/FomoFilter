@@ -5,7 +5,20 @@ import type { ReactNode } from "react";
 import { Search, CheckCircle, XCircle, List } from "lucide-react";
 import type { AdminStockDataInventoryRow } from "@/src/lib/data/admin-stock-data";
 
-type FilterId = "all" | "scanner-eligible" | "missing-score" | "missing-quote" | "missing-metrics" | "missing-analyst" | "nasdaq100";
+type FilterId =
+  | "all"
+  | "scanner-eligible"
+  | "missing-score"
+  | "missing-quote"
+  | "missing-metrics"
+  | "missing-analyst"
+  | "nasdaq100"
+  | "missing-target"
+  | "has-target"
+  | "no-target-available"
+  | "plan-limited"
+  | "eligible-target-retry"
+  | "provider-error-target";
 
 const FILTERS: Array<{ id: FilterId; label: string }> = [
   { id: "all", label: "All" },
@@ -15,6 +28,12 @@ const FILTERS: Array<{ id: FilterId; label: string }> = [
   { id: "missing-metrics", label: "Missing Metrics" },
   { id: "missing-analyst", label: "Missing Analyst" },
   { id: "nasdaq100", label: "Nasdaq 100" },
+  { id: "missing-target", label: "Missing Target" },
+  { id: "has-target", label: "Has Target" },
+  { id: "no-target-available", label: "No Target Available" },
+  { id: "plan-limited", label: "Plan Limited" },
+  { id: "eligible-target-retry", label: "Eligible for Retry" },
+  { id: "provider-error-target", label: "Provider Error" },
 ];
 
 interface ColumnDef {
@@ -785,6 +804,70 @@ const COLUMNS: ColumnDef[] = [
         <NA />
       ),
   },
+  // ── Target Discovery ─────────────────────────────────────────────────────────
+  {
+    label: "Target Status",
+    sourceLabel: "FMP",
+    align: "left",
+    minWidth: "130px",
+    render: (r) => {
+      if (!r.targetStatus) return <span className="text-[10px] text-slate-600">not_checked</span>;
+      const cls =
+        r.targetStatus === "has_target" ? "text-emerald-400 font-medium" :
+        r.targetStatus === "no_target_available" ? "text-slate-500" :
+        r.targetStatus === "quota_blocked" ? "text-amber-400" :
+        r.targetStatus === "provider_error" ? "text-red-400" :
+        r.targetStatus === "plan_limited" ? "text-blue-400" :
+        r.targetStatus === "stale_target" ? "text-amber-300" :
+        "text-slate-500";
+      return <span className={`font-mono text-[10px] ${cls}`}>{r.targetStatus}</span>;
+    },
+  },
+  {
+    label: "Tgt Attempted",
+    sourceLabel: "FMP",
+    align: "left",
+    minWidth: "115px",
+    render: (r) =>
+      r.targetLastAttemptedAt ? (
+        <span className="text-xs text-slate-400">{r.targetLastAttemptedAt}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "Tgt Found",
+    sourceLabel: "FMP",
+    align: "left",
+    minWidth: "115px",
+    render: (r) =>
+      r.targetLastFoundAt ? (
+        <span className="text-xs text-slate-400">{r.targetLastFoundAt}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "Tgt Retry At",
+    sourceLabel: "FMP",
+    align: "left",
+    minWidth: "115px",
+    render: (r) =>
+      r.targetNextRetryAt ? (
+        <span className="text-xs text-slate-400">{r.targetNextRetryAt}</span>
+      ) : (
+        <NA />
+      ),
+  },
+  {
+    label: "Tgt Attempts",
+    sourceLabel: "FMP",
+    align: "right",
+    minWidth: "90px",
+    render: (r) => (
+      <span className="font-mono text-xs text-slate-400">{r.targetAttemptCount}</span>
+    ),
+  },
   // ── Optional ──────────────────────────────────────────────────────────────────
   {
     label: "In Watchlist",
@@ -822,7 +905,11 @@ export default function DataInventoryTab({ rows }: DataInventoryTabProps) {
       withAnalystData: rows.filter((r) => r.hasAnalystData).length,
       missingAnalyst: rows.filter((r) => !r.hasAnalystData).length,
       nasdaq100Active: rows.filter((r) => r.inNasdaq100 && r.membershipActive).length,
+      hasTarget: rows.filter((r) => r.targetStatus === "has_target").length,
+      planLimited: rows.filter((r) => r.targetStatus === "plan_limited").length,
+      missingTarget: rows.filter((r) => !r.targetStatus || r.targetStatus === "not_checked" || r.targetStatus === "no_target_available").length,
     }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [rows]
   );
 
@@ -857,6 +944,33 @@ export default function DataInventoryTab({ rows }: DataInventoryTabProps) {
       case "nasdaq100":
         result = result.filter((r) => r.inNasdaq100 && r.membershipActive);
         break;
+      case "missing-target":
+        result = result.filter((r) => !r.targetStatus || r.targetStatus === "not_checked" || r.targetStatus === "no_target_available");
+        break;
+      case "has-target":
+        result = result.filter((r) => r.targetStatus === "has_target");
+        break;
+      case "no-target-available":
+        result = result.filter((r) => r.targetStatus === "no_target_available");
+        break;
+      case "plan-limited":
+        result = result.filter((r) => r.targetStatus === "plan_limited");
+        break;
+      case "eligible-target-retry": {
+        const nowTs = new Date().toISOString().slice(0, 16);
+        result = result.filter((r) => {
+          if (!r.targetStatus || r.targetStatus === "not_checked") return true;
+          // plan_limited has a 90-day cooldown — excluded from short eligible-retry filter
+          if (r.targetStatus === "provider_error" || r.targetStatus === "quota_blocked" || r.targetStatus === "no_target_available") {
+            return !r.targetNextRetryAt || r.targetNextRetryAt <= nowTs;
+          }
+          return false;
+        });
+        break;
+      }
+      case "provider-error-target":
+        result = result.filter((r) => r.targetStatus === "provider_error");
+        break;
     }
 
     return result;
@@ -872,33 +986,36 @@ export default function DataInventoryTab({ rows }: DataInventoryTabProps) {
           <h2 className="text-sm font-semibold text-slate-200">Stock Data Inventory</h2>
           <span className="text-xs text-slate-500 ml-1">DB-only snapshot</span>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
           <SummaryCard label="Total Stocks" value={summary.totalStocks} />
           <SummaryCard label="With Quote" value={summary.withQuote} color="text-emerald-400" />
-          <SummaryCard
-            label="Missing Quote"
-            value={summary.missingQuote}
-            color={summary.missingQuote > 0 ? "text-red-400" : "text-slate-400"}
-          />
           <SummaryCard label="With Metrics" value={summary.withMetric} color="text-emerald-400" />
-          <SummaryCard
-            label="Missing Metrics"
-            value={summary.missingMetric}
-            color={summary.missingMetric > 0 ? "text-amber-400" : "text-slate-400"}
-          />
           <SummaryCard label="With Score" value={summary.withScore} color="text-emerald-400" />
           <SummaryCard
             label="Scanner Eligible"
             value={summary.scannerEligible}
             color={summary.scannerEligible > 0 ? "text-emerald-400" : "text-amber-400"}
           />
+          <SummaryCard label="Nasdaq 100 Active" value={summary.nasdaq100Active} color="text-blue-400" />
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-slate-700/50">
           <SummaryCard label="With Analyst Data" value={summary.withAnalystData} color="text-emerald-400" />
           <SummaryCard
             label="Missing Analyst"
             value={summary.missingAnalyst}
             color={summary.missingAnalyst > 0 ? "text-amber-400" : "text-slate-400"}
           />
-          <SummaryCard label="Nasdaq 100 Active" value={summary.nasdaq100Active} color="text-blue-400" />
+          <SummaryCard label="Has Target Price" value={summary.hasTarget} color="text-emerald-400" />
+          <SummaryCard
+            label="Missing Target"
+            value={summary.missingTarget}
+            color={summary.missingTarget > 0 ? "text-amber-400" : "text-slate-400"}
+          />
+          <SummaryCard
+            label="Plan Limited"
+            value={summary.planLimited}
+            color={summary.planLimited > 0 ? "text-blue-400" : "text-slate-400"}
+          />
         </div>
       </section>
 
