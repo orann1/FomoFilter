@@ -1,574 +1,801 @@
-# Phase 19 — FMP Daily Market Data Sync Migration
+# Phase 20 — Opportunity Score v2 with Analyst Targets
 
 ## Status
 
-Completed (2026-06-01)
+Completed
 
 ---
 
 ## Goal
 
-Migrate the **Daily Market Data Sync** workflow from the legacy Finnhub quote + basic metrics implementation to FMP Starter.
+Upgrade the existing Opportunity Score from `opportunity-v1` to `opportunity-v2` by adding analyst target and analyst sentiment signals.
 
-This phase should make Daily Market Data Sync responsible only for daily-changing market data.
-
-The target ownership is:
+The current Opportunity Score does **not** include:
 
 ```txt
-Daily Market Data Sync
-→ quote
-→ price movement
-→ volume
-→ 52-week context
-→ 50/200 day averages if available
-→ daily price-change windows
-→ future daily candles foundation
+Analyst target price
+Analyst upside %
+Target high / low / median
+Analyst recommendation counts
+Analyst count / confidence
 ```
 
-Company Data Sync already owns slow-changing company and financial data after Phase 18.
+After Phase 17 and Phase 19, the app now has reliable coverage for the missing inputs:
+
+```txt
+Analyst target coverage: 100 / 100
+Analyst upside coverage: 100 / 100
+Target high / low / median coverage: 100 / 100
+Analyst rating/count coverage: 100 / 100
+Quote coverage: 100 / 100
+52-week context coverage: 100 / 100
+```
+
+Phase 20 should use this new data to make Opportunity Score more meaningful.
+
+---
+
+## Important User Requirements
+
+This phase must update more than the calculation code.
+
+Required updates:
+
+```txt
+1. Update the Opportunity Score calculation logic.
+2. Update the Admin Sync Actions button description for Calculate Opportunity Scores.
+3. Update the Score Methodology tab with the new v2 calculation explanation.
+4. Update any UI text that still describes Opportunity Score v1.
+5. Keep the implementation clean and avoid duplicate score fields/tables.
+```
+
+The user specifically requested:
+
+```txt
+Do not only change the calculation.
+Also update:
+- Admin → Sync Actions → Calculate Opportunity Scores description
+- Admin → Score Methodology tab
+```
 
 ---
 
 ## Why This Phase Is Needed
 
-After Phase 18, Company Data Sync now owns:
+The original Opportunity Score was intentionally conservative because analyst target coverage was poor.
+
+Earlier phases had:
 
 ```txt
-FMP profile
-FMP ratios-ttm
-FMP financial-growth
-FMP price-target-consensus
-Finnhub analyst recommendation counts
+Target price coverage: partial / unreliable
+Analyst upside: N/A for many stocks
 ```
 
-Phase 18 confirmed:
+Therefore Opportunity Score v1 did not include analyst target signals.
+
+Now the data is available and reliable after:
 
 ```txt
-StockMetric coverage: 100 / 100
-provider = fmp: 100 / 100
-Fundamental Score recalculates successfully
-Opportunity Score recalculates successfully
+Phase 17 — FMP price-target-consensus migration
+Phase 18 — FMP fundamentals/ratios/growth migration
+Phase 19 — FMP daily quote migration
 ```
 
-However, Daily Market Data Sync still uses the legacy Finnhub flow:
+Opportunity Score should now reflect:
 
 ```txt
-Finnhub quote
-Finnhub basic financial metrics
+Is this a fundamentally strong company?
+Is valuation reasonable?
+Is growth attractive?
+Is risk acceptable?
+Is the stock trading in an attractive price range?
+Do analysts see meaningful upside?
+Is analyst sentiment supportive?
 ```
-
-This creates a data-ownership problem:
-
-```txt
-Daily Market Data Sync still fetches some company/financial metrics,
-even though those now belong to Company Data Sync.
-```
-
-Phase 19 should clean this up by moving Daily Market Data Sync to FMP market data and removing financial metrics from the daily workflow.
 
 ---
 
 ## Critical Product Decision
 
-Do not add another daily sync.
+Do not create a separate new score table.
 
-Do not duplicate StockQuote.
+Do not create duplicate score fields unless absolutely required.
 
-Do not create duplicate market data tables unless absolutely required.
-
-Do not keep fetching company financial metrics inside Daily Market Data Sync.
-
-Instead:
+Use existing fields:
 
 ```txt
-Reuse the existing Daily Market Data Sync flow.
-Replace legacy Finnhub quote source with FMP quote data.
-Keep StockQuote as the main quote table.
-Use existing progress / continue / restart / history mechanisms.
-Stop updating StockMetric from Daily Market Data Sync.
-Leave StockMetric ownership to Company Data Sync.
+StockScore.oppScore
+StockScore.oppScoreVersion
+StockScore.oppCalculatedAt
 ```
+
+Update:
+
+```txt
+oppScoreVersion = "opportunity-v2"
+```
+
+Keep previous v1 logic only as internal reference/fallback if useful.
 
 ---
 
 ## Scope
 
-Phase 19 includes:
+Phase 20 includes:
 
-1. Audit existing Daily Market Data Sync implementation.
-2. Replace Finnhub quote calls with FMP quote calls.
-3. Stop Daily Market Data Sync from fetching/upserting Finnhub basic financial metrics.
-4. Map FMP quote fields into existing `StockQuote`.
-5. Preserve daily progress UI and chunked sync behavior.
-6. Preserve SyncRun / SyncRunItem / Sync History.
-7. Update UI copy to remove legacy Finnhub wording.
-8. Update Data Inventory source/freshness labels where needed.
-9. Confirm Scanner and Dashboard still read from DB only.
-10. Confirm Company Data Sync remains the owner of StockMetric.
+1. Audit existing Opportunity Score v1 logic.
+2. Define Opportunity Score v2 formula.
+3. Add analyst target/upside component.
+4. Add analyst sentiment component from recommendation counts.
+5. Use existing valuation/growth/fundamental/risk/price position inputs.
+6. Preserve missing-data re-normalization.
+7. Update Calculate Opportunity Scores action.
+8. Update Admin Sync Actions button text.
+9. Update Score Methodology tab.
+10. Update Data Inventory if needed.
+11. Update Scanner/Dashboard only if labels/version display needs refresh.
+12. Run score calculation and verify outputs.
 
 ---
 
 ## Non-Scope
 
-Do not implement:
+Do not build:
 
-- Historical candles table.
+- Analyst Sentiment Score as a separate score.
 - Momentum Score.
-- Relative volume calculation.
-- RSI / EMA / MACD.
+- Catalyst Score.
 - News sync.
-- Earnings/catalyst sync.
-- Intraday refresh.
-- Opportunity Score v2.
-- Analyst Sentiment Score.
-- Full deletion of Finnhub provider.
-- Deletion of Finnhub analyst recommendation logic.
-- Refactor of Company Data Sync.
-- New database models unless absolutely required.
+- Historical candle indicators.
+- Technical score.
+- Intraday sync.
+- New database score table.
+- New provider calls.
+- New live API calls from Scanner/Dashboard.
+- New scoring formulas for Fundamental Score.
 
-Do not change scoring formulas.
+Do not change:
 
-Do not automatically recalculate scores after Daily Market Data Sync.
+```txt
+Fundamental Score formula
+Growth Score formula
+Profitability Score formula
+Valuation Score formula
+Financial Health Score formula
+Risk Context Score formula
+Daily Market Data Sync
+Company Data Sync
+Universe Sync
+```
 
 ---
 
-## Provider Strategy For This Phase
+## Existing Opportunity Score v1
 
-| Data Type | Current Provider | New Provider | Workflow |
-| --- | --- | --- | --- |
-| Current price | Finnhub | FMP | Daily Market Data Sync |
-| Day change | Finnhub | FMP | Daily Market Data Sync |
-| Day change % | Finnhub | FMP | Daily Market Data Sync |
-| Open / high / low | Finnhub | FMP | Daily Market Data Sync |
-| Previous close | Finnhub | FMP | Daily Market Data Sync |
-| Volume | Finnhub / mixed | FMP | Daily Market Data Sync |
-| Market cap | Finnhub/FMP mixed | FMP quote/profile | Daily / Company depending field |
-| 52-week high / low | Finnhub legacy | FMP quote | Daily Market Data Sync |
-| priceAvg50 / priceAvg200 | Not currently reliable | FMP quote | Daily Market Data Sync |
-| Basic financial metrics | Finnhub | No longer daily | Company Data Sync |
-| Analyst recommendations | Finnhub | Finnhub | Company Data Sync |
-
----
-
-## FMP Endpoint To Use
-
-Use the verified FMP Starter endpoint:
+Current v1 is based on:
 
 ```txt
-/stable/quote?symbol={symbol}
+Fundamental Quality
+Valuation
+Growth
+Risk / Context
+Price Position
 ```
 
-FMP Starter verification showed this endpoint works for all tested symbols.
-
-Expected useful fields include:
+It does not use:
 
 ```txt
-symbol
-price
-change
-changePercentage
-open
-dayHigh
-dayLow
-previousClose
-volume
-marketCap
-yearHigh
-yearLow
-priceAvg50
-priceAvg200
-exchange
-timestamp
-```
-
-Important mapping note:
-
-```txt
-FMP uses changePercentage
-not changesPercentage
+Analyst Target
+Analyst Upside
+Analyst Rating
+Analyst Count
+Recommendation Counts
 ```
 
 ---
 
 # 1. Required Audit Before Implementation
 
-Before changing logic, inspect and document:
-
-## Current Daily Sync UI
-
-```txt
-src/components/admin/SyncPageClient.tsx
-```
-
-Check:
-
-- Daily Market Data Sync button.
-- Current helper text.
-- Progress panel.
-- Polling behavior.
-- Continue / Restart behavior.
-- Coverage panel.
-- SyncRun type used by this workflow.
-
----
-
-## Current Daily Sync Backend
-
 Inspect:
 
 ```txt
-app/api/admin/sync-runs/start/route.ts
-app/api/admin/sync-runs/process-next/route.ts
-app/api/admin/sync-runs/latest/route.ts
+src/lib/scoring/opportunity-score.ts
 src/actions/market-data-actions.ts
-src/lib/data/admin-sync.ts
+src/components/admin/ScoreMethodologyTab.tsx
+src/components/admin/SyncPageClient.tsx
+src/components/admin/DataInventoryTab.tsx
+src/lib/data/scanner.ts
+src/lib/data/dashboard.ts
+prisma/schema.prisma
 ```
 
-Find:
+Document:
 
-- Where Finnhub quote is called.
-- Where Finnhub basic financials are called.
-- Where StockQuote is upserted.
-- Where StockMetric is upserted by daily sync.
-- Which counts/statuses are used.
-- Whether the same API route is still named market-data-nasdaq100-chunked-sync.
+```txt
+Current Opportunity Score v1 weights
+Current inputs used
+Current missing-data behavior
+Current scoreVersion value
+Where Calculate Opportunity Scores button text appears
+Where Score Methodology describes Opportunity Score
+Where oppScore is displayed
+```
+
+Do not start implementation before confirming all existing touchpoints.
 
 ---
 
-## Providers
+# 2. Data Inputs Available For v2
 
-Inspect:
+## Existing Score Inputs
+
+From `StockScore`:
 
 ```txt
-src/lib/market-data/providers/fmp.ts
-src/lib/market-data/providers/finnhub.ts
+fundamentalScore
+growthScore
+profitabilityScore
+valuationScore
+financialHealthScore
+riskContextScore
 ```
 
-Confirm or add:
+From `StockMetric`:
 
 ```txt
-fetchFmpQuote(symbol)
+peBasicExclExtraTTM
+psTTM
+pbAnnual
+evEbitdaTTM
+pegTTM
+revenueGrowthTTMYoy
+epsGrowthTTMYoy
+beta
+marketCapitalization
 ```
 
-Provider boundary rules:
+From `StockQuote`:
 
 ```txt
-fmp.ts = FMP calls only
-finnhub.ts = Finnhub calls only
-daily sync process route = orchestrates FMP quote usage
+price
+week52High
+week52Low
+priceAvg50
+priceAvg200
 ```
 
-Do not put FMP calls in `finnhub.ts`.
-
----
-
-## DB Models
-
-Inspect:
+From `StockAnalystData`:
 
 ```txt
-StockQuote
-StockMetric
-Stock
-SyncRun
-SyncRunItem
-```
-
-Confirm existing fields before adding anything.
-
-No migration is expected unless `StockQuote` lacks required fields.
-
-If a migration is needed, stop and explain before adding it.
-
----
-
-# 2. StockQuote Mapping
-
-Map FMP quote fields into existing `StockQuote`.
-
-Suggested mapping:
-
-| FMP field | DB field | Normalization |
-| --- | --- | --- |
-| symbol | stock symbol relation | none |
-| price | price / currentPrice | none |
-| change | change | none |
-| changePercentage | changePercent | none |
-| open | open | none |
-| dayHigh | dayHigh | none |
-| dayLow | dayLow | none |
-| previousClose | previousClose | none |
-| volume | volume | none |
-| marketCap | marketCap if quote table has it | full USD |
-| yearHigh | week52High / yearHigh field if exists | none |
-| yearLow | week52Low / yearLow field if exists | none |
-| priceAvg50 | priceAvg50 if exists | none |
-| priceAvg200 | priceAvg200 if exists | none |
-| exchange | exchange if exists | none |
-| timestamp | sourceUpdatedAt / provider timestamp | convert safely |
-
-If a DB field does not exist:
-
-```txt
-Do not add it automatically.
-Report the missing field.
-Only add migration if approved.
+targetPrice
+targetMean
+targetHigh
+targetLow
+targetMedian
+analystUpsidePercent
+analystRating
+analystCount
+strongBuyCount
+buyCount
+holdCount
+sellCount
+strongSellCount
 ```
 
 ---
 
-## Important Source Decision
+# 3. Opportunity Score v2 Formula
 
-Set quote provider/source to:
+Recommended v2 components:
+
+| Component | Weight |
+| --- | ---: |
+| Fundamental Quality | 25% |
+| Valuation | 20% |
+| Growth | 15% |
+| Analyst Upside | 20% |
+| Analyst Sentiment / Confidence | 10% |
+| Price Position | 5% |
+| Risk / Context | 5% |
+
+Total:
 
 ```txt
-fmp
+100%
 ```
-
-Do not use:
-
-```txt
-fmp+finnhub
-```
-
-for quote source.
-
-Daily Market Data Sync should be FMP-only after this phase.
 
 ---
 
-# 3. Remove StockMetric Updates From Daily Sync
+## Why These Weights
 
-Daily Market Data Sync should no longer call or upsert:
+### Fundamental Quality — 25%
+
+The company still needs to be fundamentally strong.
+
+Uses:
 
 ```txt
-Finnhub /stock/metric
-StockMetric basic financial metrics
+fundamentalScore
+```
+
+### Valuation — 20%
+
+Opportunity should prefer stocks that are not extremely expensive.
+
+Uses:
+
+```txt
+valuationScore
+```
+
+### Growth — 15%
+
+Growth remains important, especially for tech/growth companies.
+
+Uses:
+
+```txt
+growthScore
+```
+
+### Analyst Upside — 20%
+
+Now that target coverage is 100/100, analyst upside can become a major opportunity signal.
+
+Uses:
+
+```txt
+analystUpsidePercent
+targetPrice
+current price
+```
+
+### Analyst Sentiment / Confidence — 10%
+
+Recommendation counts can help validate or challenge the upside signal.
+
+Uses:
+
+```txt
+strongBuyCount
+buyCount
+holdCount
+sellCount
+strongSellCount
+analystCount
+analystRating
+```
+
+### Price Position — 5%
+
+Helps avoid giving the highest opportunity scores only to stocks already near their 52-week high.
+
+Uses:
+
+```txt
+price
+week52High
+week52Low
+```
+
+### Risk / Context — 5%
+
+Keeps high-beta/speculative stocks from being over-rewarded.
+
+Uses:
+
+```txt
+riskContextScore
+```
+
+---
+
+# 4. Analyst Upside Scoring
+
+Input:
+
+```txt
+analystUpsidePercent
+```
+
+Recommended scoring scale:
+
+| Analyst Upside | Score |
+| --- | ---: |
+| >= 60% | 100 |
+| 40% to <60% | 90 |
+| 30% to <40% | 82 |
+| 20% to <30% | 72 |
+| 10% to <20% | 60 |
+| 0% to <10% | 45 |
+| -10% to <0% | 30 |
+| < -10% | 15 |
+| missing | null |
+
+Important:
+
+```txt
+Missing should be null, not 0.
+```
+
+Even though current coverage is 100/100, keep missing-data handling for future universes.
+
+---
+
+# 5. Analyst Sentiment / Confidence Scoring
+
+Use recommendation counts.
+
+Recommended weighted recommendation score:
+
+```txt
+Strong Buy = 100
+Buy = 80
+Hold = 50
+Sell = 20
+Strong Sell = 0
+```
+
+Formula:
+
+```txt
+rawSentiment =
+(
+  strongBuy * 100 +
+  buy * 80 +
+  hold * 50 +
+  sell * 20 +
+  strongSell * 0
+) / totalRecommendations
+```
+
+Where:
+
+```txt
+totalRecommendations = strongBuy + buy + hold + sell + strongSell
+```
+
+If totalRecommendations is missing or zero:
+
+```txt
+sentimentScore = null
+```
+
+---
+
+## Analyst Count Confidence Adjustment
+
+Recommendation from 3 analysts should not carry the same weight as recommendation from 50 analysts.
+
+Use a confidence multiplier:
+
+| Analyst Count | Confidence |
+| --- | ---: |
+| >= 30 | 1.00 |
+| 20–29 | 0.95 |
+| 10–19 | 0.90 |
+| 5–9 | 0.80 |
+| 1–4 | 0.65 |
+| 0 / missing | null |
+
+Final sentiment component:
+
+```txt
+analystSentimentScore = 50 + ((rawSentiment - 50) * confidence)
 ```
 
 Reason:
 
 ```txt
-StockMetric now belongs to Company Data Sync.
-Company Data Sync already refreshes FMP ratios/growth/profile data.
+Low analyst count should pull the score toward neutral, not directly crush it.
+```
+
+Example:
+
+```txt
+rawSentiment = 90
+analystCount = 4
+confidence = 0.65
+
+score = 50 + ((90 - 50) * 0.65)
+score = 76
+```
+
+---
+
+# 6. Price Position Scoring
+
+Use 52-week range.
+
+Formula:
+
+```txt
+position = (price - week52Low) / (week52High - week52Low)
+```
+
+Recommended scale:
+
+| Position in 52W Range | Score |
+| --- | ---: |
+| 0.20 to 0.60 | 100 |
+| 0.60 to 0.75 | 80 |
+| 0.75 to 0.90 | 60 |
+| 0.90 to 1.00 | 40 |
+| > 1.00 | 30 |
+| 0.00 to 0.20 | 65 |
+| < 0.00 | 50 |
+| missing / invalid range | null |
+
+Interpretation:
+
+```txt
+Middle-lower part of 52W range is often a better opportunity zone.
+Very high near 52W high is less attractive.
+Very low near 52W low may signal risk, so do not score it as 100 automatically.
+```
+
+---
+
+# 7. Missing Data Re-normalization
+
+Keep existing v1 behavior:
+
+```txt
+Do not treat missing components as zero.
+Remove missing components from denominator.
+Re-normalize weights among available components.
+```
+
+Example:
+
+If a stock is missing analyst sentiment but has everything else:
+
+```txt
+Exclude analyst sentiment 10%.
+Re-normalize the remaining 90% to 100%.
+```
+
+Minimum required component:
+
+```txt
+fundamentalScore must exist.
+```
+
+If `fundamentalScore` is missing:
+
+```txt
+oppScore = null
+skip / not calculated
+```
+
+---
+
+# 8. Caps and Guardrails
+
+## Analyst Upside Cap
+
+Analyst targets can be overly optimistic.
+
+Cap input for scoring:
+
+```txt
+analystUpsidePercent scoring max = 60%
+```
+
+Do not alter raw stored value.
+
+## Extreme Valuation Guardrail
+
+Do not create hard exclusions in this phase.
+
+Let valuationScore handle expensive stocks.
+
+## Negative Earnings
+
+If valuation metrics like P/E are null:
+
+```txt
+valuationScore already handles missing/available fields.
+Do not add separate penalty in Opportunity v2 unless already existing.
+```
+
+## High Risk
+
+Risk component weight remains low at 5%.
+
+Do not over-penalize high beta if analysts and fundamentals are strong.
+
+---
+
+# 9. Score Versioning
+
+Update:
+
+```txt
+oppScoreVersion = "opportunity-v2"
+```
+
+Keep:
+
+```txt
+oppCalculatedAt = now
+```
+
+Do not add new DB fields unless absolutely required.
+
+No migration is expected.
+
+---
+
+# 10. Admin Sync Actions Text Update
+
+Update the Calculate Opportunity Scores button/section description.
+
+Current text likely describes v1.
+
+New suggested description:
+
+```txt
+Calculates Opportunity Score v2 using fundamental quality, valuation, growth, analyst upside, analyst sentiment, price position, and risk context. Uses only DB data; no external API calls.
+```
+
+Additional helper text:
+
+```txt
+Run after Company Data Sync and Daily Market Data Sync so analyst targets, quotes, and financial metrics are fresh.
+```
+
+Important:
+
+```txt
+Do not say it calls FMP/Finnhub directly.
+Score calculation is internal and DB-only.
+```
+
+---
+
+# 11. Score Methodology Tab Update
+
+Update the Score Methodology tab.
+
+Required section:
+
+```txt
+Opportunity Score v2
+```
+
+Must include:
+
+1. Purpose.
+2. Component weights.
+3. Analyst Upside scoring scale.
+4. Analyst Sentiment formula.
+5. Analyst Count confidence adjustment.
+6. Price Position formula.
+7. Missing-data re-normalization.
+8. Example calculation.
+9. Note that raw analyst target values are not modified.
+10. Note that no external APIs are called during scoring.
+
+Suggested text:
+
+```txt
+Opportunity Score v2 estimates how attractive a stock looks right now by combining internal quality scores with analyst target upside and market context.
+```
+
+Component table:
+
+| Component | Weight | Source |
+| --- | ---: | --- |
+| Fundamental Quality | 25% | StockScore.fundamentalScore |
+| Valuation | 20% | StockScore.valuationScore |
+| Growth | 15% | StockScore.growthScore |
+| Analyst Upside | 20% | StockAnalystData.analystUpsidePercent |
+| Analyst Sentiment | 10% | Finnhub recommendation counts stored in DB |
+| Price Position | 5% | StockQuote 52-week range |
+| Risk / Context | 5% | StockScore.riskContextScore |
+
+---
+
+# 12. Data Inventory Updates
+
+Check whether Data Inventory already shows:
+
+```txt
+Opp. Score
+Opp. Version
+Opp. Calc At
+Analyst Upside
+Analyst Rating
+Analyst Count
 ```
 
 Required:
 
-- Remove daily-sync dependency on `fetchFinnhubBasicFinancials`.
-- Remove StockMetric upsert from daily sync route.
-- Do not delete the provider function yet, unless confirmed unused elsewhere.
-- Do not delete existing StockMetric data.
-- Do not delete legacy fields.
+```txt
+Opp. Version should show opportunity-v2 after recalculation.
+```
 
-This phase should stop future daily overwrites of company metric data.
+Optional:
+
+```txt
+Show Analyst Upside near Opportunity Score if already easy.
+```
+
+Do not overload Data Inventory.
 
 ---
 
-# 4. SyncRun Type
+# 13. Scanner Updates
 
-Current daily workflow likely uses:
-
-```txt
-market-data-nasdaq100-chunked-sync
-```
-
-Default recommendation:
+Scanner already shows:
 
 ```txt
-Keep this SyncRun type for now to avoid breaking polling/history.
-Display label should remain Daily Market Data Sync.
+Opp.
+Fund.
+Target
+Upside
+Rating
 ```
-
-If changing type is low risk, document first.
-
-Do not break Sync History.
-
----
-
-# 5. Progress UI
-
-Preserve the existing behavior:
-
-```txt
-current symbol
-processed / total
-success / skipped / failed
-elapsed time
-progress bar
-final result
-continue
-restart
-sync history
-```
-
-Do not create a new progress system.
-
-If the previous daily sync displayed metrics coverage, update the panel to quote/daily coverage.
-
----
-
-# 6. UI Copy Updates
-
-Update Daily Market Data Sync text after migration.
-
-Suggested title:
-
-```txt
-Daily Market Data Sync
-```
-
-Suggested description:
-
-```txt
-Refreshes daily-changing market data for all active stocks: quotes, price movement, volume, 52-week context, and moving-average context from FMP. Does not sync company financial metrics.
-```
-
-Suggested helper text:
-
-```txt
-Current provider: FMP /stable/quote. Fetches one quote snapshot per active stock. Company metrics are handled by Company Data Sync.
-```
-
-Suggested note:
-
-```txt
-Run once per trading day, preferably after market close.
-```
-
-Remove old wording:
-
-```txt
-legacy Finnhub quote + basic metrics
-2 calls per stock
-metrics coverage
-Current legacy sync may update basic metrics
-```
-
-Coverage panel should become:
-
-```txt
-Quote Coverage
-```
-
-or:
-
-```txt
-Daily Market Data Coverage
-```
-
-Suggested coverage fields:
-
-```txt
-Have quote
-Missing quote
-Last daily sync
-Provider source: FMP
-```
-
-Do not show `Legacy metrics coverage` after migration.
-
----
-
-# 7. Data Inventory Updates
-
-Update Data Inventory source/freshness display if needed:
-
-```txt
-Quote Source = FMP
-Quote Last Synced
-Price
-Change %
-Volume
-52-week high / low if shown
-```
-
-Metric source should remain:
-
-```txt
-FMP
-```
-
-from Company Data Sync.
-
-Avoid showing quote provider as Finnhub after this phase.
-
----
-
-# 8. Scanner Updates
-
-Scanner reads DB only.
-
-After migration:
-
-```txt
-Price
-Day %
-Market cap
-Target / Upside
-Scores
-```
-
-should still display correctly.
 
 Required:
 
-- No provider calls from Scanner.
-- Missing values show N/A.
-- Sort/filter still work.
-- Target/Upside remain populated.
-- Scores unchanged until recalculated manually.
+```txt
+Opportunity Score values should update after calculation.
+Sorting by Opportunity Score should still work.
+High Opportunity pill should still work.
+Expanded row should show Opportunity Score explanation if it already exists.
+```
+
+Optional text update:
+
+```txt
+Opportunity Score v2 now includes analyst upside and sentiment.
+```
 
 Do not redesign Scanner.
 
 ---
 
-# 9. Dashboard Updates
+# 14. Dashboard Updates
 
-Dashboard reads DB only.
+Dashboard already has opportunity cards.
 
-After migration:
+Required:
 
 ```txt
-Quote coverage should remain 100/100.
-Metric coverage should remain 100/100 from Company Data Sync.
-Target coverage should remain 100/100.
+Avg Opportunity should reflect v2 after recalculation.
+High Opportunity count should update.
+Top opportunity/analyst upside sections should still work.
 ```
 
-No live provider calls.
+Optional:
 
-No redesign.
+```txt
+Update label/tooltips to mention v2 if present.
+```
+
+Do not redesign Dashboard.
 
 ---
 
-# 10. Rate Limit / Runtime
+# 15. QA Requirements
 
-FMP Starter has higher call limits than the previous free plan.
+## Before Calculation
 
-Daily sync should now require:
-
-```txt
-1 FMP call per stock
-~100 calls for Nasdaq 100
-```
-
-Expected runtime should be shorter than the previous legacy sync.
-
-If pacing remains conservative, document it.
-
-Suggested UI note:
+Record baseline:
 
 ```txt
-Estimated calls: 1 FMP quote call per stock.
+Average oppScore
+Top 10 oppScore stocks
+oppScoreVersion distribution
+Number with opportunity-v1
+Number with opportunity-v2
 ```
-
-Do not remove pacing completely unless safe.
 
 ---
 
-# 11. QA Requirements
-
-## Admin Sync
+## Run Calculation
 
 Open:
 
@@ -579,65 +806,45 @@ Open:
 Run:
 
 ```txt
-Sync Daily Market Data
+Calculate Opportunity Scores
 ```
 
 Confirm:
 
-1. Progress panel works.
-2. Current symbol updates.
-3. Processed / total updates.
-4. Succeeded / skipped / failed update.
-5. Final result appears.
-6. Sync History records the run.
-7. Provider shows `fmp`.
-8. UI no longer says legacy Finnhub.
-9. UI no longer says quote + basic metrics.
-10. UI no longer shows legacy metrics coverage.
+```txt
+No external API calls.
+Status success or partial_success only if expected.
+100 active Nasdaq 100 calculated.
+0 failed.
+oppScoreVersion = opportunity-v2.
+```
 
 ---
 
-## Coverage Report After Sync
+## Score Result Coverage
 
 Report:
 
 ```txt
 Total active Nasdaq 100 stocks
-With StockQuote row
-Quote source = fmp
-With price
-With day change %
-With open
-With day high
-With day low
-With previous close
-With volume
-With 52-week high / low if fields exist
-With priceAvg50 / priceAvg200 if fields exist
-Missing quotes
-Failed symbols
+With oppScore
+With oppScoreVersion = opportunity-v2
+With analystUpsidePercent
+With analyst sentiment inputs
+Failed/skipped
 ```
 
 Expected:
 
 ```txt
-100 / 100 active stocks should have FMP quote rows.
+100 / 100 active Nasdaq 100 should have opportunity-v2.
 ```
 
 ---
 
-## StockMetric Preservation
+## Score Spot Check
 
-Confirm:
-
-```txt
-StockMetric rows remain provider = fmp from Company Data Sync.
-Daily Market Data Sync did not overwrite StockMetric.
-Daily Market Data Sync did not call Finnhub basicFinancials.
-Financial metrics remain intact after Daily sync.
-```
-
-Spot check:
+Return table for:
 
 ```txt
 AAPL
@@ -645,20 +852,81 @@ MSFT
 NVDA
 META
 TSLA
+AMZN
+PLTR
+AVGO
+AMD
+GOOGL
 ```
 
-Compare before/after:
+Columns:
 
 ```txt
-grossMarginTTM
-roeTTM
-revenueGrowthTTMYoy
-peBasicExclExtraTTM
-provider
-lastSyncedAt
+Symbol
+Old Opp Score
+New Opp Score
+Fundamental
+Valuation
+Growth
+Analyst Upside
+Analyst Sentiment
+Price Position
+Risk
+Final Opp v2
+Reason / explanation
 ```
 
-These should not be overwritten by Daily sync.
+Validate:
+
+```txt
+High upside + good fundamentals should improve.
+Very expensive stocks should still be constrained by valuation.
+Negative analyst upside should reduce opportunity.
+High beta should slightly reduce opportunity.
+```
+
+---
+
+## Plausibility Checks
+
+Look for:
+
+```txt
+Stocks with very high analyst upside but weak fundamentals.
+Stocks with strong fundamentals but low/negative upside.
+Stocks near 52-week highs.
+Stocks with very high valuation.
+Stocks with low analyst count.
+```
+
+Confirm the score behaves reasonably.
+
+---
+
+## Admin UI QA
+
+Confirm:
+
+```txt
+Calculate Opportunity Scores button text updated.
+Helper text mentions v2 inputs.
+No misleading v1 text remains.
+Score Methodology tab documents v2.
+```
+
+---
+
+## Data Inventory QA
+
+Confirm:
+
+```txt
+Opp. Score updated.
+Opp. Version = opportunity-v2.
+Opp. Calc At updated.
+Analyst Upside remains visible.
+No fake zero values.
+```
 
 ---
 
@@ -667,14 +935,12 @@ These should not be overwritten by Daily sync.
 Confirm:
 
 ```txt
-Scanner loads
-100 stocks visible
-Prices updated
-Day % updated
-Target/Upside still populated
-Scores still visible
-Sort/filter still work
-No provider calls from Scanner
+Scanner loads.
+Opportunity column updated.
+Sort by Opportunity Score works.
+High Opportunity pill works.
+Target/Upside/Rating still visible.
+No provider calls from Scanner.
 ```
 
 ---
@@ -684,12 +950,11 @@ No provider calls from Scanner
 Confirm:
 
 ```txt
-Dashboard loads
-Quote coverage correct
-Metric coverage still correct
-Target coverage still 100/100
-No provider calls from Dashboard
-No stale warning introduced
+Dashboard loads.
+Avg Opportunity updated.
+High Opportunity count updated.
+Top rows look plausible.
+No provider calls from Dashboard.
 ```
 
 ---
@@ -699,22 +964,22 @@ No stale warning introduced
 Confirm:
 
 ```txt
-Universe Sync still works
-Company Data Sync still works
-Daily Market Data Sync works
-Score Calculation works
-Provider Tests load
-Sync History works
-Data Inventory loads
-Score Methodology loads
-Scanner loads
-Dashboard loads
-Legacy Target Discovery remains hidden/legacy
+Universe Sync loads.
+Company Data Sync loads.
+Daily Market Data Sync loads.
+Score Calculation works.
+Provider Tests load.
+Sync History works.
+Data Inventory loads.
+Score Methodology loads.
+Scanner loads.
+Dashboard loads.
+No provider calls from score calculation.
 ```
 
 ---
 
-# 12. Validation
+# 16. Validation
 
 Run:
 
@@ -725,70 +990,72 @@ npx prisma validate
 npx prisma migrate status
 ```
 
+No migration is expected.
+
 If a migration is needed, stop and explain why before adding it.
 
 ---
 
-# 13. Required Implementation Report
+# 17. Required Implementation Report
 
 Return a concise report in English only with:
 
 1. Files inspected.
-2. Existing Daily Sync behavior found.
-3. FMP endpoint used.
-4. StockQuote field mapping table.
-5. Files changed.
-6. Whether migration was needed.
-7. Whether Finnhub basic metrics were removed from Daily sync.
-8. Whether StockMetric writes were removed from Daily sync.
-9. Provider composition after migration.
-10. Calls per stock and estimated runtime.
-11. UI copy changes.
-12. Quote coverage before/after.
-13. StockMetric preservation verification.
-14. Data Inventory verification.
-15. Scanner verification.
-16. Dashboard verification.
-17. Regression QA results.
-18. Automated check results.
-19. Known issues.
-20. Ready for commit or not.
+2. Current v1 formula summary.
+3. New v2 formula and weights.
+4. Analyst Upside scoring scale.
+5. Analyst Sentiment formula.
+6. Price Position formula.
+7. Files changed.
+8. Whether migration was needed.
+9. Admin Sync button text update.
+10. Score Methodology update.
+11. Data Inventory update if any.
+12. Scanner/Dashboard update if any.
+13. Baseline oppScore vs new oppScore summary.
+14. Score spot-check table.
+15. Plausibility analysis.
+16. Regression QA results.
+17. Automated check results.
+18. Known issues.
+19. Ready for commit or not.
 
 ---
 
-## Required Field Mapping Table In Report
+## Required Formula Table In Report
 
 Include:
 
-| Category | FMP endpoint | FMP field | DB field | Normalization |
-| --- | --- | --- | --- | --- |
-
-Examples:
-
-```txt
-Quote | /stable/quote | price | price | none
-Quote | /stable/quote | changePercentage | changePercent | none
-Quote | /stable/quote | yearHigh | week52High | none
-```
+| Component | Weight | Source | Missing Handling |
+| --- | ---: | --- | --- |
+| Fundamental Quality | 25% | StockScore.fundamentalScore | required |
+| Valuation | 20% | StockScore.valuationScore | re-normalize |
+| Growth | 15% | StockScore.growthScore | re-normalize |
+| Analyst Upside | 20% | StockAnalystData.analystUpsidePercent | re-normalize |
+| Analyst Sentiment | 10% | recommendation counts | re-normalize |
+| Price Position | 5% | StockQuote 52W range | re-normalize |
+| Risk / Context | 5% | StockScore.riskContextScore | re-normalize |
 
 ---
 
 ## Acceptance Criteria
 
-Phase 19 is complete when:
+Phase 20 is complete when:
 
-- Daily Market Data Sync uses FMP quote data.
-- Daily Market Data Sync no longer fetches Finnhub basic financial metrics.
-- Daily Market Data Sync no longer upserts StockMetric.
-- StockMetric remains owned by Company Data Sync.
-- StockQuote is updated from FMP for all active stocks.
-- Quote source shows FMP.
-- UI copy no longer says legacy Finnhub.
-- Progress/continue/history behavior is preserved.
-- Scanner and Dashboard load.
-- Company Data Sync is not broken.
-- No duplicate quote table is created.
+- Opportunity Score uses v2 formula.
+- Analyst Upside is included.
+- Analyst Sentiment is included.
+- Price Position still included.
+- Missing data is re-normalized, not treated as zero.
+- oppScoreVersion is `opportunity-v2`.
+- Calculate Opportunity Scores button text is updated.
+- Score Methodology tab fully documents v2.
+- Data Inventory shows opportunity-v2 after recalculation.
+- Scanner and Dashboard reflect updated scores.
+- No new DB table is created.
 - No unnecessary migration is added.
+- Fundamental Score formula is unchanged.
+- No provider calls are added to scoring.
 - Build passes.
 - TypeScript passes.
 - Prisma validates.
@@ -798,10 +1065,9 @@ Phase 19 is complete when:
 
 ## Future Phases
 
-After Phase 19:
+After Phase 20:
 
 ```txt
-Phase 20 — Opportunity Score v2 with Analyst Targets
 Phase 21 — Historical Daily + Momentum Foundation
 Phase 22 — Analyst Sentiment Score
 Phase 23 — News and Earnings Catalyst Foundation
@@ -842,3 +1108,4 @@ Phase 23 — News and Earnings Catalyst Foundation
 - Phase 17 completed (2026-06-01): FMP Company Data Sync Migration. Fixed the field mapping bug from Phase 14/15 where FMP `/stable/price-target-summary` was incorrectly used as a source for targetMean/targetHigh/targetLow/targetMedian (those fields do not exist in that endpoint). Added `fetchFmpPriceTargetConsensus` to `fmp.ts` (calls `/stable/price-target-consensus` which correctly returns targetConsensus, targetHigh, targetLow, targetMedian). Enforced clean provider boundaries: `fmp.ts` contains only FMP calls, `finnhub.ts` contains only Finnhub calls (removed FMP call that was inside `fetchFinnhubAnalystData`). Provider composition moved into `app/api/admin/analyst-sync/process-next/route.ts` which calls `fetchFmpPriceTargetConsensus` + `fetchFinnhubAnalystData` in parallel per symbol and combines results before upsert. Updated upsert to set `targetStatus`, `targetLastFoundAt`, `targetLastAttemptedAt` — repairs old bad rows where `targetStatus = has_target` but `targetPrice = null`. SyncRun type kept as `analyst-data-nasdaq100-sync` (changing would break history/polling); UI label remains "Company Data Sync". SyncRun.provider = `fmp+finnhub`. Updated SyncPageClient.tsx description to reflect FMP consensus as source. Updated ScoreMethodologyTab.tsx to Phase 17 analyst data source table. Legacy Analyst Target Discovery remains in Developer/Legacy Tools with updated labels. No Prisma migration needed (all StockAnalystData fields existed). QA results: pre-sync targetPrice=0/100, bad rows=19; post-sync targetPrice=100/100, targetHigh=100/100, targetLow=100/100, targetMedian=100/100, analystUpsidePercent=100/100, bad rows=0. All 11 SyncRun types unaffected. Scores unchanged (avg fundamental=64.2, avg opportunity=60.3). Build passes, tsc --noEmit zero errors, prisma validate valid, prisma migrate status clean (12 migrations). Approved by user.
 - Phase 18 completed (2026-06-01): FMP Fundamentals, Ratios & Growth Migration. Extended Company Data Sync to fetch FMP company fundamentals per symbol alongside the existing analyst sync. Added `beta` field to `NormalizedCompanyProfile` in types.ts. Added 5 new FMP provider functions to `fmp.ts`: `fetchFmpKeyMetrics`, `fetchFmpKeyMetricsTtm`, `fetchFmpRatios`, `fetchFmpRatiosTtm`, `fetchFmpFinancialGrowth`. Updated `fetchFmpCompanyProfile` to also extract and return `beta` from the profile response. Extended `app/api/admin/analyst-sync/process-next/route.ts` to call 4 FMP endpoints per symbol in parallel (profile, ratios-ttm, financial-growth, price-target-consensus) plus 1 Finnhub call (recommendation), then upsert both `StockAnalystData` (Phase 17 behavior preserved) and `StockMetric` (FMP data). Field mapping and normalization: FMP margin/ROE/ROA fields (decimal) multiplied by 100 for % scale; growth fields (decimal fraction) multiplied by 100; ratio fields (P/E, D/E, current ratio, etc.) stored as-is. Fields not covered by FMP (forwardPE, forwardPEG, week52High, week52Low, quarterly growth, dividendYield) preserved from Finnhub's last daily sync via safe-update pattern. Provider set to `fmp` on StockMetric after Company Data Sync. Stock.name and Stock.sector updated from FMP profile (only if non-null). Calls per stock: 4 FMP + 1 Finnhub = 5 total; ~500 calls for 100 stocks; estimated 3-5 min. Updated SyncPageClient.tsx Company Data Sync helper text with endpoint details and call estimates. Updated ScoreMethodologyTab.tsx data source overview to reference FMP Starter. No Prisma migration needed (all StockMetric fields already existed). Build passes, tsc --noEmit zero errors, prisma validate valid, prisma migrate status clean (12 migrations). Fixed the field mapping bug from Phase 14/15 where FMP `/stable/price-target-summary` was incorrectly used as a source for targetMean/targetHigh/targetLow/targetMedian (those fields do not exist in that endpoint). Added `fetchFmpPriceTargetConsensus` to `fmp.ts` (calls `/stable/price-target-consensus` which correctly returns targetConsensus, targetHigh, targetLow, targetMedian). Enforced clean provider boundaries: `fmp.ts` contains only FMP calls, `finnhub.ts` contains only Finnhub calls (removed FMP call that was inside `fetchFinnhubAnalystData`). Provider composition moved into `app/api/admin/analyst-sync/process-next/route.ts` which calls `fetchFmpPriceTargetConsensus` + `fetchFinnhubAnalystData` in parallel per symbol and combines results before upsert. Updated upsert to set `targetStatus`, `targetLastFoundAt`, `targetLastAttemptedAt` — repairs old bad rows where `targetStatus = has_target` but `targetPrice = null`. SyncRun type kept as `analyst-data-nasdaq100-sync` (changing would break history/polling); UI label remains "Company Data Sync". SyncRun.provider = `fmp+finnhub`. Updated SyncPageClient.tsx description to reflect FMP consensus as source. Updated ScoreMethodologyTab.tsx to Phase 17 analyst data source table. Legacy Analyst Target Discovery remains in Developer/Legacy Tools with updated labels. No Prisma migration needed (all StockAnalystData fields existed). QA results: pre-sync targetPrice=0/100, bad rows=19; post-sync targetPrice=100/100, targetHigh=100/100, targetLow=100/100, targetMedian=100/100, analystUpsidePercent=100/100, bad rows=0. All 11 SyncRun types unaffected. Scores unchanged (avg fundamental=64.2, avg opportunity=60.3). Build passes, tsc --noEmit zero errors, prisma validate valid, prisma migrate status clean (12 migrations). Approved by user.
 - Phase 19 completed (2026-06-01): FMP Daily Market Data Sync Migration. Migrated Daily Market Data Sync from legacy Finnhub quote + basic metrics to FMP `/stable/quote` only. Added `fetchFmpQuote(symbol)` to `fmp.ts`. Added migration `20260601193636_add_stock_quote_52w_and_averages` to extend `StockQuote` with `week52High`, `week52Low`, `priceAvg50`, `priceAvg200`. Rewrote `app/api/admin/sync-runs/process-next/route.ts` — FMP quote only, all StockMetric writes removed, PROVIDER set to `fmp`, pacing reduced to 250ms (FMP Starter). Updated `app/api/admin/sync-runs/start/route.ts` — provider changed from `finnhub` to `fmp`. Updated `SyncPageClient.tsx` — removed all legacy Finnhub wording, replaced "Legacy metrics coverage" panel with "Quote Coverage" (100/100), updated description and info panel to reference FMP, fixed pre-existing `SYNC_RUN_TYPE_LABELS` bug (added `market-data-nasdaq100-chunked-sync` key). SyncRun type kept as `market-data-nasdaq100-chunked-sync` to preserve Sync History. QA confirmed: 100/100 stocks synced (0 skipped, 0 failed), all 14 StockQuote fields populated including new 52-week and moving-average fields, source=fmp on all rows, StockMetric byte-for-byte unchanged (provider=fmp, same lastSyncedAt, same values — Daily Sync did not touch StockMetric), Scanner loads 100 stocks with real prices/scores, Dashboard coverage 100/100 for quotes/metrics/scores/targets, all 6 admin tabs load, Developer/Legacy Tools preserved. Runtime: ~2m15s for 100 stocks (was ~5min with 2 Finnhub calls/stock). Build passes, tsc --noEmit zero errors, prisma validate valid, prisma migrate status clean (13 migrations). Approved by user.
+- Phase 20 completed (2026-06-02): Opportunity Score v2 with Analyst Targets. Rewrote `src/lib/scoring/opportunity-score.ts` — new v2 formula with 7 components (Fundamental Quality 25%, Valuation 20%, Growth 15%, Analyst Upside 20%, Analyst Sentiment 10%, Price Position 5%, Risk/Context 5%); analyst upside scored on 8-tier scale (≥60%→100 down to <−10%→15), capped at 60% for scoring but raw value untouched; analyst sentiment uses weighted recommendation counts (SB=100, B=80, H=50, S=20, SS=0) divided by total, then pulled toward neutral via confidence multiplier based on analyst count (≥30→1.00, 20–29→0.95, 10–19→0.90, 5–9→0.80, 1–4→0.65); price position reads from StockQuote.week52High/Low (FMP daily sync); missing components re-normalized not zeroed; fundamentalScore required. Updated `calculateOpportunityScoresAction` in `src/actions/market-data-actions.ts` — added `analystData` include, updated input mapping, version constant set to `opportunity-v2`. Updated `src/components/admin/SyncPageClient.tsx` button description to v2 wording referencing all 7 components, DB-only, run after Company/Daily syncs. Rewrote Opportunity Score section in `src/components/admin/ScoreMethodologyTab.tsx` — full v2 documentation including component table, analyst upside scale, sentiment formula, confidence table, price position table, re-normalization note, example calculation; updated Analyst Data section to say fields are now scored in v2; updated legacy Phase 15 note to reference v2. QA results: baseline avg=63.49 (v1), post-calc avg=63.34 (v2); 100/100 Nasdaq 100 calculated, 0 failed, 4 seed stocks skipped (no fundamentalScore — expected); all scores in [0,100]; NVDA improved 79→82 (high upside 41.8%), AMD reduced 62→55 (negative upside −12.3%), AVGO reduced 70→64 (near-zero upside −0.2%), PLTR constrained at 66 (poor valuation despite strong growth), TSLA remains low at 38 (weak fundamentals); no fake zeros; score distribution bell-shaped around 60–74. No migration. No new DB table. No provider calls. Build passes, tsc --noEmit zero errors, prisma validate valid, prisma migrate status clean (13 migrations). Approved by user.

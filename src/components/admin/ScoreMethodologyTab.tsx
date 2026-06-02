@@ -217,68 +217,148 @@ export default function ScoreMethodologyTab() {
         </p>
       </Section>
 
-      {/* ── Opportunity Score v1 ────────────────────────────────────────── */}
-      <Section title="Opportunity Score v1" icon={<Activity className="w-4 h-4" />}>
+      {/* ── Opportunity Score v2 ────────────────────────────────────────── */}
+      <Section title="Opportunity Score v2" icon={<Activity className="w-4 h-4" />}>
         <div className="space-y-3 text-sm text-slate-300 leading-relaxed">
           <p>
-            <span className="font-semibold text-white">Opportunity Score v1</span> answers:{" "}
-            <em className="text-slate-400">How attractive is this stock as an investment opportunity right now, using available fundamentals, valuation, and price context?</em>
+            <span className="font-semibold text-white">Opportunity Score v2</span> estimates how attractive a stock looks right now by combining internal quality scores with analyst target upside and market context.
           </p>
           <p className="text-slate-400">
             Unlike Fundamental Score which asks <strong className="text-slate-300">how strong is the company?</strong>,
             Opportunity Score asks <strong className="text-slate-300">is this a good time to consider it?</strong>{" "}
-            A high-quality company with stretched valuation will score lower on Opportunity than on Fundamentals.
+            A fundamentally strong company trading near its 52W high with low analyst upside will score lower than one with meaningful room to target.
           </p>
           <div className="flex items-start gap-2 rounded bg-blue-900/20 border border-blue-800/40 px-3 py-2.5">
             <Info className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
             <p className="text-xs text-blue-300">
-              Version label: <span className="font-mono font-semibold">opportunity-v1</span>.
+              Version label: <span className="font-mono font-semibold">opportunity-v2</span>.
               Requires <span className="font-mono">fundamentalScore</span> to exist — run Fundamental Score first.
-              No external API calls. Missing components are excluded and remaining weights are re-normalized.
+              No external API calls during scoring. Raw analyst target values are never modified.
+              Missing components are excluded and remaining weights re-normalized.
             </p>
           </div>
 
-          {/* Weights table */}
+          {/* Component weights table */}
           <div className="overflow-x-auto pt-1">
             <table className="w-full text-left text-sm">
-              <TableHeader headers={["Component", "Weight", "Source", "Purpose"]} />
+              <TableHeader headers={["Component", "Weight", "Source", "Missing"]} />
               <tbody>
                 {[
-                  { comp: "Fundamental Quality", weight: "35%", source: "StockScore.fundamentalScore", purpose: "Grounds opportunity in company quality — avoids rewarding cheap but weak stocks" },
-                  { comp: "Valuation Attractiveness", weight: "30%", source: "StockScore.valuationScore", purpose: "Rewards reasonable pricing" },
-                  { comp: "Growth Strength", weight: "20%", source: "StockScore.growthScore", purpose: "A cheap stock with no growth is not necessarily a good opportunity" },
-                  { comp: "Risk / Context", weight: "10%", source: "StockScore.riskContextScore", purpose: "Penalizes excessive risk" },
-                  { comp: "Price Position / 52W", weight: "5%", source: "StockQuote.price + StockMetric.week52High/Low", purpose: "Small timing signal — avoids overextended setups" },
+                  { comp: "Fundamental Quality", weight: "25%", source: "StockScore.fundamentalScore", missing: "required" },
+                  { comp: "Valuation", weight: "20%", source: "StockScore.valuationScore", missing: "re-normalize" },
+                  { comp: "Growth", weight: "15%", source: "StockScore.growthScore", missing: "re-normalize" },
+                  { comp: "Analyst Upside", weight: "20%", source: "StockAnalystData.analystUpsidePercent", missing: "re-normalize" },
+                  { comp: "Analyst Sentiment", weight: "10%", source: "Finnhub recommendation counts stored in DB", missing: "re-normalize" },
+                  { comp: "Price Position", weight: "5%", source: "StockQuote 52-week range", missing: "re-normalize" },
+                  { comp: "Risk / Context", weight: "5%", source: "StockScore.riskContextScore", missing: "re-normalize" },
                 ].map((row) => (
                   <tr key={row.comp} className="border-b border-slate-700/40">
                     <td className="px-3 py-2 font-medium text-slate-200">{row.comp}</td>
                     <td className="px-3 py-2 font-mono text-emerald-300">{row.weight}</td>
                     <td className="px-3 py-2 text-xs text-slate-400 font-mono">{row.source}</td>
-                    <td className="px-3 py-2 text-xs text-slate-400">{row.purpose}</td>
+                    <td className="px-3 py-2 text-xs">
+                      <span className={row.missing === "required" ? "text-amber-400 font-medium" : "text-slate-500"}>
+                        {row.missing}
+                      </span>
+                    </td>
                   </tr>
                 ))}
+                <tr className="bg-slate-900/40">
+                  <td className="px-3 py-2 text-xs font-semibold text-slate-500">Total</td>
+                  <td className="px-3 py-2 font-mono font-bold text-slate-200">100%</td>
+                  <td /><td />
+                </tr>
               </tbody>
             </table>
           </div>
 
-          {/* Price position scoring */}
+          {/* Analyst Upside scoring */}
+          <div className="pt-1 space-y-2">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Analyst Upside Scoring</p>
+            <p className="text-xs text-slate-500">
+              Input: <span className="font-mono text-slate-300">analystUpsidePercent</span>.
+              Upside &gt; 60% is capped at 60% for scoring — the raw stored value is never modified.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <TableHeader headers={["Analyst Upside %", "Score"]} />
+                <tbody>
+                  {[
+                    { range: "≥ 60%", score: "100" },
+                    { range: "40% to < 60%", score: "90" },
+                    { range: "30% to < 40%", score: "82" },
+                    { range: "20% to < 30%", score: "72" },
+                    { range: "10% to < 20%", score: "60" },
+                    { range: "0% to < 10%",  score: "45" },
+                    { range: "−10% to < 0%", score: "30" },
+                    { range: "< −10%",        score: "15" },
+                    { range: "Missing",        score: "null — excluded" },
+                  ].map((row) => (
+                    <tr key={row.range} className="border-b border-slate-700/40">
+                      <td className="px-3 py-1.5 font-mono text-slate-300">{row.range}</td>
+                      <td className="px-3 py-1.5 font-mono text-emerald-300">{row.score}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Analyst Sentiment */}
+          <div className="pt-1 space-y-2">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Analyst Sentiment Formula</p>
+            <div className="rounded bg-slate-900/70 border border-slate-700/60 px-4 py-3 font-mono text-xs text-slate-300 space-y-1">
+              <p className="text-slate-500 mb-1">rawSentiment = (strongBuy×100 + buy×80 + hold×50 + sell×20 + strongSell×0) / totalRecommendations</p>
+              <p className="text-slate-500">analystSentimentScore = 50 + (rawSentiment − 50) × confidence</p>
+            </div>
+            <p className="text-xs text-slate-500">
+              The confidence multiplier pulls the score toward neutral (50) when analyst coverage is thin, so a handful of analysts does not carry the same weight as broad consensus.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <TableHeader headers={["Analyst Count", "Confidence"]} />
+                <tbody>
+                  {[
+                    { count: "≥ 30", conf: "1.00 (full weight)" },
+                    { count: "20–29", conf: "0.95" },
+                    { count: "10–19", conf: "0.90" },
+                    { count: "5–9",   conf: "0.80" },
+                    { count: "1–4",   conf: "0.65" },
+                    { count: "0 / missing", conf: "null — excluded" },
+                  ].map((row) => (
+                    <tr key={row.count} className="border-b border-slate-700/40">
+                      <td className="px-3 py-1.5 font-mono text-slate-300">{row.count}</td>
+                      <td className="px-3 py-1.5 text-slate-400">{row.conf}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-slate-500">
+              Example: rawSentiment = 90, analystCount = 4, confidence = 0.65 → score = 50 + (90−50)×0.65 = <span className="font-mono text-slate-300">76</span>.
+            </p>
+          </div>
+
+          {/* Price Position */}
           <div className="pt-1 space-y-2">
             <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">52-Week Price Position Scoring</p>
             <p className="text-xs text-slate-500">
               Formula: <span className="font-mono text-slate-300">position = (price − week52Low) / (week52High − week52Low)</span>.
-              A value of 0 = near 52W low, 1 = near 52W high.
+              Source: <span className="font-mono text-slate-300">StockQuote.week52High / week52Low</span> (FMP daily sync).
             </p>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
-                <TableHeader headers={["Position Range", "Score", "Meaning"]} />
+                <TableHeader headers={["Position in 52W Range", "Score", "Meaning"]} />
                 <tbody>
                   {[
-                    { range: "0.20 – 0.60", score: "100", meaning: "Attractive / not overextended" },
-                    { range: "0.60 – 0.80", score: "75", meaning: "Reasonable" },
-                    { range: "0.80 – 0.95", score: "50", meaning: "Extended" },
-                    { range: "> 0.95",       score: "30", meaning: "Very close to 52W high" },
-                    { range: "0.00 – 0.20",  score: "60", meaning: "Cheap but possibly weak / downtrend" },
-                    { range: "Missing data", score: "null", meaning: "Excluded from weighted average" },
+                    { range: "0.20 – 0.60", score: "100", meaning: "Attractive zone — not overextended" },
+                    { range: "0.60 – 0.75", score: "80",  meaning: "Reasonable" },
+                    { range: "0.75 – 0.90", score: "60",  meaning: "Extended" },
+                    { range: "0.90 – 1.00", score: "40",  meaning: "Near 52W high" },
+                    { range: "> 1.00",       score: "30",  meaning: "Above 52W high (breakout)" },
+                    { range: "0.00 – 0.20",  score: "65",  meaning: "Near 52W low — cheap but possibly weak" },
+                    { range: "< 0.00",       score: "50",  meaning: "Below 52W low — neutral" },
+                    { range: "Missing / invalid range", score: "null", meaning: "Excluded from weighted average" },
                   ].map((row) => (
                     <tr key={row.range} className="border-b border-slate-700/40">
                       <td className="px-3 py-1.5 font-mono text-slate-300">{row.range}</td>
@@ -289,54 +369,65 @@ export default function ScoreMethodologyTab() {
                 </tbody>
               </table>
             </div>
-            <p className="text-xs text-slate-500">
-              Near-low stocks score 60 (not 100) because a stock near its 52W low may be cheap but also structurally weak.
-              Without technical or news context, over-rewarding the low is avoided.
-            </p>
           </div>
 
           {/* Missing data */}
           <div className="flex items-start gap-2 rounded bg-amber-900/20 border border-amber-800/40 px-3 py-2.5">
             <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
             <p className="text-xs text-amber-300">
-              <strong>Missing data handling:</strong> If a component is null (e.g., no price position because 52W data is missing),
-              it is excluded from the weighted average and the remaining weights are re-normalized to 100%.
-              Missing components are <strong>never treated as zero</strong>.
+              <strong>Missing data re-normalization:</strong> If a component is null, it is excluded from the weighted average and the remaining weights are re-normalized to 100%.
+              Missing components are <strong>never treated as zero</strong>.{" "}
+              <span className="font-mono">fundamentalScore</span> is the only required input — if missing, no score is calculated.
             </p>
+          </div>
+
+          {/* Example */}
+          <div className="pt-1 space-y-2">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Example Calculation</p>
+            <div className="rounded bg-slate-900/70 border border-slate-700/60 px-4 py-3 font-mono text-xs text-slate-300 space-y-1">
+              <p className="text-slate-500 mb-2">Illustrative example — not a real stock</p>
+              <p>Fundamental Quality (25%):  <span className="text-emerald-300">70</span>  →  70 × 0.25 = 17.50</p>
+              <p>Valuation (20%):            <span className="text-emerald-300">65</span>  →  65 × 0.20 = 13.00</p>
+              <p>Growth (15%):               <span className="text-emerald-300">80</span>  →  80 × 0.15 = 12.00</p>
+              <p>Analyst Upside 28% (20%):  <span className="text-emerald-300">72</span>  →  72 × 0.20 = 14.40</p>
+              <p>Analyst Sentiment (10%):   <span className="text-emerald-300">76</span>  →  76 × 0.10 =  7.60</p>
+              <p>Price Position (5%):       <span className="text-emerald-300">80</span>  →  80 × 0.05 =  4.00</p>
+              <p>Risk / Context (5%):       <span className="text-emerald-300">60</span>  →  60 × 0.05 =  3.00</p>
+              <div className="border-t border-slate-700 pt-2 mt-2">
+                <p className="font-bold text-white">Total = 71.50  →  Opportunity Score v2: <span className="text-emerald-300">72</span></p>
+              </div>
+            </div>
           </div>
         </div>
       </Section>
 
       {/* ── Analyst Data (Phase 17/18) ──────────────────────────────────── */}
-      <Section title="Analyst Data — Collected, Not Yet Scored" icon={<Info className="w-4 h-4" />}>
+      <Section title="Analyst Data Sources" icon={<Info className="w-4 h-4" />}>
         <div className="space-y-3 text-sm text-slate-300 leading-relaxed">
           <p>
-            <span className="font-semibold text-white">Company Data Sync</span> (Phase 18) uses FMP Starter as the
-            primary source for all financial metrics, ratios, growth, company profile, and analyst targets.
-            Recommendation counts remain sourced from{" "}
-            <span className="font-mono text-slate-300">Finnhub /stock/recommendation</span>.
-            Analyst data is stored in <span className="font-mono text-slate-300">StockAnalystData</span> and displayed
-            in the Scanner and Dashboard but is{" "}
-            <strong className="text-white">not yet included in Opportunity Score v1</strong>.
+            <span className="font-semibold text-white">Company Data Sync</span> uses FMP Starter as the
+            primary source for analyst targets and Finnhub for recommendation counts.
+            Analyst data is stored in <span className="font-mono text-slate-300">StockAnalystData</span> and is{" "}
+            <strong className="text-white">included in Opportunity Score v2</strong> via the Analyst Upside and Analyst Sentiment components.
           </p>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <TableHeader headers={["Field", "Source", "How Derived", "Status"]} />
+              <TableHeader headers={["Field", "Source", "How Derived", "Scored In"]} />
               <tbody>
                 {[
-                  { field: "Analyst Target Price", source: "FMP /stable/price-target-consensus", derived: "targetConsensus (primary consensus price)", status: "Stored" },
-                  { field: "Target High / Low / Median", source: "FMP /stable/price-target-consensus", derived: "targetHigh, targetLow, targetMedian direct", status: "Stored" },
-                  { field: "Analyst Upside %", source: "Internal calculation", derived: "((targetConsensus − price) / price) × 100", status: "Stored" },
-                  { field: "Analyst Rating", source: "Finnhub /stock/recommendation", derived: "Normalized from Buy/Hold/Sell counts", status: "Stored" },
-                  { field: "Analyst Count", source: "Finnhub /stock/recommendation", derived: "strongBuy + buy + hold + sell + strongSell", status: "Stored" },
+                  { field: "Analyst Target Price", source: "FMP /stable/price-target-consensus", derived: "targetConsensus (primary consensus price)", scored: "—" },
+                  { field: "Target High / Low / Median", source: "FMP /stable/price-target-consensus", derived: "targetHigh, targetLow, targetMedian direct", scored: "—" },
+                  { field: "Analyst Upside %", source: "Internal calculation", derived: "((targetConsensus − price) / price) × 100", scored: "Opportunity v2 (20%)" },
+                  { field: "Analyst Rating", source: "Finnhub /stock/recommendation", derived: "Normalized from Buy/Hold/Sell counts", scored: "—" },
+                  { field: "Recommendation Counts", source: "Finnhub /stock/recommendation", derived: "strongBuy, buy, hold, sell, strongSell", scored: "Opportunity v2 (10%)" },
                 ].map((row) => (
                   <tr key={row.field} className="border-b border-slate-700/40">
                     <td className="px-3 py-2 font-medium text-slate-200">{row.field}</td>
                     <td className="px-3 py-2 text-xs text-slate-400 font-mono">{row.source}</td>
                     <td className="px-3 py-2 text-xs text-slate-400">{row.derived}</td>
                     <td className="px-3 py-2">
-                      <span className="text-emerald-400 text-xs font-medium">{row.status}</span>
+                      <span className={row.scored !== "—" ? "text-emerald-400 text-xs font-medium" : "text-slate-500 text-xs"}>{row.scored}</span>
                     </td>
                   </tr>
                 ))}
@@ -347,12 +438,8 @@ export default function ScoreMethodologyTab() {
           <div className="flex items-start gap-2 rounded bg-blue-900/20 border border-blue-800/40 px-3 py-2.5">
             <Info className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
             <p className="text-xs text-blue-300">
-              <strong>Phase 17 migration:</strong> Previously, Phase 14/15 used FMP{" "}
-              <span className="font-mono">price-target-summary</span> which returns averaging fields
-              (lastMonthAvgPriceTarget, etc.) — not the correct target consensus values.
-              Phase 17 corrects this by using{" "}
-              <span className="font-mono">price-target-consensus</span> which provides real targetConsensus,
-              targetHigh, targetLow, and targetMedian. Analyst Upside is display-only until Opportunity Score v2.
+              Raw analyst target values are <strong>never modified</strong> during scoring.
+              No external API calls are made during Opportunity Score calculation — all inputs are read from the DB.
             </p>
           </div>
         </div>
@@ -396,7 +483,7 @@ export default function ScoreMethodologyTab() {
             <Info className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
             <div className="text-xs text-slate-400 space-y-1">
               <p>Existing target prices are <strong className="text-slate-300">never deleted</strong> by an empty response — only overwritten when new valid data is found.</p>
-              <p>Opportunity Score v1 is <strong className="text-slate-300">unchanged</strong>. Analyst Upside will be added to scoring once coverage reaches ≥ 60% (preferred ≥ 80%).</p>
+              <p>Analyst upside and sentiment are now included in <strong className="text-slate-300">Opportunity Score v2</strong> (Phase 20). This discovery tool is a legacy supplement only.</p>
             </div>
           </div>
         </div>
@@ -420,13 +507,14 @@ export default function ScoreMethodologyTab() {
               "Peer comparison within sector",
               "Z-score normalization for distributions with sufficient data",
               "Moat score (R&D %, brand strength proxy)",
-              "Analyst target / upside (Opportunity Score v2)",
-              "Technical trend / moving averages (Opportunity Score v2)",
-              "Relative volume anomaly (Opportunity Score v2)",
-              "News and catalyst score (Opportunity Score v2)",
-              "Earnings timing (Opportunity Score v2)",
-              "Sector-relative valuation (Opportunity Score v2)",
-              "Drawdown / rebound pattern (Opportunity Score v2)",
+              "Technical trend / moving averages (Opportunity Score v3)",
+              "Relative volume anomaly (Opportunity Score v3)",
+              "News and catalyst score (Opportunity Score v3)",
+              "Earnings timing (Opportunity Score v3)",
+              "Sector-relative valuation (Opportunity Score v3)",
+              "Drawdown / rebound pattern (Opportunity Score v3)",
+              "Analyst Sentiment Score (separate standalone score)",
+              "Momentum Score",
             ].map((item) => (
               <div key={item} className="flex items-start gap-2">
                 <span className="text-slate-600 mt-0.5">•</span>
