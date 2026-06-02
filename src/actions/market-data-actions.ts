@@ -1119,6 +1119,7 @@ export async function calculateOpportunityScoresAction(): Promise<ScoreCalcResul
       score: true,
       metric: true,
       quote: true,
+      analystData: true,
     },
     orderBy: { symbol: "asc" },
   });
@@ -1142,14 +1143,22 @@ export async function calculateOpportunityScoresAction(): Promise<ScoreCalcResul
     };
 
     const score = stock.score;
+    const analyst = stock.analystData;
     const input: OpportunityScoreInput = {
       fundamentalScore: toNum(score.fundamentalScore),
       valuationScore: toNum(score.valuationScore),
       growthScore: toNum(score.growthScore),
       riskContextScore: toNum(score.riskContextScore),
+      analystUpsidePercent: analyst ? toNum(analyst.analystUpsidePercent) : null,
+      strongBuyCount: analyst?.strongBuyCount ?? null,
+      buyCount: analyst?.buyCount ?? null,
+      holdCount: analyst?.holdCount ?? null,
+      sellCount: analyst?.sellCount ?? null,
+      strongSellCount: analyst?.strongSellCount ?? null,
+      analystCount: analyst?.analystCount ?? null,
       price: stock.quote ? toNum(stock.quote.price) : null,
-      week52High: stock.metric ? toNum(stock.metric.week52High) : null,
-      week52Low: stock.metric ? toNum(stock.metric.week52Low) : null,
+      week52High: stock.quote ? toNum(stock.quote.week52High) : null,
+      week52Low: stock.quote ? toNum(stock.quote.week52Low) : null,
     };
 
     let result;

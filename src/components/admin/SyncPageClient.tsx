@@ -2095,7 +2095,7 @@ export default function SyncPageClient({
               disabled={isLoading || anyChunkedRunning}
               loading={activeAction === "calc-opportunity-scores"}
               label="Calculate Opportunity Scores"
-              description="Calculates Opportunity Score v1 from stored Fundamental Score, valuation, growth, risk/context, and 52-week price position. No external APIs."
+              description="Calculates Opportunity Score v2 using fundamental quality, valuation, growth, analyst upside, analyst sentiment, price position, and risk context. Uses only DB data; no external API calls."
             />
             {isSyncRunning && activeAction === "calc-opportunity-scores" && activeSyncMeta && (
               <SyncInProgressPanel
@@ -2111,7 +2111,7 @@ export default function SyncPageClient({
                 Updates only <span className="font-mono text-slate-400">oppScore</span>,{" "}
                 <span className="font-mono text-slate-400">oppScoreVersion</span>, and{" "}
                 <span className="font-mono text-slate-400">oppCalculatedAt</span>. Skips stocks with no{" "}
-                <span className="font-mono text-slate-400">fundamentalScore</span>. No external provider calls.
+                <span className="font-mono text-slate-400">fundamentalScore</span>. Run after Company Data Sync and Daily Market Data Sync so analyst targets, quotes, and financial metrics are fresh.
               </p>
             </div>
           </section>
