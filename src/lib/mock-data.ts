@@ -117,6 +117,9 @@ export type HotStock = {
   week52Low?: number | null;
   priceAvg50?: number | null;
   priceAvg200?: number | null;
+  // Phase 21B: company profile fields
+  industry?: string | null;
+  description?: string | null;
 };
 
 export const mockHotStocks: HotStock[] = [

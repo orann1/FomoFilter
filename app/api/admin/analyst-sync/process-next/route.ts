@@ -354,6 +354,14 @@ export async function POST() {
       if (fmpProfile.sector && fmpProfile.sector.trim().length > 0) {
         profileUpdate.sector = fmpProfile.sector;
       }
+      // Persist industry — only overwrite if FMP returned a non-empty value
+      if (fmpProfile.industry && fmpProfile.industry.trim().length > 0) {
+        profileUpdate.industry = fmpProfile.industry;
+      }
+      // Persist description — only overwrite if FMP returned a non-empty value
+      if (fmpProfile.description && fmpProfile.description.trim().length > 0) {
+        profileUpdate.description = fmpProfile.description;
+      }
       if (Object.keys(profileUpdate).length > 0) {
         try {
           await prisma.stock.update({ where: { id: stock.id }, data: profileUpdate });

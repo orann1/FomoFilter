@@ -1,5 +1,5 @@
 import type { HotStock } from "@/src/lib/mock-data";
-import { formatRatio, formatCurrency } from "@/src/lib/formatters";
+import { formatRatio, formatCurrency, formatCompactCurrency } from "@/src/lib/formatters";
 
 // --- Shared helpers ---
 
@@ -28,7 +28,7 @@ function fmtPrice(v: number | null | undefined): string {
 
 function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-slate-900/60 border border-slate-800/80 rounded-lg p-3 flex flex-col gap-2">
+    <div className="bg-slate-900/60 border border-slate-800/80 rounded-lg p-3 flex flex-col gap-2 overflow-hidden min-w-0">
       <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-800/60 pb-1.5 mb-0.5">
         {title}
       </p>
@@ -49,11 +49,14 @@ function MetricRow({
   valueClass?: string;
 }) {
   return (
-    <div className="flex items-center justify-between gap-2 py-0.5">
-      <span className="text-xs text-slate-500 cursor-help shrink-0" title={tooltip}>
+    <div className="flex items-baseline justify-between gap-2 py-0.5 min-w-0">
+      <span className="text-xs text-slate-500 cursor-help shrink-0 leading-snug" title={tooltip}>
         {label}
       </span>
-      <span className={`text-xs tabular-nums font-medium text-right ${valueClass ?? "text-slate-300"} ${value === "N/A" ? "!text-slate-600" : ""}`}>
+      <span
+        className={`text-xs font-medium text-right min-w-0 truncate leading-snug ${valueClass ?? "text-slate-300"} ${value === "N/A" ? "!text-slate-600" : ""}`}
+        title={value}
+      >
         {value}
       </span>
     </div>
@@ -208,56 +211,107 @@ export default function ScannerExpandedRow({ stock, colSpan }: ScannerExpandedRo
     <tr className="bg-[#0a0c11]">
       <td colSpan={colSpan} className="px-4 py-5">
 
-        {/* Section 1: Decision Summary — badge-chip layout */}
-        <div className="mb-4 px-4 py-3 bg-slate-900/60 border border-slate-800/80 rounded-lg space-y-2.5">
-          {/* Status */}
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider w-16 shrink-0">Status</span>
-            <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full ${badgeColor}`}>
-              {badge}
-            </span>
-          </div>
+        {/* Section 1: Decision Summary + Company Snapshot — stacked rows */}
+        <div className="mb-4 bg-slate-900/60 border border-slate-800/80 rounded-lg overflow-hidden">
 
-          {/* Strengths chips */}
-          <div className="flex items-start gap-2">
-            <span className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider w-16 shrink-0 mt-0.5">Strengths</span>
-            <div className="flex flex-wrap gap-1.5">
-              {strengths.length > 0 ? (
-                strengths.map((s) => (
-                  <span key={s} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 border border-emerald-600/20 text-emerald-300/90 whitespace-nowrap">
-                    <span className="text-emerald-500 leading-none text-[11px]">+</span>{s}
+          {/* Row 1: Decision Tag, Strengths, Concerns */}
+          <div className="px-4 py-3 space-y-2.5 min-w-0 border-b border-slate-800/60">
+            {/* Decision Tag */}
+            <div className="flex items-center gap-2">
+              <span
+                className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider w-20 shrink-0 cursor-help"
+                title="Rule-based tag derived from Opportunity Score, fundamentals, valuation, analyst upside, stability, and detected concerns. It is not an external analyst rating."
+              >
+                Decision Tag
+              </span>
+              <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full ${badgeColor}`}>
+                {badge}
+              </span>
+            </div>
+
+            {/* Strengths chips */}
+            <div className="flex items-start gap-2">
+              <span className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider w-20 shrink-0 mt-0.5">Strengths</span>
+              <div className="flex flex-wrap gap-1.5">
+                {strengths.length > 0 ? (
+                  strengths.map((s) => (
+                    <span key={s} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 border border-emerald-600/20 text-emerald-300/90 whitespace-nowrap">
+                      <span className="text-emerald-500 leading-none text-[11px]">+</span>{s}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-[10px] text-slate-600 italic">None detected</span>
+                )}
+              </div>
+            </div>
+
+            {/* Concerns chips */}
+            <div className="flex items-start gap-2">
+              <span className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider w-20 shrink-0 mt-0.5">Concerns</span>
+              <div className="flex flex-wrap gap-1.5">
+                {concerns.length > 0 ? (
+                  concerns.map((c) => (
+                    <span key={c} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 border border-amber-600/20 text-amber-300/90 whitespace-nowrap">
+                      <span className="text-amber-500 leading-none text-[11px]">−</span>{c}
+                    </span>
+                  ))
+                ) : (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-800/60 border border-slate-700/30 text-slate-500 whitespace-nowrap">
+                    No major concerns detected
                   </span>
-                ))
-              ) : (
-                <span className="text-[10px] text-slate-600 italic">None detected</span>
-              )}
+                )}
+              </div>
             </div>
           </div>
 
-          {/* Concerns chips */}
-          <div className="flex items-start gap-2">
-            <span className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider w-16 shrink-0 mt-0.5">Concerns</span>
-            <div className="flex flex-wrap gap-1.5">
-              {concerns.length > 0 ? (
-                concerns.map((c) => (
-                  <span key={c} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 border border-amber-600/20 text-amber-300/90 whitespace-nowrap">
-                    <span className="text-amber-500 leading-none text-[11px]">−</span>{c}
-                  </span>
-                ))
-              ) : (
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-800/60 border border-slate-700/30 text-slate-500 whitespace-nowrap">
-                  No major concerns detected
-                </span>
-              )}
+          {/* Row 2: Company Snapshot — full width, meta left + description right */}
+          <div className="px-4 py-3">
+            <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">
+              Company Snapshot
+            </p>
+            <div className="flex items-start gap-6 min-w-0">
+              {/* Left: identity (fixed width, compact) */}
+              <div className="w-52 shrink-0 space-y-1">
+                <div className="text-xs text-slate-200 font-medium leading-tight truncate" title={stock.name}>
+                  {stock.name}
+                </div>
+                {(stock.sector || stock.industry) && (
+                  <div className="text-[11px] text-slate-500 truncate">
+                    {[stock.sector, stock.industry].filter(Boolean).join(" · ")}
+                  </div>
+                )}
+                {stock.marketCapFull != null && (
+                  <div className="text-[11px]">
+                    <span className="text-slate-600">Mkt Cap </span>
+                    <span className="text-slate-400 font-medium">{formatCompactCurrency(stock.marketCapFull)}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Right: description — takes remaining width, 3-line clamp */}
+              <div className="flex-1 min-w-0">
+                {stock.description ? (
+                  <p
+                    className="text-[11px] text-slate-400 leading-relaxed"
+                    style={{ display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}
+                    title={stock.description}
+                  >
+                    {stock.description}
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-slate-600 italic">Description not available</p>
+                )}
+              </div>
             </div>
           </div>
+
         </div>
 
-        {/* Sections 2–8 in grid */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
+        {/* Sections 2–8 in grid — max 4 columns so cards are wide enough to display values cleanly */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
 
-          {/* Section 2: Our Calculated Scores */}
-          <div className="col-span-2 md:col-span-2 xl:col-span-2">
+          {/* Section 2: Our Calculated Scores — spans 2 columns for wider score bars */}
+          <div className="sm:col-span-2 lg:col-span-2">
             <SectionCard title="Our Calculated Scores">
               <p className="text-[10px] text-slate-600 -mt-1 mb-1">Internal scores calculated by FomoFilter from synced financial, market, analyst, and stability data.</p>
               <div className="space-y-1.5">
@@ -323,7 +377,7 @@ export default function ScannerExpandedRow({ stock, colSpan }: ScannerExpandedRo
           </div>
 
           {/* Section 3: Analyst View */}
-          <div className="xl:col-span-1">
+          <div>
             <SectionCard title="Analyst View">
               {/* Stars + value + label */}
               <div className="flex items-center gap-1.5 flex-wrap mb-1">
@@ -395,7 +449,7 @@ export default function ScannerExpandedRow({ stock, colSpan }: ScannerExpandedRo
           </div>
 
           {/* Section 4: Valuation Metrics */}
-          <div className="xl:col-span-1">
+          <div>
             <SectionCard title="Valuation Metrics">
               <MetricRow
                 label="P/E"
@@ -435,8 +489,8 @@ export default function ScannerExpandedRow({ stock, colSpan }: ScannerExpandedRo
             </SectionCard>
           </div>
 
-          {/* Section 5: Growth & Profitability */}
-          <div className="xl:col-span-1">
+          {/* Section 5: Growth & Profitability — spans 2 columns to prevent % value wrapping */}
+          <div className="sm:col-span-2 lg:col-span-2">
             <SectionCard title="Growth &amp; Profitability">
               <MetricRow
                 label="Revenue Growth TTM"
@@ -491,7 +545,7 @@ export default function ScannerExpandedRow({ stock, colSpan }: ScannerExpandedRo
           </div>
 
           {/* Section 6: Financial Health */}
-          <div className="xl:col-span-1">
+          <div>
             <SectionCard title="Financial Health">
               <MetricRow
                 label="Debt / Equity"
@@ -549,6 +603,11 @@ export default function ScannerExpandedRow({ stock, colSpan }: ScannerExpandedRo
                   value={fmtPrice(stock.priceAvg200)}
                   tooltip="200-day simple moving average from FMP quote data."
                 />
+                <MetricRow
+                  label="Beta"
+                  value={stock.beta != null ? Number(stock.beta).toFixed(2) : "N/A"}
+                  tooltip="Beta measures stock volatility relative to the market. Higher beta generally means higher volatility."
+                />
                 {week52Pos != null && (
                   <div className="mt-1 pt-1 border-t border-slate-800/60">
                     <div className="flex items-center gap-2">
@@ -572,7 +631,7 @@ export default function ScannerExpandedRow({ stock, colSpan }: ScannerExpandedRo
           </div>
 
           {/* Section 8: Data Freshness */}
-          <div className="xl:col-span-1">
+          <div>
             <SectionCard title="Data Freshness">
               <MetricRow
                 label="Quote Synced"
