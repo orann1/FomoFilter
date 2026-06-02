@@ -191,8 +191,19 @@ export async function getScannerData({
         analystCount: s.analystData?.analystCount ?? null,
         analystTargetHigh: s.analystData ? toNum(s.analystData.targetHigh) : null,
         analystTargetLow: s.analystData ? toNum(s.analystData.targetLow) : null,
+        analystTargetMedian: s.analystData ? toNum(s.analystData.targetMedian) : null,
         analystSource: s.analystData?.source ?? null,
         analystLastSyncedAt: s.analystData?.lastSyncedAt?.toISOString() ?? null,
+        analystStrongBuyCount: s.analystData?.strongBuyCount ?? null,
+        analystBuyCount: s.analystData?.buyCount ?? null,
+        analystHoldCount: s.analystData?.holdCount ?? null,
+        analystSellCount: s.analystData?.sellCount ?? null,
+        analystStrongSellCount: s.analystData?.strongSellCount ?? null,
+        // Phase 21A: quote 52W and moving average fields
+        week52High: s.quote ? toNum(s.quote.week52High) : null,
+        week52Low: s.quote ? toNum(s.quote.week52Low) : null,
+        priceAvg50: s.quote ? toNum(s.quote.priceAvg50) : null,
+        priceAvg200: s.quote ? toNum(s.quote.priceAvg200) : null,
       };
     });
 
