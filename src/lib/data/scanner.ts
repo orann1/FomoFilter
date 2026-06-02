@@ -128,6 +128,8 @@ export async function getScannerData({
         catalyst: s.score!.catalyst ?? "",
         inWatchlist: watchlistStockIds.has(s.id),
         sector: s.sector ?? "",
+        industry: s.industry ?? null,
+        description: s.description ?? null,
         weekChange: Number(s.quote!.weekChange ?? 0),
         monthChange: Number(s.quote!.monthChange ?? 0),
         volume: s.quote!.volume ? String(s.quote!.volume) : "",

@@ -4,11 +4,23 @@ import React, { useState } from "react";
 import { Star, Bell, ChevronDown, ChevronRight } from "lucide-react";
 import type { HotStock } from "@/src/lib/mock-data";
 import type { ActiveAlertRule } from "@/src/lib/data/dashboard";
+import type { SortKey } from "./ScannerControls";
 import { formatCurrency, formatPercent } from "@/src/lib/formatters";
 import ScannerExpandedRow from "./ScannerExpandedRow";
 
 // 12 total columns: star + symbol + sector + price + day% + opp + fund + valuation + stability + upside + rating + expand
 const TOTAL_COLS = 12;
+
+// Maps sort key → column identifier
+const SORT_COL_MAP: Partial<Record<SortKey, string>> = {
+  "opportunity-score":  "opportunity",
+  "fundamental-score":  "fundamental",
+  "valuation-score":    "valuation",
+  "risk-score":         "stability",
+  "daily-change":       "day",
+  "analyst-upside":     "upside",
+  "symbol":             "symbol",
+};
 
 // --- Score tiers ---
 function scoreBarColor(n: number): string {
@@ -127,9 +139,20 @@ function RatingCell({
   );
 }
 
-// --- Column highlight helpers (header-only; cells have no background) ---
-function thClass(highlighted: boolean): string {
+// --- Column highlight helpers ---
+// Filter highlight: amber text for header
+function thFilterClass(highlighted: boolean): string {
   return highlighted ? "text-amber-400/70" : "text-slate-500";
+}
+
+// Sort highlight: blue tint for header when this column is the active sort
+function thSortClass(isActiveSort: boolean): string {
+  return isActiveSort ? "text-blue-300/90 bg-blue-500/[0.06]" : "";
+}
+
+// Sort highlight for body cells
+function tdSortClass(isActiveSort: boolean): string {
+  return isActiveSort ? "bg-blue-500/[0.03]" : "";
 }
 
 // --- Header tooltip wrapper ---
@@ -141,6 +164,8 @@ function Th({
   highlighted,
   groupStart,
   className,
+  isActiveSort,
+  sortArrow,
 }: {
   children: React.ReactNode;
   tooltip: string;
@@ -149,7 +174,10 @@ function Th({
   highlighted?: boolean;
   groupStart?: boolean;
   className?: string;
+  isActiveSort?: boolean;
+  sortArrow?: string;
 }) {
+  const filterHighlight = highlighted && !isActiveSort;
   return (
     <th
       title={tooltip}
@@ -157,11 +185,14 @@ function Th({
         text-xs font-semibold uppercase tracking-wider px-3 py-3 cursor-help select-none
         ${right ? "text-right" : center ? "text-center" : "text-left"}
         ${groupStart ? "border-l border-slate-700/50" : ""}
-        ${thClass(!!highlighted)}
+        ${isActiveSort ? thSortClass(true) : thFilterClass(!!filterHighlight)}
         ${className ?? ""}
       `}
     >
       {children}
+      {isActiveSort && sortArrow && (
+        <span className="ml-1 text-blue-400 font-bold">{sortArrow}</span>
+      )}
     </th>
   );
 }
@@ -172,6 +203,7 @@ interface ScannerTableProps {
   alertRulesBySymbol: Record<string, ActiveAlertRule[]>;
   onSelectStock: (stock: HotStock) => void;
   highlightedColumns?: Set<string>;
+  sortBy?: SortKey;
 }
 
 export default function ScannerTable({
@@ -180,6 +212,7 @@ export default function ScannerTable({
   alertRulesBySymbol,
   onSelectStock,
   highlightedColumns = new Set(),
+  sortBy,
 }: ScannerTableProps) {
   const [expandedSymbols, setExpandedSymbols] = useState<Set<string>>(new Set());
 
@@ -195,12 +228,23 @@ export default function ScannerTable({
 
   if (stocks.length === 0) return null;
 
-  const hlDay   = highlightedColumns.has("day");
-  const hlOpp   = highlightedColumns.has("opportunity");
-  const hlFund  = highlightedColumns.has("fundamental");
-  const hlVal   = highlightedColumns.has("valuation");
-  const hlStab  = highlightedColumns.has("stability");
+  // Active sort column + arrow label
+  const activeSortCol = sortBy ? (SORT_COL_MAP[sortBy] ?? null) : null;
+  const sortArrow = sortBy === "symbol" ? "A–Z" : "↓";
+
+  const hlDay    = highlightedColumns.has("day");
+  const hlOpp    = highlightedColumns.has("opportunity");
+  const hlFund   = highlightedColumns.has("fundamental");
+  const hlVal    = highlightedColumns.has("valuation");
   const hlUpside = highlightedColumns.has("upside");
+
+  const sortDay    = activeSortCol === "day";
+  const sortOpp    = activeSortCol === "opportunity";
+  const sortFund   = activeSortCol === "fundamental";
+  const sortVal    = activeSortCol === "valuation";
+  const sortStab   = activeSortCol === "stability";
+  const sortUpside = activeSortCol === "upside";
+  const sortSym    = activeSortCol === "symbol";
 
   return (
     <div className="hidden md:block overflow-x-auto rounded-xl border border-slate-800">
@@ -210,13 +254,21 @@ export default function ScannerTable({
             <th className="w-8 px-3 py-3"></th>
 
             {/* Group 1: Identity / Market */}
-            <Th tooltip="Stock ticker, company name, and index membership.">Symbol</Th>
+            <Th
+              tooltip="Stock ticker, company name, and index membership."
+              isActiveSort={sortSym}
+              sortArrow={sortArrow}
+            >
+              Symbol
+            </Th>
             <Th tooltip="Company sector based on FMP profile data.">Sector</Th>
             <Th tooltip="Latest synced market price from Daily Market Data Sync." right>Price</Th>
             <Th
               tooltip="Daily percentage change from the latest synced quote."
               right
               highlighted={hlDay}
+              isActiveSort={sortDay}
+              sortArrow={sortArrow}
             >
               Day %
             </Th>
@@ -227,6 +279,8 @@ export default function ScannerTable({
               right
               highlighted={hlOpp}
               groupStart
+              isActiveSort={sortOpp}
+              sortArrow={sortArrow}
             >
               Opportunity
             </Th>
@@ -234,6 +288,8 @@ export default function ScannerTable({
               tooltip="Internal Fundamental Score based on growth, profitability, valuation, financial health, and stability inputs. Higher is better."
               right
               highlighted={hlFund}
+              isActiveSort={sortFund}
+              sortArrow={sortArrow}
             >
               Fundamental
             </Th>
@@ -241,13 +297,16 @@ export default function ScannerTable({
               tooltip="Internal Valuation Score based on valuation ratios such as P/E, P/S, EV/EBITDA, and PEG. Higher generally means more reasonable valuation."
               right
               highlighted={hlVal}
+              isActiveSort={sortVal}
+              sortArrow={sortArrow}
             >
               Valuation
             </Th>
             <Th
               tooltip="Stability Score measures risk context. Higher is better and generally means lower volatility/risk context based mainly on beta and related inputs."
               right
-              highlighted={hlStab}
+              isActiveSort={sortStab}
+              sortArrow={sortArrow}
             >
               Stability
             </Th>
@@ -258,6 +317,8 @@ export default function ScannerTable({
               center
               highlighted={hlUpside}
               groupStart
+              isActiveSort={sortUpside}
+              sortArrow={sortArrow}
             >
               Analyst Upside
             </Th>
@@ -308,7 +369,7 @@ export default function ScannerTable({
                   </td>
 
                   {/* Symbol */}
-                  <td className="px-3 py-3">
+                  <td className={`px-3 py-3 ${tdSortClass(sortSym)}`}>
                     <div>
                       <span className="text-white font-semibold">{stock.symbol}</span>
                       <p className="text-xs text-slate-500 truncate max-w-[130px]">{stock.name}</p>
@@ -340,34 +401,34 @@ export default function ScannerTable({
                   </td>
 
                   {/* Day % */}
-                  <td className="px-3 py-3 text-right">
+                  <td className={`px-3 py-3 text-right ${tdSortClass(sortDay)}`}>
                     <span className={`font-semibold tabular-nums text-xs ${stock.change >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                       {formatPercent(stock.change)}
                     </span>
                   </td>
 
                   {/* Opportunity — group 2 start */}
-                  <td className="px-3 py-3 text-right border-l border-slate-700/30">
+                  <td className={`px-3 py-3 text-right border-l border-slate-700/30 ${tdSortClass(sortOpp)}`}>
                     <ScoreCell value={stock.oppScore} />
                   </td>
 
                   {/* Fundamental */}
-                  <td className="px-3 py-3 text-right">
+                  <td className={`px-3 py-3 text-right ${tdSortClass(sortFund)}`}>
                     <ScoreCell value={stock.fundamentalScore} />
                   </td>
 
                   {/* Valuation */}
-                  <td className="px-3 py-3 text-right">
+                  <td className={`px-3 py-3 text-right ${tdSortClass(sortVal)}`}>
                     <ScoreCell value={stock.valuationScore} />
                   </td>
 
                   {/* Stability */}
-                  <td className="px-3 py-3 text-right">
+                  <td className={`px-3 py-3 text-right ${tdSortClass(sortStab)}`}>
                     <ScoreCell value={stock.riskContextScore} />
                   </td>
 
                   {/* Analyst Upside — group 3 start, center-aligned */}
-                  <td className="px-3 py-3 text-center border-l border-slate-700/30">
+                  <td className={`px-3 py-3 text-center border-l border-slate-700/30 ${tdSortClass(sortUpside)}`}>
                     {stock.analystUpsidePercent != null ? (
                       <span className={`text-xs font-semibold tabular-nums ${stock.analystUpsidePercent >= 0 ? "text-emerald-400" : "text-red-400"}`}>
                         {stock.analystUpsidePercent >= 0 ? "+" : ""}{Number(stock.analystUpsidePercent).toFixed(1)}%

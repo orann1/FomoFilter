@@ -1,4 +1,4 @@
-# Phase 21A — Scanner Decision View Cleanup
+# Phase 21B — Scanner Pagination, Table Usability & Expanded Row Cleanup
 
 ## Status
 
@@ -8,813 +8,766 @@ Completed
 
 ## Goal
 
-Refactor the Scanner page from a dense data table into a clear, modern **Decision View**.
+Continue the Scanner cleanup after Phase 21A by fixing the remaining usability issues before moving to Drawer cleanup or new data features.
 
-This phase should improve readability, reduce visual overload, fix the expanded-row bug, and make every displayed value easier to understand.
+Phase 21A already improved the Scanner table, score bars, rating stars, tooltips, Stability naming, quick filters, Advanced Filters, and expanded-row structure.
 
-The Scanner already has strong data after the recent FMP and scoring phases. The next step is not to add more data, but to present the existing data better.
+However, several important UX issues remain:
+
+```txt
+Default view still filters to High Opportunity instead of showing all stocks ranked by opportunity.
+Pagination is missing.
+Search/filter/sort must work across the full dataset before pagination.
+The active sort/highlight column is not clear enough.
+Expanded row top summary still needs better meaning and structure.
+Status label is unclear.
+Company context is missing from expanded row.
+```
+
+This phase should finish the Scanner table and expanded-row usability work.
 
 ---
 
-## Core Problem
+## Important Scope Decision
 
-The current Scanner works technically, but the UI is overloaded:
+Do **not** include full Drawer cleanup in this phase.
+
+The Drawer appears to still contain legacy/mock-oriented content such as:
 
 ```txt
-Too many columns
-Too many filters
-Many unclear abbreviations
-Too many raw numbers
-Weak visual hierarchy
-Expanded row chevron appears only after search
-Expanded row contains useful data but is hard to scan
-Some headers have tooltips, others do not
-Some users cannot tell what filter affected which column
+Hot Score
+Signal
+AI Insight
+Main Catalyst
+Price Context mock chart
+Watch Context
+legacy setup labels
 ```
 
-The Scanner should help answer:
+That should be handled in a dedicated follow-up phase:
 
 ```txt
-Which stocks are interesting?
-Why are they interesting?
-What is the upside?
-Is the company fundamentally strong?
-Is it expensive or reasonably valued?
-What is the main stability/risk context?
-Which data is raw provider data and which data is calculated by the app?
+Phase 21C — Drawer Real Data & Decision Workspace Cleanup
 ```
 
----
-
-## Important Product Direction
-
-The main Scanner table should not look like a technical data dump.
-
-It should feel like a modern investing decision table.
-
-Use visual UI elements where appropriate:
+Phase 21B should focus on:
 
 ```txt
-Progress bars for calculated scores
-Stars for analyst rating
-Badges for status/rating
-Tooltips for every header
-Tooltips for every parameter in expanded row
-Grouped visual sections
-Highlighted filtered columns
-Clear labels instead of unclear abbreviations
-```
-
-The user specifically requested:
-
-```txt
-1. Main table parameters should be visually interesting and pleasant to read.
-2. Rating should use 1–5 stars, including half stars if possible, plus a label/score.
-3. Calculated scores should use progress bars with score numbers.
-4. Every table header must have a tooltip.
-5. Every expanded-row parameter should also have a tooltip.
-6. Risk should be renamed to Stability.
-7. Stability tooltip must explain that higher score means more stable / lower risk context.
-8. Filtered columns should be highlighted so the user knows which value caused the filter.
-9. Expanded row chevron must always appear, not only after search.
-10. Expanded row should remain rich and informative but be reorganized into clearer sections.
+Scanner main table
+Scanner controls
+Pagination
+Search/filter/sort behavior
+Expanded row top summary
+Expanded row company snapshot
+Mobile pagination behavior
 ```
 
 ---
 
 ## Non-Scope
 
-Do not add new data.
-
-Do not add new API calls.
-
-Do not change providers.
-
-Do not change Prisma schema.
-
-Do not add migrations.
-
-Do not change scoring formulas.
-
-Do not change Opportunity Score v2.
-
-Do not change Fundamental Score.
-
-Do not change Dashboard yet.
-
-Do not change Data Inventory except if absolutely needed for shared component imports.
-
-Do not implement Momentum, News, Candles, Catalyst, or any new scores.
-
----
-
-## Files To Inspect
-
-Before implementation, inspect:
+Do not change:
 
 ```txt
-src/components/scanner/ScannerTable.tsx
-src/components/scanner/ScannerExpandedRow.tsx
-src/components/scanner/ScannerPageClient.tsx
-src/components/scanner/ScannerControls.tsx
-src/components/scanner/ScannerFilters.tsx
-src/components/scanner/ScannerViewPills.tsx
-src/components/scanner/MobileScannerCard.tsx
-src/lib/data/scanner.ts
-src/lib/formatters.ts
-src/lib/mock-data.ts
-```
-
-Also inspect shared UI helpers if present:
-
-```txt
-components/ui/*
-src/components/ui/*
-src/lib/utils.ts
-```
-
-Do not create new shared UI components unless they clearly reduce duplication.
-
----
-
-# 1. Main Table: Reduce Columns
-
-## Current Problem
-
-The current main table includes too many data-heavy columns:
-
-```txt
-Symbol
-Sector
-Price
-Day %
-Target
-Upside
-Rating
-Opp.
-Fund.
-Growth
-Profit.
-Valuat.
-Health
-Risk
-P/E
-PEG
-ROE
-Rev Gr.
-Mkt Cap
-```
-
-This makes the table hard to scan.
-
----
-
-## Required Main Table Columns
-
-The main table should focus on decision-making.
-
-Recommended final columns:
-
-```txt
-Symbol
-Sector
-Price
-Day %
-Opportunity Score
+DB schema
+Prisma migrations
+API routes
+Providers
+Scoring formulas
+Opportunity Score v2
 Fundamental Score
-Analyst Upside
-Analyst Rating
-Valuation Score
-Stability Score
+Company Data Sync
+Daily Market Data Sync
+Dashboard
+Admin Sync
+Drawer redesign
 ```
 
-Optional, only if space remains:
+Do not add:
 
 ```txt
-Target Price
+New data
+New API calls
+New provider calls
+New score fields
+Momentum
+News
+Candles
+Catalysts
+AI-generated summaries
 ```
 
-Default recommendation:
-
-```txt
-Move Target Price to expanded row.
-Keep Analyst Upside in the main table.
-```
+No migration is expected.
 
 ---
 
-## Move These To Expanded Row
+## Current Scanner Context
 
-Move these out of the main table and into expanded row:
-
-```txt
-Growth Score
-Profitability Score
-Financial Health Score
-P/E
-PEG
-ROE
-Revenue Growth
-Market Cap
-Target Price
-Target High
-Target Low
-Target Median
-Analyst Count
-52W High
-52W Low
-PriceAvg50
-PriceAvg200
-Margins
-Debt / Equity
-Current Ratio
-Quick Ratio
-Interest Coverage
-Data Freshness
-```
-
----
-
-# 2. Main Table: Clear Labels, No Ambiguous Abbreviations
-
-## Current Problem
-
-Headers like these are unclear:
+The main Scanner table currently shows:
 
 ```txt
-Opp.
-Fund.
-Valuat.
-Risk
-Rev Gr.
-Mkt Cap
-```
-
-## Required Header Labels
-
-Use clearer labels:
-
-| Old | New |
-| --- | --- |
-| Opp. | Opportunity |
-| Fund. | Fundamental |
-| Valuat. | Valuation |
-| Risk | Stability |
-| Rev Gr. | Revenue Growth |
-| Mkt Cap | Market Cap |
-
-In the main table, since space is limited, short labels may be used only if the tooltip and visual grouping are clear.
-
-Preferred main-table headers:
-
-```txt
+Symbol
+Sector
+Price
+Day %
 Opportunity
 Fundamental
-Analyst Upside
-Rating
 Valuation
 Stability
+Analyst Upside
+Rating
+```
+
+Recent Phase 21A changes already added:
+
+```txt
+Score bars for calculated scores
+Stars for analyst rating
+Risk renamed to Stability
+Header tooltips
+Expanded row sections
+Quick filters
+Advanced Filters
+Chevron always visible
+Rating stars + numeric value + label
+Analyst Upside centered
+Sort dropdown near filters
+```
+
+This phase builds on that work.
+
+---
+
+# 1. Default Scanner View
+
+## Current Problem
+
+The Scanner currently defaults to the `High Opportunity` quick filter.
+
+That causes initial load to show only a subset such as:
+
+```txt
+16 / 100 stocks
+```
+
+This is confusing because users expect to see the full universe ranked by opportunity, not a filtered subset.
+
+---
+
+## Required Behavior
+
+Default scanner state should be:
+
+```txt
+Active quick filter: All Stocks
+Sort: Opportunity Score descending
+Highlighted column: Opportunity
+Page size: 20
+Current page: 1
+```
+
+Summary text:
+
+```txt
+Showing all stocks — sorted by Opportunity Score
+```
+
+Result count text:
+
+```txt
+Showing 1–20 of 100 stocks
 ```
 
 ---
 
-# 3. Rename Risk To Stability
+## High Opportunity Behavior
 
-## Requirement
+`High Opportunity` should remain available as an optional quick filter.
 
-Rename visible UI label:
+When clicked:
 
 ```txt
-Risk
+Filter: Opportunity Score >= 75
+Sort: Opportunity Score descending
+Highlighted column: Opportunity
 ```
 
-to:
+Summary text:
 
 ```txt
-Stability
+High Opportunity (≥ 75) — sorted by Opportunity Score
 ```
 
-This applies to:
+Result count example:
 
 ```txt
-Scanner table header
-Scanner expanded row
-Mobile scanner card if present
-Tooltips
-Any visible scanner labels
-```
-
-Do not rename DB fields or scoring fields in this phase.
-
-The data source can remain:
-
-```txt
-riskContextScore
-```
-
-But user-facing label should be:
-
-```txt
-Stability
-```
-
-## Tooltip Text
-
-Use:
-
-```txt
-Stability Score measures the stock's risk context. Higher is better: a higher score generally means lower volatility/risk context based mainly on beta and related risk inputs.
+Showing 1–16 of 16 stocks
 ```
 
 Important:
 
 ```txt
-A score of 100 means high stability / favorable risk context.
-It does not mean high risk.
+Default = rank all stocks by opportunity.
+High Opportunity = optional threshold filter.
+```
+
+Do not confuse filtering with sorting.
+
+---
+
+# 2. Pagination
+
+## Current Problem
+
+All Stocks currently renders all 100 rows.
+
+This will not scale when the universe grows to:
+
+```txt
+1000+ stocks
 ```
 
 ---
 
-# 4. Visual Presentation: Make Scores Interesting
+## Required Pagination
+
+Add pagination to the Scanner table.
+
+Default page size:
+
+```txt
+20
+```
+
+Page size options:
+
+```txt
+10
+20
+50
+100
+```
+
+Add compact controls:
+
+```txt
+Previous
+Next
+Current page indicator
+Page size selector
+Result count
+```
+
+Examples:
+
+```txt
+Showing 1–20 of 100 stocks
+Page 1 of 5
+```
+
+Filtered example:
+
+```txt
+Showing 1–16 of 16 stocks
+Page 1 of 1
+```
+
+---
+
+## Required Data Flow Order
+
+This is critical.
+
+The logic order must be:
+
+```txt
+all stocks
+→ search
+→ filters
+→ sort
+→ pagination
+```
+
+Do not paginate first.
+
+Search, filters, and sort must always apply to the full dataset.
+
+---
+
+## Required Reset Behavior
+
+Reset to page 1 when any of these change:
+
+```txt
+Search query
+Quick filter
+Advanced filter
+Sort option
+Page size
+Universe
+```
+
+Do not reset page when:
+
+```txt
+Expanding/collapsing a row
+Toggling watchlist
+Opening drawer
+```
+
+---
+
+# 3. Search Behavior With Pagination
 
 ## Requirement
 
-Calculated scores should not be shown as plain numbers only.
-
-Use a compact score bar or mini progress bar.
-
-Applies to:
-
-```txt
-Opportunity Score
-Fundamental Score
-Valuation Score
-Stability Score
-```
-
-Optional in expanded row:
-
-```txt
-Growth Score
-Profitability Score
-Financial Health Score
-```
-
-## Suggested Score Cell
-
-Each calculated score cell should show:
-
-```txt
-Score number
-Horizontal mini progress bar
-Color/strength based on score tier
-```
+Search must work across all stocks, not only the current page.
 
 Example:
 
 ```txt
-82
-[████████░░]
+User is on page 3.
+User searches NVDA.
+NVDA should be found even if it was on page 1.
+Search resets to page 1.
 ```
 
-or compact:
+Search should still support:
 
 ```txt
-82  ━━━━━━━░░
+Ticker
+Company name
 ```
 
-## Score Tiers
-
-Suggested tiers:
-
-```txt
-80–100: strong
-60–79: good
-40–59: caution
-0–39: weak
-```
-
-Keep it clean in dark mode.
+If sector search is currently supported, keep it.
 
 ---
 
-# 5. Analyst Rating: Stars Instead Of Plain Text Only
+# 4. Filter Behavior With Pagination
 
 ## Requirement
 
-Analyst Rating should not be only raw text like:
-
-```txt
-Buy
-Hold
-Strong Buy
-```
-
-Use a 1–5 star visualization, including half stars if possible.
-
-Display both:
-
-```txt
-Stars + label
-```
+Filters must work across the full filtered dataset before pagination.
 
 Example:
 
 ```txt
-★★★★☆ Buy
+User selects High Opportunity.
+Filter all 100 stocks first.
+Then paginate the 16 matching results.
 ```
 
-or:
+Advanced filter example:
 
 ```txt
-4.0 ★ Buy
-```
-
-## Mapping
-
-Use current recommendation / rating data.
-
-Suggested mapping:
-
-| Rating | Stars |
-| --- | ---: |
-| Strong Buy | 5.0 |
-| Buy | 4.0 |
-| Hold | 3.0 |
-| Sell | 2.0 |
-| Strong Sell | 1.0 |
-
-If half-star is possible based on recommendation mix, implement only if simple and uses existing counts.
-
-Optional half-star approach:
-
-```txt
-Use weighted recommendation score:
-Strong Buy=5, Buy=4, Hold=3, Sell=2, Strong Sell=1
-weighted average = total weighted / analyst count
-round to nearest 0.5
-```
-
-Only do this if the required recommendation counts are already available in the scanner data.
-
-If not simple, use label mapping for v1 of this UI improvement.
-
----
-
-# 6. Tooltips Everywhere
-
-## Required
-
-Every main table header must have a tooltip.
-
-Every expanded-row parameter label must have a tooltip.
-
-Tooltips should explain:
-
-```txt
-What the value means
-Whether higher is better
-Whether it is calculated by the app or provider/raw data
-The rough source if useful
-```
-
-## Main Table Tooltip Examples
-
-### Symbol
-
-```txt
-Stock ticker, company name, and index membership.
-```
-
-### Price
-
-```txt
-Latest synced market price from Daily Market Data Sync.
-```
-
-### Day %
-
-```txt
-Daily percentage change from the latest synced quote.
-```
-
-### Opportunity
-
-```txt
-Opportunity Score v2. Combines fundamental quality, valuation, growth, analyst upside, analyst sentiment, price position, and stability. Higher is better.
-```
-
-### Fundamental
-
-```txt
-Internal Fundamental Score based on growth, profitability, valuation, financial health, and stability inputs. Higher is better.
-```
-
-### Analyst Upside
-
-```txt
-Analyst target upside: the percentage difference between the current price and the consensus target price. Higher means analysts see more upside.
-```
-
-### Rating
-
-```txt
-Analyst recommendation summary converted to a star view. Based on stored recommendation counts.
-```
-
-### Valuation
-
-```txt
-Internal Valuation Score based on valuation ratios such as P/E, P/S, EV/EBITDA, and PEG. Higher generally means more reasonable valuation.
-```
-
-### Stability
-
-```txt
-Stability Score measures risk context. Higher is better and generally means lower volatility/risk context based mainly on beta and related inputs.
+Min Analyst Upside = 20%.
+Apply to all stocks first.
+Then paginate results.
 ```
 
 ---
 
-# 7. Visual Grouping: Calculated Scores vs Raw Data
+# 5. Sort Behavior With Pagination
 
 ## Requirement
 
-The main table should visually distinguish:
+Sort must apply across the full filtered/searched dataset before pagination.
+
+Example:
 
 ```txt
-Calculated app scores
+Sort by Opportunity Score.
+All matching stocks are sorted.
+Then page 1 shows the top 20.
 ```
 
-from:
+When switching sort:
 
 ```txt
-Raw / provider market and analyst data
+Reset to page 1.
+Move highlight and arrow to the sorted column.
 ```
-
-Suggested grouping:
-
-```txt
-Identity / Market
-Symbol, Sector, Price, Day %
-
-Calculated Scores
-Opportunity, Fundamental, Valuation, Stability
-
-Analyst Data
-Analyst Upside, Rating
-```
-
-Use subtle vertical dividers, background tint, or header group styling.
-
-Do not make the table visually noisy.
 
 ---
 
-# 8. Default Sort
+# 6. Active Sort Column Highlight
 
-## Decision
+## Current Problem
 
-Keep default sort as:
+The active sort column is not clear enough.
+
+The header may be colored, but the user's eye does not immediately go to the active sorted column.
+
+---
+
+## Required Behavior
+
+For the active sort column:
 
 ```txt
-Fundamental Score
+Add sort arrow in header
+Highlight header more clearly
+Add subtle body column background tint
 ```
 
-Reason:
+Example header:
 
 ```txt
-Fundamental Score is more understandable to users than Opportunity Score at this stage.
+Opportunity ↓
 ```
 
-Opportunity Score still remains visible and filterable.
-
-Ensure the sort dropdown uses clear labels:
+When sort changes:
 
 ```txt
-Fundamental Score
+Fundamental ↓
+Analyst Upside ↓
+Valuation ↓
+Stability ↓
+Day % ↓
+Symbol A–Z
+```
+
+The highlight should follow the active sort column.
+
+If a filter affects the same column, the summary should mention it.
+
+Use styling that is:
+
+```txt
+Visible enough to guide the eye
+Subtle enough not to overpower the table
+Consistent with dark mode
+```
+
+---
+
+# 7. Filter / Sort / Search Control Layout
+
+## Current Problem
+
+The UI still blurs the distinction between:
+
+```txt
+filters
+sort
+search
+pagination
+```
+
+---
+
+## Required Layout
+
+Use a clear grouped control area.
+
+Suggested layout:
+
+```txt
+Row 1:
+Quick Filters | Sort by | result count
+
+Row 2:
+Search | Filters button | Page size
+
+Row 3 if needed:
+Active filter/sort summary
+```
+
+Pagination can be:
+
+```txt
+Above table on the right
+Below table
+Or both if compact
+```
+
+Preferred:
+
+```txt
+Top: compact result count + page size
+Bottom: previous/next page controls
+```
+
+Do not make controls visually noisy.
+
+---
+
+# 8. Sort Options Cleanup
+
+## Requirement
+
+Sort options should only include visible main-table columns.
+
+Allowed options:
+
+```txt
 Opportunity Score
+Fundamental Score
 Analyst Upside
 Valuation Score
 Stability Score
 Price Change %
-Market Cap
 Symbol A–Z
 ```
 
-Do not use unclear labels like:
+Do not include:
 
 ```txt
-Opp.
-Fund.
+Market Cap
+Growth Score
+Profitability Score
+P/E
+PEG
+Revenue Growth
 ```
 
----
-
-# 9. Quick Filters Cleanup
-
-## Current Problem
-
-There are too many quick filter pills, including disabled future filters.
-
-## Required Quick Filters
-
-Keep only:
-
-```txt
-All Stocks
-High Opportunity
-High Fundamentals
-High Analyst Upside
-Reasonable Valuation
-In Watchlist
-```
-
-Optional:
-
-```txt
-Positive Day %
-```
-
-Move or remove:
-
-```txt
-High Growth
-High Profitability
-Alert Active
-```
-
-These can go into Advanced Filters if still useful.
-
-Hide unsupported future filters completely:
-
-```txt
-Hot Today
-Strong Momentum
-Unusual Volume
-FOMO Risk
-```
-
-Do not show disabled future filters in the main scanner.
+unless those columns are visible in the main table.
 
 Reason:
 
 ```txt
-Disabled pills add visual noise and confuse users.
+If the user sorts by a field they cannot see, the result feels random.
 ```
 
 ---
 
-# 10. Advanced Filters
+# 9. Empty State
 
 ## Requirement
 
-Move detailed filters into a collapsible section:
+If search/filter returns no results, show a helpful empty state.
+
+Example:
 
 ```txt
-Advanced Filters
+No stocks match these filters.
+Try clearing filters or lowering the score thresholds.
 ```
 
-Collapsed by default.
-
-Include:
+Provide a button:
 
 ```txt
-Index
-Sector
-Watchlist
-Alert Active
+Clear filters
+```
+
+This should clear:
+
+```txt
+Search
+Quick filter back to All Stocks
+Advanced filters
+Page back to 1
+```
+
+Keep sort as Opportunity Score unless product logic already clears sort.
+
+---
+
+# 10. Clear Filters Control
+
+## Requirement
+
+If an `X` clear button exists, make it understandable.
+
+Preferred label:
+
+```txt
+Clear filters
+```
+
+or icon with tooltip:
+
+```txt
+Clear all filters and search
+```
+
+It should clear:
+
+```txt
+Search query
+Quick filter
+Advanced filter thresholds
+Watchlist/alert filters
 Positive Day %
-Min Opportunity
-Min Fundamental
-Min Growth
-Min Profitability
-Min Valuation
-Min Health
-Min Analyst Upside
+Current page back to 1
 ```
 
-If there is already a filter row, refactor it into this collapsible section.
-
-The main screen should not show all threshold dropdowns by default.
+Do not necessarily reset sort unless that is already the app convention.
 
 ---
 
-# 11. Highlight Filtered Columns
-
-## Requirement
-
-When a filter affects a specific column, highlight that column.
-
-Examples:
-
-| Active Filter | Highlight Column |
-| --- | --- |
-| High Opportunity | Opportunity |
-| High Fundamentals | Fundamental |
-| High Analyst Upside | Analyst Upside |
-| Reasonable Valuation | Valuation |
-| Positive Day % | Day % |
-| Min Opportunity | Opportunity |
-| Min Fundamental | Fundamental |
-| Min Valuation | Valuation |
-| Min Analyst Upside | Analyst Upside |
-
-Highlight should apply to:
-
-```txt
-Header cell
-Relevant body cells
-```
-
-Use subtle styling.
-
-Do not make it distracting.
-
----
-
-# 12. Active Filter Summary
-
-Add a small summary line when filters are active.
-
-Examples:
-
-```txt
-Filtering by: High Analyst Upside — see highlighted Analyst Upside column.
-```
-
-or:
-
-```txt
-Active filters: Analyst Upside ≥ 20%, Fundamental Score ≥ 75
-```
-
-This summary should help the user understand:
-
-```txt
-Why only these rows are visible
-Which column to look at
-```
-
----
-
-# 13. Expanded Row Chevron Bug
-
-## Current Bug
-
-Expanded-row chevron appears only after searching for a stock.
-
-Expected:
-
-```txt
-Every row should always show the expand/collapse chevron.
-```
-
-## Requirement
-
-Fix:
-
-```txt
-The chevron must appear in every row, in every list state.
-It must not depend on search state.
-It must work when no search is active.
-It must work when filters are active.
-It must work after sorting.
-It must work on first page load.
-```
-
-Click behavior:
-
-```txt
-Clicking chevron expands/collapses the row.
-Clicking row can still open drawer if that behavior exists.
-Chevron click should stop propagation if needed.
-```
-
----
-
-# 14. Expanded Row Reorganization
+# 11. Expanded Row: Status → Decision Tag
 
 ## Current Problem
 
-Expanded row is useful but visually hard to scan:
+Expanded row uses the label:
 
 ```txt
-Many parameters
-Small section headings
-Dense layout
-No strong grouping
-Labels are unclear
-Tooltips missing
+Status
 ```
 
-## Required Structure
+This is unclear.
 
-Reorganize expanded row into sections:
+The user does not know:
 
 ```txt
-Decision Summary
-Score Breakdown
+What it means
+Who calculated it
+Whether it is an analyst rating
+Whether it is app-generated
+```
+
+---
+
+## Required Change
+
+Rename visible label:
+
+```txt
+Status
+```
+
+to:
+
+```txt
+Decision Tag
+```
+
+Add tooltip:
+
+```txt
+Rule-based tag derived from Opportunity Score, fundamentals, valuation, analyst upside, stability, and detected concerns. It is not an external analyst rating.
+```
+
+Do not change DB fields.
+
+This is UI-only.
+
+---
+
+# 12. Expanded Row: Company Snapshot
+
+## Current Problem
+
+The top Decision Summary area has unused space.
+
+The user could benefit from immediate company context:
+
+```txt
+What does this company do?
+What sector/industry is it in?
+How large is it?
+Is it high beta?
+```
+
+---
+
+## Required Company Snapshot
+
+Add a compact `Company Snapshot` area to the top expanded-row summary.
+
+Use existing DB/scanner data only.
+
+No provider calls.
+
+Show when available:
+
+```txt
+Company name
+Sector
+Industry
+Market Cap
+Beta
+Short company description
+```
+
+Description behavior:
+
+```txt
+Max 2 lines
+Truncate if long
+Use title tooltip with full text if simple
+Show N/A if missing
+```
+
+Suggested layout:
+
+```txt
+Decision Summary card
+
+Left:
+Decision Tag
+Strengths
+Concerns
+
+Right:
+Company Snapshot
+Description
+Sector · Industry
+Market Cap · Beta
+```
+
+If description is not currently available in scanner data:
+
+```txt
+Check whether src/lib/data/scanner.ts already maps company description/profile.
+If available in DB but not mapped, map it.
+If not available, do not add API call.
+Show only available fields.
+```
+
+No migration expected.
+
+---
+
+# 13. Expanded Row: Strengths / Concerns Cleanup
+
+## Current Problem
+
+Strengths and Concerns exist as chips, but still feel visually messy.
+
+---
+
+## Required Design
+
+Use structured rows:
+
+```txt
+Strengths:
+[Strong fundamentals] [High analyst upside] [Strong profitability]
+
+Concerns:
+[Elevated valuation] [Near 52W high]
+```
+
+If there are no concerns:
+
+```txt
+Concerns:
+[No major concerns detected]
+```
+
+Do not hide the concerns row.
+
+Do not leave it blank.
+
+Use compact chips:
+
+```txt
+Small rounded badges
+Consistent gap
+No long unwrapped text
+Color-coded but subtle
+```
+
+---
+
+# 14. Expanded Row: Keep Existing Detail Sections
+
+Do not remove existing useful sections:
+
+```txt
+Our Calculated Scores
 Analyst View
 Valuation Metrics
 Growth & Profitability
@@ -823,236 +776,58 @@ Market Position
 Data Freshness
 ```
 
----
-
-## Section 1: Decision Summary
-
-Purpose:
-
-```txt
-Explain the stock in plain language using available data.
-```
-
-Suggested contents:
-
-```txt
-Opportunity Score
-Main strength
-Main concern
-Overall status badge
-```
-
-No AI call.
-
-Use rule-based explanations.
-
-Example:
-
-```txt
-Main strength: Strong fundamentals and high analyst upside.
-Main concern: Expensive valuation and elevated beta.
-```
-
-Rules can be simple:
-
-```txt
-If fundamentalScore >= 80 → Strong fundamentals
-If analystUpsidePercent >= 20 → High analyst upside
-If valuationScore < 40 → Expensive valuation
-If stabilityScore < 60 → Higher volatility/risk context
-If price position > 0.85 → Near 52-week high
-```
-
-Do not over-engineer.
+Only improve the top summary area.
 
 ---
 
-## Section 2: Score Breakdown
+# 15. Rating / Analyst Upside Regression
 
-Show calculated scores with progress bars:
-
-```txt
-Opportunity Score
-Fundamental Score
-Growth Score
-Profitability Score
-Valuation Score
-Financial Health Score
-Stability Score
-```
-
-Include:
+Keep previous improvements:
 
 ```txt
-Score version
-Last calculated date
+Rating = stars + numeric value on first line, recommendation label on second line
+Half-star support
+Analyst Upside centered
+Good spacing between Analyst Upside and Rating
 ```
 
-Use tooltips for every score.
+Verify nothing regressed.
 
 ---
 
-## Section 3: Analyst View
+# 16. Mobile Pagination
 
-Show:
+If mobile scanner cards use the same filtered list, pagination should apply there too.
+
+Required:
 
 ```txt
-Analyst Rating stars
-Rating label
-Analyst Count
-Consensus Target
-Analyst Upside %
-Target High
-Target Median
-Target Low
-Last analyst sync date
-Source
+Mobile should not render 1000 cards at once in the future.
+Mobile should use the same paginated result set.
+Pagination controls should be usable on mobile.
 ```
 
-Use tooltips.
+Do not redesign mobile completely.
 
 ---
 
-## Section 4: Valuation Metrics
+# 17. Drawer Handling
 
-Show:
+Do not redesign Drawer in Phase 21B.
 
-```txt
-P/E
-Forward P/E
-PEG
-Forward PEG
-P/S
-P/B
-EV/EBITDA
-```
+However, if table/row changes accidentally affect Drawer opening, fix regression only.
 
-Use tooltips.
-
----
-
-## Section 5: Growth & Profitability
-
-Show:
+Drawer full cleanup is deferred to:
 
 ```txt
-Revenue Growth TTM
-EPS Growth TTM
-Revenue Growth 3Y
-EPS Growth 3Y
-Gross Margin
-Operating Margin
-Net Margin
-ROE
-ROA
-```
-
-Use tooltips.
-
----
-
-## Section 6: Financial Health
-
-Show:
-
-```txt
-Debt / Equity
-Current Ratio
-Quick Ratio
-Interest Coverage
-```
-
-Use tooltips.
-
----
-
-## Section 7: Market Position
-
-Show:
-
-```txt
-Current Price
-Day %
-52W High
-52W Low
-Price Avg 50
-Price Avg 200
-52W Position
-```
-
-Use tooltips.
-
----
-
-## Section 8: Data Freshness
-
-Show:
-
-```txt
-Quote Synced
-Quote Source
-Metrics Synced
-Metrics Source
-Analyst Synced
-Analyst Source
-Opportunity Calculated
-Fundamental Calculated
-```
-
-Use tooltips.
-
----
-
-# 15. Expanded Row Visual Design
-
-## Requirements
-
-Make expanded row more readable.
-
-Use:
-
-```txt
-Larger section headings
-Better spacing
-Cards or grouped panels
-Subtle borders
-Clear label/value alignment
-Progress bars for scores
-Stars for rating
-N/A display for missing values
-Tooltips for every label
-```
-
-Avoid:
-
-```txt
-Tiny uppercase headings
-Dense grid with no visual separation
-Long rows of raw metrics without context
+Phase 21C — Drawer Real Data & Decision Workspace Cleanup
 ```
 
 ---
 
-# 16. Mobile Scanner Card
+# 18. QA Requirements
 
-If the mobile scanner card exists, apply the same clarity principles:
-
-```txt
-Use clear labels
-Rename Risk to Stability
-Use score bars
-Show analyst rating stars
-Keep only key decision fields
-Put details in expanded area or secondary section
-```
-
-Do not redesign mobile completely if it is risky.
-
----
-
-# 17. QA Requirements
-
-## Scanner Initial Load
+## Initial Load QA
 
 Open:
 
@@ -1063,36 +838,65 @@ Open:
 Confirm:
 
 ```txt
-100 stocks visible
-Default sort is Fundamental Score
-Main table has reduced columns
-No unsupported future filter pills visible
-Headers use clearer labels
-Every header has tooltip
-Stability replaces Risk
-Calculated scores use visual bars
-Rating uses stars
+All Stocks active by default
+Sort = Opportunity Score
+100 total stocks
+20 rows visible by default
+Opportunity header shows sort arrow
+Opportunity column highlighted
+Summary says: Showing all stocks — sorted by Opportunity Score
+Result count says: Showing 1–20 of 100 stocks
 ```
 
 ---
 
-## Expanded Row Bug QA
+## Pagination QA
+
+Test:
+
+```txt
+Default page size 20
+Change page size to 10
+Change page size to 50
+Change page size to 100
+Next page
+Previous page
+Last page if available
+```
 
 Confirm:
 
 ```txt
-Chevron appears on every row on initial load
-Chevron appears without search
-Chevron appears after search
-Chevron appears after filtering
-Chevron appears after sorting
-Chevron expands and collapses correctly
-Chevron click does not trigger wrong row action
+Counts are correct
+Page resets correctly on page size change
+No duplicated/missing rows across pages
+Expanded rows work after pagination
+Chevron appears on every row after pagination
 ```
 
 ---
 
-## Filter QA
+## Search + Pagination QA
+
+Test:
+
+```txt
+Go to page 3
+Search NVDA
+```
+
+Confirm:
+
+```txt
+Search resets to page 1
+NVDA is found even if not on page 3
+Result count is correct
+Clearing search restores full dataset
+```
+
+---
+
+## Filter + Pagination QA
 
 Test:
 
@@ -1101,92 +905,132 @@ High Opportunity
 High Fundamentals
 High Analyst Upside
 Reasonable Valuation
+In Watchlist
+Advanced Min Opportunity
+Advanced Min Analyst Upside
 Positive Day %
-Advanced Filters thresholds
 ```
 
 Confirm:
 
 ```txt
-Filtered column is highlighted
-Active filter summary appears
-Summary text is accurate
-Clearing filters removes highlight
+Filters apply across all stocks
+Pagination applies after filters
+Result count is correct
+Page resets to 1
+Highlighted column matches active filter/sort
+Summary is accurate
 ```
 
 ---
 
-## Tooltip QA
+## Sort + Pagination QA
 
-Confirm tooltips exist for:
+Test all sort options:
 
 ```txt
-All main table headers
-All expanded row parameter labels
 Opportunity Score
 Fundamental Score
 Analyst Upside
-Rating
-Valuation
-Stability
-P/E
-PEG
-ROE
-Revenue Growth
-Market Cap
-52W High / Low
-Price Avg 50 / 200
-Data freshness fields
+Valuation Score
+Stability Score
+Price Change %
+Symbol A–Z
+```
+
+Confirm:
+
+```txt
+Sort applies across full filtered dataset
+Page resets to 1
+Header arrow moves to sorted column
+Column highlight moves to sorted column
+No Market Cap option exists
 ```
 
 ---
 
-## Expanded Row Layout QA
+## Expanded Row QA
 
 Expand:
 
 ```txt
+ADBE
 NVDA
-AAPL
+NFLX
+GOOG
 TSLA
-GOOGL
-PLTR
+CHTR
 ```
 
 Confirm:
 
 ```txt
-Sections are clearly separated
-Headings are readable
-Decision Summary is useful
-Score bars render correctly
-Rating stars render correctly
-Missing values show N/A
+Decision Tag replaces Status
+Decision Tag tooltip exists
+Company Snapshot appears if data exists
+Description is readable and not too long
+Strength chips are clean
+Concern chips are clean
+No concerns case shows "No major concerns detected"
+Existing detail sections still work
+```
+
+---
+
+## Visual QA
+
+Confirm:
+
+```txt
+Opportunity highlight is clear but not overpowering
+Sector width remains compact
+Analyst Upside and Rating spacing is good
+Sort dropdown remains readable in dark mode
+Rating still uses stars + numeric value + label
+Controls feel connected and not scattered
+```
+
+---
+
+## Mobile QA
+
+Confirm:
+
+```txt
+Mobile cards load
+Pagination applies to mobile
+Page size / previous / next usable on mobile
+Search works on mobile
+Filters work on mobile
 No layout overflow
 ```
 
 ---
 
-## Regression
+## Regression QA
 
 Confirm:
 
 ```txt
-Scanner search works
+Search works
 Sort works
-Universe selector still works
-Watchlist toggle still works
+Quick filters work
+Advanced filters work
+Chevron appears on every row
+Drawer still opens if applicable
+Watchlist star still works
 Alert indicator still works
-Drawer behavior still works if present
-Dashboard still loads
-Admin Sync still loads
+Dashboard loads
+Admin Sync loads
 No provider calls from Scanner
 No DB/schema changes
+No scoring changes
 ```
 
 ---
 
-# 18. Validation
+# 19. Validation
 
 Run:
 
@@ -1203,57 +1047,58 @@ If a migration is needed, stop and explain why before adding it.
 
 ---
 
-# 19. Required Implementation Report
+# 20. Required Implementation Report
 
-Return a concise report in English only with:
+Return a report in English only with:
 
 1. Files inspected.
 2. Files changed.
-3. Columns removed from main table.
-4. Columns kept in main table.
-5. Columns moved to expanded row.
-6. Header tooltip coverage.
-7. Expanded-row tooltip coverage.
-8. Risk → Stability changes.
-9. Score visual components added.
-10. Rating stars implementation.
-11. Filter cleanup performed.
-12. Advanced Filters behavior.
-13. Filtered column highlight behavior.
-14. Expanded row bug fix.
-15. Expanded row layout changes.
-16. Mobile changes if any.
-17. QA results.
-18. Regression results.
-19. Automated check results.
-20. Known issues.
-21. Ready for commit or not.
+3. Default view behavior.
+4. Pagination implementation.
+5. Search/filter/sort/pagination order.
+6. Page size options.
+7. Opportunity highlight changes.
+8. Sort options after cleanup.
+9. Empty state / clear filter behavior.
+10. Decision Tag changes.
+11. Company Snapshot changes.
+12. Strengths/Concerns layout changes.
+13. Mobile pagination behavior.
+14. Drawer regression status.
+15. Browser QA results.
+16. Automated check results.
+17. Known issues.
+18. Ready for commit or not.
 
 ---
 
 ## Acceptance Criteria
 
-Phase 21A is complete when:
+Phase 21B is complete when:
 
-- Main scanner table is significantly less crowded.
-- Main table uses clear labels instead of unclear abbreviations.
-- Calculated scores are visually represented with progress bars or score bars.
-- Analyst Rating uses stars plus label/score.
-- Risk is renamed to Stability in UI.
-- Stability tooltip explains higher is better / lower risk context.
-- Every main table header has tooltip.
-- Every expanded row parameter label has tooltip.
-- Filtered columns are highlighted.
-- Active filter summary explains active filters.
-- Advanced Filters are collapsed by default.
-- Unsupported future filters are hidden.
-- Expanded row chevron appears on every row without requiring search.
-- Expanded row is reorganized into readable sections.
-- Expanded row remains rich and includes all important parameters.
+- Scanner defaults to All Stocks, not High Opportunity.
+- Scanner sorts all stocks by Opportunity Score by default.
+- Opportunity column is clearly highlighted as active sort.
+- Pagination exists with 10/20/50/100 options.
+- Default page size is 20.
+- Search applies across full dataset before pagination.
+- Filters apply across full dataset before pagination.
+- Sort applies across full dataset before pagination.
+- Search/filter/sort reset to page 1.
+- Sort options only include visible main-table columns.
+- Empty state is helpful.
+- Clear filters behavior is clear.
+- Status is renamed to Decision Tag.
+- Decision Tag has tooltip.
+- Company Snapshot appears in expanded row using existing DB data only.
+- Strengths/Concerns chips are clean and structured.
+- Existing expanded-row detail sections remain.
+- Mobile does not render all rows at once.
+- Drawer is not redesigned in this phase.
 - No new API calls are added.
 - No scoring formulas are changed.
 - No DB migration is added.
-- Scanner still loads and works.
+- Scanner still works.
 - Dashboard/Admin still load.
 - Build passes.
 - TypeScript passes.
@@ -1264,17 +1109,46 @@ Phase 21A is complete when:
 
 ## Future Phases
 
-After Phase 21A:
+After Phase 21B:
 
 ```txt
-Phase 21B — Dashboard Clarity Cleanup
-Phase 21C — Data Inventory / Admin Data Health Cleanup
+Phase 21C — Drawer Real Data & Decision Workspace Cleanup
+Phase 21D — Dashboard Clarity Cleanup
+Phase 21E — Data Inventory / Admin Data Health Cleanup
 Phase 22 — Historical Daily + Momentum Foundation
-Phase 23 — Analyst Sentiment Score
-Phase 24 — News and Earnings Catalyst Foundation
 ```
 
 ---
+
+## Notes For Phase 21C
+
+The Drawer currently appears to contain legacy/mock-oriented sections such as:
+
+```txt
+Hot Score
+Signal
+AI Insight
+Main Catalyst
+Price Context chart
+Watch Context
+legacy setup labels
+```
+
+Phase 21C should audit and replace those with real DB-backed decision sections:
+
+```txt
+Company Snapshot
+Opportunity Score v2
+Fundamental Score
+Analyst View
+Market Position
+Valuation / Fundamentals
+Watchlist / Alert actions
+Data Freshness
+```
+
+Do not start that cleanup in Phase 21B except to prevent regressions.
+
 
 ## History
 
@@ -1311,3 +1185,4 @@ Phase 24 — News and Earnings Catalyst Foundation
 - Phase 19 completed (2026-06-01): FMP Daily Market Data Sync Migration. Migrated Daily Market Data Sync from legacy Finnhub quote + basic metrics to FMP `/stable/quote` only. Added `fetchFmpQuote(symbol)` to `fmp.ts`. Added migration `20260601193636_add_stock_quote_52w_and_averages` to extend `StockQuote` with `week52High`, `week52Low`, `priceAvg50`, `priceAvg200`. Rewrote `app/api/admin/sync-runs/process-next/route.ts` — FMP quote only, all StockMetric writes removed, PROVIDER set to `fmp`, pacing reduced to 250ms (FMP Starter). Updated `app/api/admin/sync-runs/start/route.ts` — provider changed from `finnhub` to `fmp`. Updated `SyncPageClient.tsx` — removed all legacy Finnhub wording, replaced "Legacy metrics coverage" panel with "Quote Coverage" (100/100), updated description and info panel to reference FMP, fixed pre-existing `SYNC_RUN_TYPE_LABELS` bug (added `market-data-nasdaq100-chunked-sync` key). SyncRun type kept as `market-data-nasdaq100-chunked-sync` to preserve Sync History. QA confirmed: 100/100 stocks synced (0 skipped, 0 failed), all 14 StockQuote fields populated including new 52-week and moving-average fields, source=fmp on all rows, StockMetric byte-for-byte unchanged (provider=fmp, same lastSyncedAt, same values — Daily Sync did not touch StockMetric), Scanner loads 100 stocks with real prices/scores, Dashboard coverage 100/100 for quotes/metrics/scores/targets, all 6 admin tabs load, Developer/Legacy Tools preserved. Runtime: ~2m15s for 100 stocks (was ~5min with 2 Finnhub calls/stock). Build passes, tsc --noEmit zero errors, prisma validate valid, prisma migrate status clean (13 migrations). Approved by user.
 - Phase 20 completed (2026-06-02): Opportunity Score v2 with Analyst Targets. Rewrote `src/lib/scoring/opportunity-score.ts` — new v2 formula with 7 components (Fundamental Quality 25%, Valuation 20%, Growth 15%, Analyst Upside 20%, Analyst Sentiment 10%, Price Position 5%, Risk/Context 5%); analyst upside scored on 8-tier scale (≥60%→100 down to <−10%→15), capped at 60% for scoring but raw value untouched; analyst sentiment uses weighted recommendation counts (SB=100, B=80, H=50, S=20, SS=0) divided by total, then pulled toward neutral via confidence multiplier based on analyst count (≥30→1.00, 20–29→0.95, 10–19→0.90, 5–9→0.80, 1–4→0.65); price position reads from StockQuote.week52High/Low (FMP daily sync); missing components re-normalized not zeroed; fundamentalScore required. Updated `calculateOpportunityScoresAction` in `src/actions/market-data-actions.ts` — added `analystData` include, updated input mapping, version constant set to `opportunity-v2`. Updated `src/components/admin/SyncPageClient.tsx` button description to v2 wording referencing all 7 components, DB-only, run after Company/Daily syncs. Rewrote Opportunity Score section in `src/components/admin/ScoreMethodologyTab.tsx` — full v2 documentation including component table, analyst upside scale, sentiment formula, confidence table, price position table, re-normalization note, example calculation; updated Analyst Data section to say fields are now scored in v2; updated legacy Phase 15 note to reference v2. QA results: baseline avg=63.49 (v1), post-calc avg=63.34 (v2); 100/100 Nasdaq 100 calculated, 0 failed, 4 seed stocks skipped (no fundamentalScore — expected); all scores in [0,100]; NVDA improved 79→82 (high upside 41.8%), AMD reduced 62→55 (negative upside −12.3%), AVGO reduced 70→64 (near-zero upside −0.2%), PLTR constrained at 66 (poor valuation despite strong growth), TSLA remains low at 38 (weak fundamentals); no fake zeros; score distribution bell-shaped around 60–74. No migration. No new DB table. No provider calls. Build passes, tsc --noEmit zero errors, prisma validate valid, prisma migrate status clean (13 migrations). Approved by user.
 - Phase 21A completed (2026-06-02): Scanner Decision View Cleanup. Refactored Scanner from a dense data table into a clear Decision View. Main table reduced from 18+ columns to 10 focused columns (Symbol, Sector, Price, Day %, Opportunity, Fundamental, Analyst Upside, Rating, Valuation, Stability). All unclear abbreviations replaced with clear labels (Opp.→Opportunity, Fund.→Fundamental, Valuat.→Valuation, Risk→Stability, Rev Gr.→Revenue Growth). Risk renamed to Stability everywhere in the UI — DB field `riskContextScore` unchanged. All 10 main table headers have tooltips. Calculated scores (Opportunity, Fundamental, Valuation, Stability) use compact mini progress bars with color tiers (80–100 emerald, 60–79 blue, 40–59 amber, 0–39 red). Analyst Rating uses 1–5 star visualization with half-star support via weighted recommendation counts, plus label. Expanded row reorganized into 8 sections: Decision Summary (rule-based plain-language insight with strength/concern/badge), Score Breakdown (all 7 scores with progress bars, version, last calculated), Analyst View (stars, targets, counts, source), Valuation Metrics (P/E, PEG, P/S, P/B, EV/EBITDA, forward variants), Growth & Profitability (revenue growth, EPS growth, margins, ROE, ROA), Financial Health (D/E, current ratio, quick ratio, interest coverage), Market Position (price, 52W high/low, moving averages, 52W position), Data Freshness (quote, metrics, analyst, score sync dates and sources). Every expanded-row parameter label has a tooltip. Expanded row chevron bug fixed — chevron now always appears on every row regardless of search state. Quick filter pills cleaned up — removed disabled future filters (Hot Today, Strong Momentum, Unusual Volume, FOMO Risk); kept All Stocks, High Opportunity, High Fundamentals, High Analyst Upside, Reasonable Valuation, In Watchlist, Positive Day %. Advanced Filters moved to collapsible section collapsed by default, containing Index, Sector, Watchlist, Alert Active, Positive Day %, and all threshold filters (Min Opportunity, Min Fundamental, Min Growth, Min Profitability, Min Valuation, Min Health, Min Analyst Upside). Filtered columns highlighted with subtle tint — header and body cells highlight when a filter targets that column. Active filter summary line appears when any filter is active. Sort dropdown uses full clear labels (Fundamental Score, Opportunity Score, Analyst Upside, Valuation Score, Stability Score, Price Change %, Market Cap, Symbol A–Z). Mobile scanner card updated with same clarity principles (Stability label, score bars, rating stars, key decision fields). Visual grouping: subtle left border dividers separate Identity/Market, Calculated Scores, and Analyst Data column groups. No new API calls. No scoring formula changes. No DB migration. No new Prisma models. Build passes, tsc --noEmit zero errors, prisma validate valid, prisma migrate status clean (13 migrations). Approved by user.
+- Phase 21B completed (2026-06-02): Scanner Pagination, Table Usability & Expanded Row Cleanup. Default scanner view changed from High Opportunity to All Stocks with Opportunity Score descending. Added pagination with 10/20/50/100 page size options (default 20); data flow order enforced as: all stocks → search → filters → sort → pagination. All page reset handlers added (search, view, filter, sort, page size, universe changes all reset to page 1; expanding rows, watchlist, and drawer do not reset). Compact pagination controls added below table (Previous/Next/Page X of Y/result count). Controls layout restructured: quick filter pills on row 1; search + sort + show N + filters + clear + result count all on one compact connected row 2. Sort arrow (↓ or A–Z) now appears in the active sort column header with blue tint; active sort column body cells get subtle blue background tint. Filter-highlighted columns retain amber header text (separate from sort highlight). "Status" label in expanded row renamed to "Decision Tag" with tooltip explaining the rule-based nature. Expanded row Decision Summary restructured to two stacked rows: row 1 = Decision Tag badge + Strengths chips + Concerns chips; row 2 = Company Snapshot full-width with meta column left (name, sector·industry, mkt cap) and description right (3-line clamp, full text in title tooltip). Strengths/Concerns always shown — "No major concerns detected" when no concerns. Sort options limited to visible table columns only. Clear filters button shows label text with tooltip. Summary bar shows "Showing all stocks — sorted by Opportunity Score" on default state. Mobile cards use same paginated result set. Expanded row grid changed from xl:grid-cols-7 to max 4 columns (lg:grid-cols-4); Our Calculated Scores and Growth & Profitability span 2 columns; MetricRow uses truncate+title for clean overflow; SectionCard has overflow-hidden min-w-0. Beta removed from Company Snapshot; added to Market Position section with tooltip. Migration 20260602191605_add_stock_description_and_industry added Stock.description and Stock.industry (approved mid-phase); Company Data Sync route updated to persist FMP description and industry (non-empty, safe-update only); scanner.ts maps both fields; HotStock type extended; Company Snapshot renders real description and Sector · Industry. DB coverage: 100/100 Nasdaq 100 stocks have description and industry. Build passes, tsc --noEmit zero errors, prisma validate valid, prisma migrate status clean (14 migrations). Approved by user.

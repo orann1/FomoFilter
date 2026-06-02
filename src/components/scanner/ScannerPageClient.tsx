@@ -13,9 +13,10 @@ import ScannerControls, { type SortKey, sortOptions } from "./ScannerControls";
 import ScannerFilters, { type ScannerFilterState, DEFAULT_FILTERS, hasActiveFilters } from "./ScannerFilters";
 import ScannerTable from "./ScannerTable";
 import MobileScannerCard from "./MobileScannerCard";
-import { Radar, Globe, Lock, Filter, ArrowUpDown, SlidersHorizontal, ChevronDown, ChevronUp, X } from "lucide-react";
+import { Radar, Globe, Lock, Filter, ArrowUpDown, SlidersHorizontal, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, X } from "lucide-react";
 
 const CLOSE_ANIMATION_MS = 300;
+const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
 function nullLast(a: number | null | undefined, b: number | null | undefined, desc = true): number {
   if (a == null && b == null) return 0;
@@ -140,13 +141,15 @@ export default function ScannerPageClient({
   const [isDrawerClosing, setIsDrawerClosing] = useState(false);
   const [localWatchlistEntries, setLocalWatchlistEntries] = useState<Record<string, LocalWatchlistEntry>>({});
 
-  // Default: High Opportunity + Opportunity Score sort
-  const [activeView, setActiveView] = useState<ScannerView>("high-opportunity");
+  // Default: All Stocks + Opportunity Score sort
+  const [activeView, setActiveView] = useState<ScannerView>("all");
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState<SortKey>("opportunity-score");
   const [filters, setFilters] = useState<ScannerFilterState>(DEFAULT_FILTERS);
   const [universeSlug, setUniverseSlug] = useState(selectedUniverseSlug);
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
 
   useEffect(() => {
     if (selectedStock) {
@@ -155,9 +158,37 @@ export default function ScannerPageClient({
     }
   }, [stocks]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // --- Handlers that also reset page to 1 ---
+
   function handleUniverseChange(slug: string) {
     setUniverseSlug(slug);
     router.push(`/scanner?universe=${slug}`);
+    setCurrentPage(1);
+  }
+
+  function handleViewChange(view: ScannerView) {
+    setActiveView(view);
+    setCurrentPage(1);
+  }
+
+  function handleSearchChange(val: string) {
+    setSearch(val);
+    setCurrentPage(1);
+  }
+
+  function handleSortChange(key: SortKey) {
+    setSortBy(key);
+    setCurrentPage(1);
+  }
+
+  function handleFilterChange(f: ScannerFilterState) {
+    setFilters(f);
+    setCurrentPage(1);
+  }
+
+  function handlePageSizeChange(size: number) {
+    setPageSize(size);
+    setCurrentPage(1);
   }
 
   const availableSectors = useMemo(() => {
@@ -165,6 +196,7 @@ export default function ScannerPageClient({
     return sectors;
   }, [stocks]);
 
+  // Data flow: all stocks → search → filters → sort → pagination
   const filteredStocks = useMemo(() => {
     let result = [...stocks];
     if (search.trim()) {
@@ -181,13 +213,30 @@ export default function ScannerPageClient({
     return result;
   }, [stocks, search, filters, activeView, sortBy, alertRulesBySymbol]);
 
+  // Pagination (applied after all filtering + sorting)
+  const totalCount = filteredStocks.length;
+  const pageCount = Math.max(1, Math.ceil(totalCount / pageSize));
+  const clampedPage = Math.min(currentPage, pageCount);
+  const startIdx = (clampedPage - 1) * pageSize;
+  const endIdx = Math.min(startIdx + pageSize, totalCount);
+  const paginatedStocks = filteredStocks.slice(startIdx, endIdx);
+
+  const resultCountText =
+    totalCount === 0
+      ? "No stocks"
+      : `Showing ${startIdx + 1}–${endIdx} of ${totalCount} stock${totalCount !== 1 ? "s" : ""}`;
+
   const highlightedColumns = useMemo(() => computeHighlightedColumns(activeView, filters), [activeView, filters]);
   const { parts: filterSummaryParts, sortLabel } = useMemo(
     () => buildFilterSummary(activeView, filters, search, sortBy),
     [activeView, filters, search, sortBy]
   );
 
+  const summaryPrefix =
+    filterSummaryParts.length > 0 ? filterSummaryParts.join(" · ") : "Showing all stocks";
+
   const advancedActive = hasActiveFilters(filters);
+  const isFiltered = advancedActive || search.trim() !== "" || activeView !== "all";
 
   function clearAllFilters() {
     setSearch("");
@@ -195,6 +244,7 @@ export default function ScannerPageClient({
     setFilters(DEFAULT_FILTERS);
     setSortBy("opportunity-score");
     setAdvancedOpen(false);
+    setCurrentPage(1);
   }
 
   function closeDrawer() {
@@ -232,8 +282,6 @@ export default function ScannerPageClient({
     return ordered;
   }, [universes]);
 
-  const isFiltered = advancedActive || search.trim() !== "" || activeView !== "all";
-
   return (
     <div>
       <ScannerHeader />
@@ -267,37 +315,47 @@ export default function ScannerPageClient({
         </div>
       )}
 
-      {/* Row 1: Quick filter pills + Sort + Count */}
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 mb-3">
-        <ScannerViewPills activeView={activeView} onViewChange={setActiveView} />
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="flex items-center gap-1.5">
-            <ArrowUpDown size={12} className="text-slate-500 shrink-0" />
-            <span className="text-xs text-slate-500 whitespace-nowrap">Sort</span>
-            <select
-              value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as SortKey)}
-              style={{ colorScheme: "dark" }}
-              className="bg-slate-800/80 border border-slate-700/60 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-emerald-600/60 transition-colors cursor-pointer"
-            >
-              {sortOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>{opt.label}</option>
-              ))}
-            </select>
-          </div>
-          <span className="text-xs text-slate-600 whitespace-nowrap">
-            {filteredStocks.length === stocks.length
-              ? `${stocks.length} stocks`
-              : `${filteredStocks.length} / ${stocks.length}`}
-          </span>
-        </div>
+      {/* Row 1: Quick filter pills */}
+      <div className="flex flex-wrap gap-2 mb-3">
+        <ScannerViewPills activeView={activeView} onViewChange={handleViewChange} />
       </div>
 
-      {/* Row 2: Search + Advanced Filters toggle */}
-      <div className="flex items-center gap-2 mb-3">
-        {/* Search */}
-        <div className="flex-1 min-w-0">
-          <ScannerControls search={search} onSearchChange={setSearch} />
+      {/* Row 2: Search + Sort + Page size + Filters + Clear + Count — one compact connected row */}
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        {/* Search — grows to fill available space */}
+        <div className="flex-1 min-w-[180px]">
+          <ScannerControls search={search} onSearchChange={handleSearchChange} />
+        </div>
+
+        {/* Sort */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <ArrowUpDown size={12} className="text-slate-500" />
+          <span className="text-xs text-slate-500 whitespace-nowrap">Sort</span>
+          <select
+            value={sortBy}
+            onChange={(e) => handleSortChange(e.target.value as SortKey)}
+            style={{ colorScheme: "dark" }}
+            className="bg-slate-800/80 border border-slate-700/60 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-emerald-600/60 transition-colors cursor-pointer"
+          >
+            {sortOptions.map((opt) => (
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Page size */}
+        <div className="flex items-center gap-1.5 shrink-0">
+          <span className="text-xs text-slate-500 whitespace-nowrap">Show</span>
+          <select
+            value={pageSize}
+            onChange={(e) => handlePageSizeChange(Number(e.target.value))}
+            style={{ colorScheme: "dark" }}
+            className="bg-slate-800/80 border border-slate-700/60 rounded-lg px-2 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-emerald-600/60 transition-colors cursor-pointer"
+          >
+            {PAGE_SIZE_OPTIONS.map((n) => (
+              <option key={n} value={n}>{n}</option>
+            ))}
+          </select>
         </div>
 
         {/* Advanced Filters toggle */}
@@ -321,22 +379,26 @@ export default function ScannerPageClient({
           {advancedOpen ? <ChevronUp size={11} /> : <ChevronDown size={11} />}
         </button>
 
-        {/* Clear — only when something is active */}
+        {/* Clear filters — only when active */}
         {isFiltered && (
           <button
             onClick={clearAllFilters}
-            className="flex items-center gap-1 px-2 py-2 rounded-lg text-xs text-slate-500 hover:text-slate-300 border border-transparent hover:border-slate-700/60 transition-colors shrink-0"
-            title="Clear all filters and reset"
+            className="flex items-center gap-1.5 px-2.5 py-2 rounded-lg text-xs text-slate-500 hover:text-slate-300 border border-slate-800/60 hover:border-slate-700/60 transition-colors shrink-0"
+            title="Clear all filters and search"
           >
             <X size={12} />
+            <span>Clear</span>
           </button>
         )}
+
+        {/* Result count */}
+        <span className="text-xs text-slate-600 whitespace-nowrap ml-1">{resultCountText}</span>
       </div>
 
       {/* Advanced Filters panel (controlled) */}
       <ScannerFilters
         filters={filters}
-        onFilterChange={setFilters}
+        onFilterChange={handleFilterChange}
         availableSectors={availableSectors}
         isOpen={advancedOpen}
       />
@@ -345,51 +407,77 @@ export default function ScannerPageClient({
       <div className="flex items-start gap-2 mb-3 px-3 py-2 bg-slate-800/30 border border-slate-800/60 rounded-lg">
         <Filter size={11} className="text-slate-600 mt-0.5 shrink-0" />
         <p className="text-xs text-slate-500">
-          {filterSummaryParts.length > 0 ? (
-            <>
-              <span className="text-slate-400">{filterSummaryParts.join(" · ")}</span>
-              <span className="text-slate-600 mx-1.5">—</span>
-            </>
-          ) : null}
-          <>sorted by <span className="text-slate-400">{sortLabel}</span></>
+          <span className="text-slate-400">{summaryPrefix}</span>
+          <span className="text-slate-600 mx-1.5">—</span>
+          sorted by <span className="text-slate-400">{sortLabel}</span>
           {highlightedColumns.size > 0 && (
             <span className="text-amber-500/50 ml-1.5">· highlighted column header shows filtered data</span>
           )}
         </p>
       </div>
 
-      {/* Desktop table */}
+      {/* Desktop table — receives paginated slice */}
       <ScannerTable
-        stocks={filteredStocks}
+        stocks={paginatedStocks}
         selectedSymbol={isDrawerClosing ? null : (selectedStock?.symbol ?? null)}
         alertRulesBySymbol={alertRulesBySymbol}
         onSelectStock={handleSelectStock}
         highlightedColumns={highlightedColumns}
+        sortBy={sortBy}
       />
 
-      {/* Mobile cards */}
-      {filteredStocks.length > 0 && (
+      {/* Mobile cards — same paginated slice */}
+      {paginatedStocks.length > 0 && (
         <div className="md:hidden flex flex-col gap-3">
-          {filteredStocks.map((stock) => (
+          {paginatedStocks.map((stock) => (
             <MobileScannerCard key={stock.symbol} stock={stock} alertRulesBySymbol={alertRulesBySymbol} onSelectStock={handleSelectStock} />
           ))}
         </div>
       )}
 
-      {/* Empty states */}
+      {/* Pagination controls */}
+      {totalCount > 0 && (
+        <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-800/60">
+          <span className="text-xs text-slate-600">{resultCountText}</span>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={clampedPage === 1}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs border border-slate-700/60 text-slate-400 hover:text-slate-300 hover:border-slate-600/60 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <ChevronLeft size={12} />
+              <span>Previous</span>
+            </button>
+            <span className="text-xs text-slate-500 px-2 whitespace-nowrap">
+              Page {clampedPage} of {pageCount}
+            </span>
+            <button
+              onClick={() => setCurrentPage((p) => Math.min(pageCount, p + 1))}
+              disabled={clampedPage === pageCount}
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs border border-slate-700/60 text-slate-400 hover:text-slate-300 hover:border-slate-600/60 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            >
+              <span>Next</span>
+              <ChevronRight size={12} />
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Empty state: filters matched nothing */}
       {filteredStocks.length === 0 && stocks.length > 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <Radar size={40} className="text-slate-700 mb-4" />
-          <p className="text-slate-400 font-medium mb-1">No stocks match your filters.</p>
-          <p className="text-sm text-slate-600 mb-4">Try lowering the score threshold, clearing filters, or selecting All Stocks.</p>
+          <p className="text-slate-400 font-medium mb-1">No stocks match these filters.</p>
+          <p className="text-sm text-slate-600 mb-4">Try clearing filters or lowering the score thresholds.</p>
           {isFiltered && (
             <button onClick={clearAllFilters} className="text-xs text-emerald-400 hover:text-emerald-300 border border-emerald-800/50 px-3 py-1.5 rounded-lg transition-colors">
-              Reset filters
+              Clear filters
             </button>
           )}
         </div>
       )}
 
+      {/* Empty state: no scanner data at all */}
       {stocks.length === 0 && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <Radar size={40} className="text-slate-700 mb-4" />
@@ -398,7 +486,7 @@ export default function ScannerPageClient({
         </div>
       )}
 
-      {/* Drawer */}
+      {/* Stock preview drawer */}
       {selectedStock && (
         <StockPreviewDrawer
           stock={selectedStock}
