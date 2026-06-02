@@ -104,8 +104,19 @@ export type HotStock = {
   analystCount?: number | null;
   analystTargetHigh?: number | null;
   analystTargetLow?: number | null;
+  analystTargetMedian?: number | null;
   analystSource?: string | null;
   analystLastSyncedAt?: string | null;
+  analystStrongBuyCount?: number | null;
+  analystBuyCount?: number | null;
+  analystHoldCount?: number | null;
+  analystSellCount?: number | null;
+  analystStrongSellCount?: number | null;
+  // Phase 21A: quote 52W and moving average fields
+  week52High?: number | null;
+  week52Low?: number | null;
+  priceAvg50?: number | null;
+  priceAvg200?: number | null;
 };
 
 export const mockHotStocks: HotStock[] = [

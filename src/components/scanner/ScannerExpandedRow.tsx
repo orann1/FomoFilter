@@ -1,52 +1,17 @@
 import type { HotStock } from "@/src/lib/mock-data";
-import { formatRatio, formatMetricPercent, formatScore } from "@/src/lib/formatters";
+import { formatRatio, formatCurrency } from "@/src/lib/formatters";
 
-function MetricItem({ label, value, highlight }: { label: string; value: string; highlight?: boolean }) {
-  return (
-    <div className="flex justify-between items-center py-1">
-      <span className="text-xs text-slate-500">{label}</span>
-      <span className={`text-xs tabular-nums font-medium ${highlight ? "text-emerald-300" : "text-slate-300"}`}>
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <p className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider mb-1">{title}</p>
-      <div className="divide-y divide-slate-800/60">{children}</div>
-    </div>
-  );
-}
-
-function ScoreBar({ label, value }: { label: string; value: number | null | undefined }) {
-  const n = value != null ? Math.round(Number(value)) : null;
-  const color = n == null ? "bg-slate-700" : n >= 75 ? "bg-emerald-500" : n >= 55 ? "bg-amber-500" : n >= 40 ? "bg-slate-500" : "bg-red-500/70";
-  const textColor = n == null ? "text-slate-600" : n >= 75 ? "text-emerald-300" : n >= 55 ? "text-amber-300" : "text-slate-400";
-  return (
-    <div className="flex items-center gap-2">
-      <span className="text-xs text-slate-500 w-28 shrink-0">{label}</span>
-      <div className="flex-1 bg-slate-800 rounded-full h-1.5 overflow-hidden">
-        <div className={`h-full rounded-full transition-all ${color}`} style={{ width: n != null ? `${n}%` : "0%" }} />
-      </div>
-      <span className={`text-xs font-semibold tabular-nums w-8 text-right ${textColor}`}>
-        {n != null ? n : "N/A"}
-      </span>
-    </div>
-  );
-}
+// --- Shared helpers ---
 
 function fmtPct(v: number | null | undefined): string {
   if (v == null) return "N/A";
   const sign = v >= 0 ? "+" : "";
-  return `${sign}${v.toFixed(1)}%`;
+  return `${sign}${Number(v).toFixed(1)}%`;
 }
 
-function fmtRatio(v: number | null | undefined, decimals = 1): string {
+function fmtNum(v: number | null | undefined, decimals = 1): string {
   if (v == null) return "N/A";
-  return Number(v).toFixed(decimals) + "x";
+  return Number(v).toFixed(decimals);
 }
 
 function fmtDate(iso: string | null | undefined): string {
@@ -54,139 +19,602 @@ function fmtDate(iso: string | null | undefined): string {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
+function fmtPrice(v: number | null | undefined): string {
+  if (v == null) return "N/A";
+  return `$${Number(v).toFixed(2)}`;
+}
+
+// --- Sub-components ---
+
+function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-slate-900/60 border border-slate-800/80 rounded-lg p-3 flex flex-col gap-2">
+      <p className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-800/60 pb-1.5 mb-0.5">
+        {title}
+      </p>
+      {children}
+    </div>
+  );
+}
+
+function MetricRow({
+  label,
+  value,
+  tooltip,
+  valueClass,
+}: {
+  label: string;
+  value: string;
+  tooltip: string;
+  valueClass?: string;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2 py-0.5">
+      <span className="text-xs text-slate-500 cursor-help shrink-0" title={tooltip}>
+        {label}
+      </span>
+      <span className={`text-xs tabular-nums font-medium text-right ${valueClass ?? "text-slate-300"} ${value === "N/A" ? "!text-slate-600" : ""}`}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function ScoreBar({ label, value, tooltip }: { label: string; value: number | null | undefined; tooltip: string }) {
+  const n = value != null ? Math.round(Number(value)) : null;
+  const barColor =
+    n == null ? "bg-slate-700" :
+    n >= 80 ? "bg-emerald-500" :
+    n >= 60 ? "bg-emerald-500/60" :
+    n >= 40 ? "bg-amber-500" :
+    "bg-red-500/70";
+  const textColor =
+    n == null ? "text-slate-600" :
+    n >= 80 ? "text-emerald-300" :
+    n >= 60 ? "text-emerald-400/80" :
+    n >= 40 ? "text-amber-300" :
+    "text-red-400/70";
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-xs text-slate-500 w-28 shrink-0 cursor-help" title={tooltip}>
+        {label}
+      </span>
+      <div className="flex-1 bg-slate-800 rounded-full h-1.5 overflow-hidden">
+        <div className={`h-full rounded-full ${barColor}`} style={{ width: n != null ? `${n}%` : "0%" }} />
+      </div>
+      <span className={`text-xs font-semibold tabular-nums w-7 text-right ${textColor}`}>
+        {n != null ? n : "N/A"}
+      </span>
+    </div>
+  );
+}
+
+function StarDisplay({ stars }: { stars: number }) {
+  if (stars === 0) return <span className="text-slate-600 text-xs">N/A</span>;
+  return (
+    <span className="flex items-center gap-0.5 text-[14px] leading-none">
+      {[1, 2, 3, 4, 5].map((i) => {
+        if (stars >= i) return <span key={i} className="text-amber-400">★</span>;
+        if (stars >= i - 0.5) {
+          return (
+            <span
+              key={i}
+              style={{
+                background: "linear-gradient(90deg, #fbbf24 50%, #475569 50%)",
+                WebkitBackgroundClip: "text",
+                WebkitTextFillColor: "transparent",
+                backgroundClip: "text",
+              }}
+            >
+              ★
+            </span>
+          );
+        }
+        return <span key={i} className="text-slate-600">★</span>;
+      })}
+    </span>
+  );
+}
+
+function ratingToStars(stock: HotStock): number {
+  const total = stock.analystCount;
+  if (total && total > 0) {
+    const weighted =
+      ((stock.analystStrongBuyCount ?? 0) * 5 +
+        (stock.analystBuyCount ?? 0) * 4 +
+        (stock.analystHoldCount ?? 0) * 3 +
+        (stock.analystSellCount ?? 0) * 2 +
+        (stock.analystStrongSellCount ?? 0) * 1) /
+      total;
+    return Math.round(weighted * 2) / 2;
+  }
+  switch (stock.analystRatingNormalized) {
+    case "Strong Buy": return 5;
+    case "Buy": return 4;
+    case "Hold": return 3;
+    case "Sell": return 2;
+    case "Strong Sell": return 1;
+    default: return 0;
+  }
+}
+
+// --- Decision Summary logic ---
+
+function buildDecisionSummary(stock: HotStock): {
+  strengths: string[];
+  concerns: string[];
+  badge: string;
+  badgeColor: string;
+} {
+  const strengths: string[] = [];
+  const concerns: string[] = [];
+
+  const fund = stock.fundamentalScore ?? 0;
+  const opp = stock.oppScore ?? 0;
+  const val = stock.valuationScore ?? 0;
+  const stab = stock.riskContextScore ?? 0;
+  const upside = stock.analystUpsidePercent;
+  const growth = stock.growthScore ?? 0;
+  const profit = stock.profitabilityScore ?? 0;
+  const health = stock.financialHealthScore ?? 0;
+
+  if (fund >= 80) strengths.push("Strong fundamentals");
+  if (upside != null && upside >= 20) strengths.push("High analyst upside");
+  if (growth >= 80) strengths.push("Strong growth metrics");
+  if (profit >= 80) strengths.push("Strong profitability");
+  if (val >= 70) strengths.push("Reasonable valuation");
+  if (stab >= 75) strengths.push("Low volatility context");
+  if (health >= 75) strengths.push("Strong financial health");
+
+  if (val < 40) concerns.push("Expensive valuation");
+  else if (val < 55) concerns.push("Elevated valuation");
+  if (stab < 50) concerns.push("High volatility/risk context");
+  else if (stab < 65) concerns.push("Elevated beta / risk context");
+  if (upside != null && upside < 0) concerns.push("Negative analyst upside");
+  else if (upside != null && upside < 10) concerns.push("Limited analyst upside");
+  if (growth < 40 && growth > 0) concerns.push("Weak growth metrics");
+  if (profit < 40 && profit > 0) concerns.push("Weak profitability");
+
+  let badge = "Neutral";
+  let badgeColor = "text-slate-400 bg-slate-800/60 border border-slate-700/50";
+  if (opp >= 80) { badge = "Strong Opportunity"; badgeColor = "text-emerald-300 bg-emerald-500/10 border border-emerald-600/30"; }
+  else if (opp >= 65) { badge = "Attractive"; badgeColor = "text-emerald-400/80 bg-emerald-500/8 border border-emerald-700/30"; }
+  else if (opp >= 50) { badge = "Watch"; badgeColor = "text-amber-300 bg-amber-500/10 border border-amber-600/30"; }
+  else if (opp > 0) { badge = "Weak Signal"; badgeColor = "text-slate-400 bg-slate-800/60 border border-slate-700/50"; }
+
+  return { strengths, concerns, badge, badgeColor };
+}
+
+// --- Main component ---
+
 interface ScannerExpandedRowProps {
   stock: HotStock;
   colSpan: number;
 }
 
 export default function ScannerExpandedRow({ stock, colSpan }: ScannerExpandedRowProps) {
+  const { strengths, concerns, badge, badgeColor } = buildDecisionSummary(stock);
+  const starCount = ratingToStars(stock);
+
+  const week52Pos =
+    stock.week52High != null &&
+    stock.week52Low != null &&
+    stock.week52High !== stock.week52Low
+      ? ((stock.price - stock.week52Low) / (stock.week52High - stock.week52Low)) * 100
+      : null;
+
   return (
-    <tr className="bg-[#0d0f14]/80">
-      <td colSpan={colSpan} className="px-4 py-4">
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 xl:grid-cols-7 gap-6">
+    <tr className="bg-[#0a0c11]">
+      <td colSpan={colSpan} className="px-4 py-5">
 
-          {/* Score Breakdown */}
-          <div className="col-span-2 md:col-span-3 lg:col-span-2">
-            <Section title="Opportunity Score">
-              <div className="space-y-2 pt-1">
-                <ScoreBar label="Opportunity" value={stock.oppScore} />
-              </div>
-              {stock.oppScore != null && (
-                <p className="text-[10px] text-slate-600 mt-1.5">
-                  Combines fundamental quality (35%), valuation (30%), growth (20%), risk/context (10%), and 52W price position (5%).
-                </p>
+        {/* Section 1: Decision Summary — badge-chip layout */}
+        <div className="mb-4 px-4 py-3 bg-slate-900/60 border border-slate-800/80 rounded-lg space-y-2.5">
+          {/* Status */}
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider w-16 shrink-0">Status</span>
+            <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full ${badgeColor}`}>
+              {badge}
+            </span>
+          </div>
+
+          {/* Strengths chips */}
+          <div className="flex items-start gap-2">
+            <span className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider w-16 shrink-0 mt-0.5">Strengths</span>
+            <div className="flex flex-wrap gap-1.5">
+              {strengths.length > 0 ? (
+                strengths.map((s) => (
+                  <span key={s} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/10 border border-emerald-600/20 text-emerald-300/90 whitespace-nowrap">
+                    <span className="text-emerald-500 leading-none text-[11px]">+</span>{s}
+                  </span>
+                ))
+              ) : (
+                <span className="text-[10px] text-slate-600 italic">None detected</span>
               )}
-              {stock.oppScore == null && (
-                <p className="text-[10px] text-amber-600 mt-1.5">
-                  Run &quot;Calculate Opportunity Scores&quot; in Admin Sync to populate.
-                </p>
+            </div>
+          </div>
+
+          {/* Concerns chips */}
+          <div className="flex items-start gap-2">
+            <span className="text-[10px] font-semibold text-slate-600 uppercase tracking-wider w-16 shrink-0 mt-0.5">Concerns</span>
+            <div className="flex flex-wrap gap-1.5">
+              {concerns.length > 0 ? (
+                concerns.map((c) => (
+                  <span key={c} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 border border-amber-600/20 text-amber-300/90 whitespace-nowrap">
+                    <span className="text-amber-500 leading-none text-[11px]">−</span>{c}
+                  </span>
+                ))
+              ) : (
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-800/60 border border-slate-700/30 text-slate-500 whitespace-nowrap">
+                  No major concerns detected
+                </span>
               )}
-              <div className="mt-2 pt-2 border-t border-slate-800/60 space-y-0.5">
-                <MetricItem label="Opp. Version" value={stock.oppScoreVersion ?? "N/A"} />
-                <MetricItem label="Opp. Calc At" value={fmtDate(stock.oppCalculatedAt)} />
+            </div>
+          </div>
+        </div>
+
+        {/* Sections 2–8 in grid */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3">
+
+          {/* Section 2: Our Calculated Scores */}
+          <div className="col-span-2 md:col-span-2 xl:col-span-2">
+            <SectionCard title="Our Calculated Scores">
+              <p className="text-[10px] text-slate-600 -mt-1 mb-1">Internal scores calculated by FomoFilter from synced financial, market, analyst, and stability data.</p>
+              <div className="space-y-1.5">
+                <ScoreBar
+                  label="Opportunity"
+                  value={stock.oppScore}
+                  tooltip="Opportunity Score v2. Combines fundamental quality, valuation, growth, analyst upside, analyst sentiment, price position, and stability. Higher is better."
+                />
+                <ScoreBar
+                  label="Fundamental"
+                  value={stock.fundamentalScore}
+                  tooltip="Internal Fundamental Score based on growth, profitability, valuation, financial health, and stability inputs. Higher is better."
+                />
+                <ScoreBar
+                  label="Growth"
+                  value={stock.growthScore}
+                  tooltip="Score for revenue and earnings growth trajectory. Higher means stronger growth metrics."
+                />
+                <ScoreBar
+                  label="Profitability"
+                  value={stock.profitabilityScore}
+                  tooltip="Score for profitability including margins, ROE, and ROA. Higher means better profitability."
+                />
+                <ScoreBar
+                  label="Valuation"
+                  value={stock.valuationScore}
+                  tooltip="Score for how reasonably valued the stock is based on P/E, P/S, EV/EBITDA, and PEG. Higher means more reasonable valuation."
+                />
+                <ScoreBar
+                  label="Financial Health"
+                  value={stock.financialHealthScore}
+                  tooltip="Score for balance sheet and liquidity strength. Higher means stronger financial health."
+                />
+                <ScoreBar
+                  label="Stability"
+                  value={stock.riskContextScore}
+                  tooltip="Stability Score measures the stock's risk context. Higher is better: a higher score generally means lower volatility/risk context based mainly on beta and related risk inputs."
+                />
               </div>
-            </Section>
-            <div className="mt-3">
-              <Section title="Fundamental Score">
-                <div className="space-y-2 pt-1">
-                  <ScoreBar label="Fundamental" value={stock.fundamentalScore} />
-                  <ScoreBar label="Growth" value={stock.growthScore} />
-                  <ScoreBar label="Profitability" value={stock.profitabilityScore} />
-                  <ScoreBar label="Valuation" value={stock.valuationScore} />
-                  <ScoreBar label="Financial Health" value={stock.financialHealthScore} />
-                  <ScoreBar label="Risk / Context" value={stock.riskContextScore} />
-                </div>
-                <div className="mt-2 pt-2 border-t border-slate-800/60 space-y-0.5">
-                  <MetricItem label="Score Version" value={stock.scoreVersion ?? "N/A"} />
-                  <MetricItem label="Last Calculated" value={fmtDate(stock.scoreLastCalculated)} />
-                </div>
-              </Section>
-            </div>
+              <div className="mt-1.5 pt-1.5 border-t border-slate-800/60 space-y-0.5">
+                <MetricRow
+                  label="Score Version"
+                  value={stock.scoreVersion ?? "N/A"}
+                  tooltip="Version of the Fundamental Score calculation formula."
+                />
+                <MetricRow
+                  label="Fundamental Calc"
+                  value={fmtDate(stock.scoreLastCalculated)}
+                  tooltip="Date when Fundamental Score was last calculated by FomoFilter."
+                />
+                <MetricRow
+                  label="Opp. Version"
+                  value={stock.oppScoreVersion ?? "N/A"}
+                  tooltip="Version of the Opportunity Score calculation formula."
+                />
+                <MetricRow
+                  label="Opportunity Calc"
+                  value={fmtDate(stock.oppCalculatedAt)}
+                  tooltip="Date when Opportunity Score v2 was last calculated by FomoFilter."
+                />
+              </div>
+            </SectionCard>
           </div>
 
-          {/* Growth & Profitability */}
-          <div>
-            <Section title="Growth">
-              <MetricItem label="Revenue Growth TTM" value={fmtPct(stock.revenueGrowth)} />
-              <MetricItem label="EPS Growth TTM" value={fmtPct(stock.epsGrowth)} />
-              <MetricItem label="Revenue Growth 3Y" value={fmtPct(stock.revenueGrowth3Y)} />
-              <MetricItem label="EPS Growth 3Y" value={fmtPct(stock.epsGrowth3Y)} />
-            </Section>
-            <div className="mt-3">
-              <Section title="Profitability">
-                <MetricItem label="Gross Margin" value={fmtPct(stock.grossMargin)} />
-                <MetricItem label="Operating Margin" value={fmtPct(stock.operatingMargin)} />
-                <MetricItem label="Net Margin" value={fmtPct(stock.netMargin)} />
-                <MetricItem label="ROE" value={stock.roe != null ? `${stock.roe.toFixed(1)}%` : "N/A"} />
-                <MetricItem label="ROA" value={stock.roa != null ? `${stock.roa.toFixed(1)}%` : "N/A"} />
-              </Section>
-            </div>
-          </div>
-
-          {/* Valuation */}
-          <div>
-            <Section title="Valuation">
-              <MetricItem label="P/E" value={formatRatio(stock.peRatio)} />
-              <MetricItem label="Forward P/E" value={formatRatio(stock.forwardPE)} />
-              <MetricItem label="PEG" value={formatRatio(stock.pegRatio, 2)} />
-              <MetricItem label="Forward PEG" value={formatRatio(stock.forwardPEG, 2)} />
-              <MetricItem label="P/S" value={formatRatio(stock.ps, 2)} />
-              <MetricItem label="P/B" value={formatRatio(stock.pb, 2)} />
-              <MetricItem label="EV/EBITDA" value={formatRatio(stock.evToEbitda, 1)} />
-            </Section>
-          </div>
-
-          {/* Financial Health & Data Freshness */}
-          <div>
-            <Section title="Financial Health">
-              <MetricItem label="Debt / Equity" value={formatRatio(stock.debtToEquity, 2)} />
-              <MetricItem label="Current Ratio" value={fmtRatio(stock.currentRatio)} />
-              <MetricItem label="Quick Ratio" value={fmtRatio(stock.quickRatio)} />
-              <MetricItem label="Interest Coverage" value={fmtRatio(stock.interestCoverage)} />
-            </Section>
-            <div className="mt-3">
-              <Section title="Context">
-                <MetricItem label="Beta" value={stock.beta != null ? Number(stock.beta).toFixed(2) : "N/A"} />
-              </Section>
-            </div>
-            <div className="mt-3">
-              <Section title="Data Freshness">
-                <MetricItem label="Quote Synced" value={fmtDate(stock.quoteLastSynced)} />
-                <MetricItem label="Quote Source" value={stock.quoteSource ?? "N/A"} />
-                <MetricItem label="Metrics Synced" value={fmtDate(stock.metricsLastSynced)} />
-                <MetricItem label="Metrics Source" value={stock.metricsSource ?? "N/A"} />
-                <MetricItem label="Analyst Synced" value={fmtDate(stock.analystLastSyncedAt)} />
-                <MetricItem label="Analyst Source" value={stock.analystSource ?? "N/A"} />
-              </Section>
-            </div>
-          </div>
-
-          {/* Analyst Data */}
-          <div>
-            <Section title="Analyst Data">
-              <MetricItem
-                label="Target Price"
-                value={stock.analystTargetPrice != null ? `$${Number(stock.analystTargetPrice).toFixed(2)}` : "N/A"}
-                highlight={stock.analystUpsidePercent != null && stock.analystUpsidePercent > 0}
+          {/* Section 3: Analyst View */}
+          <div className="xl:col-span-1">
+            <SectionCard title="Analyst View">
+              {/* Stars + value + label */}
+              <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                <StarDisplay stars={starCount} />
+                {starCount > 0 && (
+                  <span className="text-xs tabular-nums text-slate-400">{starCount.toFixed(1)}</span>
+                )}
+                {starCount > 0 && <span className="text-slate-600 text-xs">·</span>}
+                {stock.analystRatingNormalized ? (
+                  <span className={`text-xs font-semibold ${
+                    stock.analystRatingNormalized === "Strong Buy" ? "text-emerald-300" :
+                    stock.analystRatingNormalized === "Buy" ? "text-emerald-400/70" :
+                    stock.analystRatingNormalized === "Hold" ? "text-amber-400" :
+                    stock.analystRatingNormalized === "Sell" ? "text-red-400/70" :
+                    stock.analystRatingNormalized === "Strong Sell" ? "text-red-400" :
+                    "text-slate-400"
+                  }`}>{stock.analystRatingNormalized}</span>
+                ) : (
+                  <span className="text-slate-600 text-xs">No rating</span>
+                )}
+              </div>
+              <MetricRow
+                label="Analysts"
+                value={stock.analystCount != null ? String(stock.analystCount) : "N/A"}
+                tooltip="Number of analysts providing recommendations."
               />
-              <MetricItem
-                label="Upside %"
+              <MetricRow
+                label="Consensus Target"
+                value={fmtPrice(stock.analystTargetPrice)}
+                tooltip="Consensus (mean) analyst price target from FMP."
+                valueClass={stock.analystUpsidePercent != null && stock.analystUpsidePercent > 0 ? "text-emerald-300" : undefined}
+              />
+              <MetricRow
+                label="Analyst Upside"
                 value={stock.analystUpsidePercent != null
                   ? `${stock.analystUpsidePercent >= 0 ? "+" : ""}${Number(stock.analystUpsidePercent).toFixed(1)}%`
                   : "N/A"}
-                highlight={stock.analystUpsidePercent != null && stock.analystUpsidePercent > 0}
+                tooltip="Percentage difference between current price and consensus target price. Higher means analysts see more upside."
+                valueClass={stock.analystUpsidePercent != null
+                  ? (stock.analystUpsidePercent >= 0 ? "text-emerald-400" : "text-red-400")
+                  : undefined}
               />
-              <MetricItem label="Rating" value={stock.analystRatingNormalized ?? "N/A"} />
-              <MetricItem label="Analysts" value={stock.analystCount != null ? String(stock.analystCount) : "N/A"} />
-              <MetricItem
+              <MetricRow
                 label="Target High"
-                value={stock.analystTargetHigh != null ? `$${Number(stock.analystTargetHigh).toFixed(2)}` : "N/A"}
+                value={fmtPrice(stock.analystTargetHigh)}
+                tooltip="Highest analyst price target."
               />
-              <MetricItem
+              <MetricRow
+                label="Target Median"
+                value={fmtPrice(stock.analystTargetMedian)}
+                tooltip="Median analyst price target."
+              />
+              <MetricRow
                 label="Target Low"
-                value={stock.analystTargetLow != null ? `$${Number(stock.analystTargetLow).toFixed(2)}` : "N/A"}
+                value={fmtPrice(stock.analystTargetLow)}
+                tooltip="Lowest analyst price target."
               />
-            </Section>
+              <MetricRow
+                label="Analyst Synced"
+                value={fmtDate(stock.analystLastSyncedAt)}
+                tooltip="Date when analyst data was last synced from providers."
+              />
+              <MetricRow
+                label="Source"
+                value={stock.analystSource ?? "N/A"}
+                tooltip="Data provider for analyst data."
+              />
+            </SectionCard>
+          </div>
+
+          {/* Section 4: Valuation Metrics */}
+          <div className="xl:col-span-1">
+            <SectionCard title="Valuation Metrics">
+              <MetricRow
+                label="P/E"
+                value={formatRatio(stock.peRatio)}
+                tooltip="Price-to-Earnings ratio TTM. Lower generally means cheaper relative to earnings."
+              />
+              <MetricRow
+                label="Forward P/E"
+                value={formatRatio(stock.forwardPE)}
+                tooltip="Price-to-Forward-Earnings estimate. Lower generally means cheaper relative to expected earnings."
+              />
+              <MetricRow
+                label="PEG"
+                value={formatRatio(stock.pegRatio, 2)}
+                tooltip="Price/Earnings-to-Growth ratio. Values near or below 1 may indicate reasonable valuation relative to growth."
+              />
+              <MetricRow
+                label="Forward PEG"
+                value={formatRatio(stock.forwardPEG, 2)}
+                tooltip="Forward PEG ratio based on forward earnings estimate."
+              />
+              <MetricRow
+                label="P/S"
+                value={formatRatio(stock.ps, 2)}
+                tooltip="Price-to-Sales ratio TTM. Lower may indicate more reasonable valuation relative to revenue."
+              />
+              <MetricRow
+                label="P/B"
+                value={formatRatio(stock.pb, 2)}
+                tooltip="Price-to-Book ratio. Lower may indicate stock is cheaper relative to book value."
+              />
+              <MetricRow
+                label="EV/EBITDA"
+                value={formatRatio(stock.evToEbitda, 1)}
+                tooltip="Enterprise Value to EBITDA. A lower value often indicates more reasonable valuation."
+              />
+            </SectionCard>
+          </div>
+
+          {/* Section 5: Growth & Profitability */}
+          <div className="xl:col-span-1">
+            <SectionCard title="Growth &amp; Profitability">
+              <MetricRow
+                label="Revenue Growth TTM"
+                value={fmtPct(stock.revenueGrowth)}
+                tooltip="Year-over-year revenue growth for the trailing twelve months."
+                valueClass={stock.revenueGrowth != null ? (stock.revenueGrowth >= 0 ? "text-emerald-400/80" : "text-red-400/80") : undefined}
+              />
+              <MetricRow
+                label="EPS Growth TTM"
+                value={fmtPct(stock.epsGrowth)}
+                tooltip="Year-over-year earnings per share growth for the trailing twelve months."
+                valueClass={stock.epsGrowth != null ? (stock.epsGrowth >= 0 ? "text-emerald-400/80" : "text-red-400/80") : undefined}
+              />
+              <MetricRow
+                label="Revenue Growth 3Y"
+                value={fmtPct(stock.revenueGrowth3Y)}
+                tooltip="3-year compound annual revenue growth rate."
+                valueClass={stock.revenueGrowth3Y != null ? (stock.revenueGrowth3Y >= 0 ? "text-emerald-400/80" : "text-red-400/80") : undefined}
+              />
+              <MetricRow
+                label="EPS Growth 3Y"
+                value={fmtPct(stock.epsGrowth3Y)}
+                tooltip="3-year compound annual EPS growth rate."
+                valueClass={stock.epsGrowth3Y != null ? (stock.epsGrowth3Y >= 0 ? "text-emerald-400/80" : "text-red-400/80") : undefined}
+              />
+              <MetricRow
+                label="Gross Margin"
+                value={fmtPct(stock.grossMargin)}
+                tooltip="Gross profit as a percentage of revenue. Higher means better gross profitability."
+              />
+              <MetricRow
+                label="Operating Margin"
+                value={fmtPct(stock.operatingMargin)}
+                tooltip="Operating profit as a percentage of revenue. Higher means more operational efficiency."
+              />
+              <MetricRow
+                label="Net Margin"
+                value={fmtPct(stock.netMargin)}
+                tooltip="Net profit as a percentage of revenue. Higher means more bottom-line profitability."
+              />
+              <MetricRow
+                label="ROE"
+                value={stock.roe != null ? `${fmtNum(stock.roe)}%` : "N/A"}
+                tooltip="Return on Equity — net income divided by shareholders' equity. Higher generally means better use of equity capital."
+              />
+              <MetricRow
+                label="ROA"
+                value={stock.roa != null ? `${fmtNum(stock.roa)}%` : "N/A"}
+                tooltip="Return on Assets — net income divided by total assets. Higher generally means better asset efficiency."
+              />
+            </SectionCard>
+          </div>
+
+          {/* Section 6: Financial Health */}
+          <div className="xl:col-span-1">
+            <SectionCard title="Financial Health">
+              <MetricRow
+                label="Debt / Equity"
+                value={formatRatio(stock.debtToEquity, 2)}
+                tooltip="Total debt divided by shareholders' equity. Lower generally means less leverage."
+              />
+              <MetricRow
+                label="Current Ratio"
+                value={stock.currentRatio != null ? fmtNum(stock.currentRatio) : "N/A"}
+                tooltip="Current assets divided by current liabilities. A ratio above 1 generally indicates good short-term liquidity."
+              />
+              <MetricRow
+                label="Quick Ratio"
+                value={stock.quickRatio != null ? fmtNum(stock.quickRatio) : "N/A"}
+                tooltip="Like current ratio but excluding inventory. A ratio above 1 generally indicates strong liquidity."
+              />
+              <MetricRow
+                label="Interest Coverage"
+                value={stock.interestCoverage != null ? `${fmtNum(stock.interestCoverage)}x` : "N/A"}
+                tooltip="EBIT divided by interest expense. Higher means the company can more easily cover its interest payments."
+              />
+            </SectionCard>
+
+            {/* Section 7: Market Position */}
+            <div className="mt-3">
+              <SectionCard title="Market Position">
+                <MetricRow
+                  label="Current Price"
+                  value={formatCurrency(stock.price)}
+                  tooltip="Latest synced market price from FMP Daily Market Data Sync."
+                />
+                <MetricRow
+                  label="Day %"
+                  value={fmtPct(stock.change)}
+                  tooltip="Daily percentage change from the latest synced quote."
+                  valueClass={stock.change >= 0 ? "text-emerald-400" : "text-red-400"}
+                />
+                <MetricRow
+                  label="52W High"
+                  value={fmtPrice(stock.week52High)}
+                  tooltip="52-week price high from FMP quote data."
+                />
+                <MetricRow
+                  label="52W Low"
+                  value={fmtPrice(stock.week52Low)}
+                  tooltip="52-week price low from FMP quote data."
+                />
+                <MetricRow
+                  label="Price Avg 50"
+                  value={fmtPrice(stock.priceAvg50)}
+                  tooltip="50-day simple moving average from FMP quote data."
+                />
+                <MetricRow
+                  label="Price Avg 200"
+                  value={fmtPrice(stock.priceAvg200)}
+                  tooltip="200-day simple moving average from FMP quote data."
+                />
+                {week52Pos != null && (
+                  <div className="mt-1 pt-1 border-t border-slate-800/60">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-slate-500 cursor-help w-28 shrink-0" title="Current price position within the 52-week range. 100% = at 52-week high, 0% = at 52-week low.">
+                        52W Position
+                      </span>
+                      <div className="flex-1 bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-blue-500/60"
+                          style={{ width: `${Math.min(100, Math.max(0, week52Pos))}%` }}
+                        />
+                      </div>
+                      <span className="text-xs text-slate-400 tabular-nums w-9 text-right">
+                        {week52Pos.toFixed(0)}%
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </SectionCard>
+            </div>
+          </div>
+
+          {/* Section 8: Data Freshness */}
+          <div className="xl:col-span-1">
+            <SectionCard title="Data Freshness">
+              <MetricRow
+                label="Quote Synced"
+                value={fmtDate(stock.quoteLastSynced)}
+                tooltip="Date when price quote data was last synced from FMP."
+              />
+              <MetricRow
+                label="Quote Source"
+                value={stock.quoteSource ?? "N/A"}
+                tooltip="Data provider for price quote (FMP)."
+              />
+              <MetricRow
+                label="Metrics Synced"
+                value={fmtDate(stock.metricsLastSynced)}
+                tooltip="Date when fundamental metrics were last synced."
+              />
+              <MetricRow
+                label="Metrics Source"
+                value={stock.metricsSource ?? "N/A"}
+                tooltip="Data provider for fundamental metrics (FMP)."
+              />
+              <MetricRow
+                label="Analyst Synced"
+                value={fmtDate(stock.analystLastSyncedAt)}
+                tooltip="Date when analyst data (targets and recommendations) was last synced."
+              />
+              <MetricRow
+                label="Analyst Source"
+                value={stock.analystSource ?? "N/A"}
+                tooltip="Data provider for analyst data (FMP + Finnhub)."
+              />
+              <MetricRow
+                label="Opp. Calculated"
+                value={fmtDate(stock.oppCalculatedAt)}
+                tooltip="Date when Opportunity Score v2 was last calculated by FomoFilter."
+              />
+              <MetricRow
+                label="Fund. Calculated"
+                value={fmtDate(stock.scoreLastCalculated)}
+                tooltip="Date when Fundamental Score was last calculated by FomoFilter."
+              />
+            </SectionCard>
           </div>
 
         </div>

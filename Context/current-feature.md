@@ -1,4 +1,4 @@
-# Phase 20 — Opportunity Score v2 with Analyst Targets
+# Phase 21A — Scanner Decision View Cleanup
 
 ## Status
 
@@ -8,953 +8,1161 @@ Completed
 
 ## Goal
 
-Upgrade the existing Opportunity Score from `opportunity-v1` to `opportunity-v2` by adding analyst target and analyst sentiment signals.
+Refactor the Scanner page from a dense data table into a clear, modern **Decision View**.
 
-The current Opportunity Score does **not** include:
+This phase should improve readability, reduce visual overload, fix the expanded-row bug, and make every displayed value easier to understand.
 
-```txt
-Analyst target price
-Analyst upside %
-Target high / low / median
-Analyst recommendation counts
-Analyst count / confidence
-```
-
-After Phase 17 and Phase 19, the app now has reliable coverage for the missing inputs:
-
-```txt
-Analyst target coverage: 100 / 100
-Analyst upside coverage: 100 / 100
-Target high / low / median coverage: 100 / 100
-Analyst rating/count coverage: 100 / 100
-Quote coverage: 100 / 100
-52-week context coverage: 100 / 100
-```
-
-Phase 20 should use this new data to make Opportunity Score more meaningful.
+The Scanner already has strong data after the recent FMP and scoring phases. The next step is not to add more data, but to present the existing data better.
 
 ---
 
-## Important User Requirements
+## Core Problem
 
-This phase must update more than the calculation code.
-
-Required updates:
+The current Scanner works technically, but the UI is overloaded:
 
 ```txt
-1. Update the Opportunity Score calculation logic.
-2. Update the Admin Sync Actions button description for Calculate Opportunity Scores.
-3. Update the Score Methodology tab with the new v2 calculation explanation.
-4. Update any UI text that still describes Opportunity Score v1.
-5. Keep the implementation clean and avoid duplicate score fields/tables.
+Too many columns
+Too many filters
+Many unclear abbreviations
+Too many raw numbers
+Weak visual hierarchy
+Expanded row chevron appears only after search
+Expanded row contains useful data but is hard to scan
+Some headers have tooltips, others do not
+Some users cannot tell what filter affected which column
+```
+
+The Scanner should help answer:
+
+```txt
+Which stocks are interesting?
+Why are they interesting?
+What is the upside?
+Is the company fundamentally strong?
+Is it expensive or reasonably valued?
+What is the main stability/risk context?
+Which data is raw provider data and which data is calculated by the app?
+```
+
+---
+
+## Important Product Direction
+
+The main Scanner table should not look like a technical data dump.
+
+It should feel like a modern investing decision table.
+
+Use visual UI elements where appropriate:
+
+```txt
+Progress bars for calculated scores
+Stars for analyst rating
+Badges for status/rating
+Tooltips for every header
+Tooltips for every parameter in expanded row
+Grouped visual sections
+Highlighted filtered columns
+Clear labels instead of unclear abbreviations
 ```
 
 The user specifically requested:
 
 ```txt
-Do not only change the calculation.
-Also update:
-- Admin → Sync Actions → Calculate Opportunity Scores description
-- Admin → Score Methodology tab
+1. Main table parameters should be visually interesting and pleasant to read.
+2. Rating should use 1–5 stars, including half stars if possible, plus a label/score.
+3. Calculated scores should use progress bars with score numbers.
+4. Every table header must have a tooltip.
+5. Every expanded-row parameter should also have a tooltip.
+6. Risk should be renamed to Stability.
+7. Stability tooltip must explain that higher score means more stable / lower risk context.
+8. Filtered columns should be highlighted so the user knows which value caused the filter.
+9. Expanded row chevron must always appear, not only after search.
+10. Expanded row should remain rich and informative but be reorganized into clearer sections.
 ```
-
----
-
-## Why This Phase Is Needed
-
-The original Opportunity Score was intentionally conservative because analyst target coverage was poor.
-
-Earlier phases had:
-
-```txt
-Target price coverage: partial / unreliable
-Analyst upside: N/A for many stocks
-```
-
-Therefore Opportunity Score v1 did not include analyst target signals.
-
-Now the data is available and reliable after:
-
-```txt
-Phase 17 — FMP price-target-consensus migration
-Phase 18 — FMP fundamentals/ratios/growth migration
-Phase 19 — FMP daily quote migration
-```
-
-Opportunity Score should now reflect:
-
-```txt
-Is this a fundamentally strong company?
-Is valuation reasonable?
-Is growth attractive?
-Is risk acceptable?
-Is the stock trading in an attractive price range?
-Do analysts see meaningful upside?
-Is analyst sentiment supportive?
-```
-
----
-
-## Critical Product Decision
-
-Do not create a separate new score table.
-
-Do not create duplicate score fields unless absolutely required.
-
-Use existing fields:
-
-```txt
-StockScore.oppScore
-StockScore.oppScoreVersion
-StockScore.oppCalculatedAt
-```
-
-Update:
-
-```txt
-oppScoreVersion = "opportunity-v2"
-```
-
-Keep previous v1 logic only as internal reference/fallback if useful.
-
----
-
-## Scope
-
-Phase 20 includes:
-
-1. Audit existing Opportunity Score v1 logic.
-2. Define Opportunity Score v2 formula.
-3. Add analyst target/upside component.
-4. Add analyst sentiment component from recommendation counts.
-5. Use existing valuation/growth/fundamental/risk/price position inputs.
-6. Preserve missing-data re-normalization.
-7. Update Calculate Opportunity Scores action.
-8. Update Admin Sync Actions button text.
-9. Update Score Methodology tab.
-10. Update Data Inventory if needed.
-11. Update Scanner/Dashboard only if labels/version display needs refresh.
-12. Run score calculation and verify outputs.
 
 ---
 
 ## Non-Scope
 
-Do not build:
+Do not add new data.
 
-- Analyst Sentiment Score as a separate score.
-- Momentum Score.
-- Catalyst Score.
-- News sync.
-- Historical candle indicators.
-- Technical score.
-- Intraday sync.
-- New database score table.
-- New provider calls.
-- New live API calls from Scanner/Dashboard.
-- New scoring formulas for Fundamental Score.
+Do not add new API calls.
 
-Do not change:
+Do not change providers.
 
-```txt
-Fundamental Score formula
-Growth Score formula
-Profitability Score formula
-Valuation Score formula
-Financial Health Score formula
-Risk Context Score formula
-Daily Market Data Sync
-Company Data Sync
-Universe Sync
-```
+Do not change Prisma schema.
+
+Do not add migrations.
+
+Do not change scoring formulas.
+
+Do not change Opportunity Score v2.
+
+Do not change Fundamental Score.
+
+Do not change Dashboard yet.
+
+Do not change Data Inventory except if absolutely needed for shared component imports.
+
+Do not implement Momentum, News, Candles, Catalyst, or any new scores.
 
 ---
 
-## Existing Opportunity Score v1
+## Files To Inspect
 
-Current v1 is based on:
+Before implementation, inspect:
 
 ```txt
-Fundamental Quality
-Valuation
-Growth
-Risk / Context
-Price Position
+src/components/scanner/ScannerTable.tsx
+src/components/scanner/ScannerExpandedRow.tsx
+src/components/scanner/ScannerPageClient.tsx
+src/components/scanner/ScannerControls.tsx
+src/components/scanner/ScannerFilters.tsx
+src/components/scanner/ScannerViewPills.tsx
+src/components/scanner/MobileScannerCard.tsx
+src/lib/data/scanner.ts
+src/lib/formatters.ts
+src/lib/mock-data.ts
 ```
 
-It does not use:
+Also inspect shared UI helpers if present:
 
 ```txt
-Analyst Target
+components/ui/*
+src/components/ui/*
+src/lib/utils.ts
+```
+
+Do not create new shared UI components unless they clearly reduce duplication.
+
+---
+
+# 1. Main Table: Reduce Columns
+
+## Current Problem
+
+The current main table includes too many data-heavy columns:
+
+```txt
+Symbol
+Sector
+Price
+Day %
+Target
+Upside
+Rating
+Opp.
+Fund.
+Growth
+Profit.
+Valuat.
+Health
+Risk
+P/E
+PEG
+ROE
+Rev Gr.
+Mkt Cap
+```
+
+This makes the table hard to scan.
+
+---
+
+## Required Main Table Columns
+
+The main table should focus on decision-making.
+
+Recommended final columns:
+
+```txt
+Symbol
+Sector
+Price
+Day %
+Opportunity Score
+Fundamental Score
 Analyst Upside
 Analyst Rating
+Valuation Score
+Stability Score
+```
+
+Optional, only if space remains:
+
+```txt
+Target Price
+```
+
+Default recommendation:
+
+```txt
+Move Target Price to expanded row.
+Keep Analyst Upside in the main table.
+```
+
+---
+
+## Move These To Expanded Row
+
+Move these out of the main table and into expanded row:
+
+```txt
+Growth Score
+Profitability Score
+Financial Health Score
+P/E
+PEG
+ROE
+Revenue Growth
+Market Cap
+Target Price
+Target High
+Target Low
+Target Median
 Analyst Count
-Recommendation Counts
+52W High
+52W Low
+PriceAvg50
+PriceAvg200
+Margins
+Debt / Equity
+Current Ratio
+Quick Ratio
+Interest Coverage
+Data Freshness
 ```
 
 ---
 
-# 1. Required Audit Before Implementation
+# 2. Main Table: Clear Labels, No Ambiguous Abbreviations
 
-Inspect:
+## Current Problem
+
+Headers like these are unclear:
 
 ```txt
-src/lib/scoring/opportunity-score.ts
-src/actions/market-data-actions.ts
-src/components/admin/ScoreMethodologyTab.tsx
-src/components/admin/SyncPageClient.tsx
-src/components/admin/DataInventoryTab.tsx
-src/lib/data/scanner.ts
-src/lib/data/dashboard.ts
-prisma/schema.prisma
+Opp.
+Fund.
+Valuat.
+Risk
+Rev Gr.
+Mkt Cap
 ```
 
-Document:
+## Required Header Labels
+
+Use clearer labels:
+
+| Old | New |
+| --- | --- |
+| Opp. | Opportunity |
+| Fund. | Fundamental |
+| Valuat. | Valuation |
+| Risk | Stability |
+| Rev Gr. | Revenue Growth |
+| Mkt Cap | Market Cap |
+
+In the main table, since space is limited, short labels may be used only if the tooltip and visual grouping are clear.
+
+Preferred main-table headers:
 
 ```txt
-Current Opportunity Score v1 weights
-Current inputs used
-Current missing-data behavior
-Current scoreVersion value
-Where Calculate Opportunity Scores button text appears
-Where Score Methodology describes Opportunity Score
-Where oppScore is displayed
-```
-
-Do not start implementation before confirming all existing touchpoints.
-
----
-
-# 2. Data Inputs Available For v2
-
-## Existing Score Inputs
-
-From `StockScore`:
-
-```txt
-fundamentalScore
-growthScore
-profitabilityScore
-valuationScore
-financialHealthScore
-riskContextScore
-```
-
-From `StockMetric`:
-
-```txt
-peBasicExclExtraTTM
-psTTM
-pbAnnual
-evEbitdaTTM
-pegTTM
-revenueGrowthTTMYoy
-epsGrowthTTMYoy
-beta
-marketCapitalization
-```
-
-From `StockQuote`:
-
-```txt
-price
-week52High
-week52Low
-priceAvg50
-priceAvg200
-```
-
-From `StockAnalystData`:
-
-```txt
-targetPrice
-targetMean
-targetHigh
-targetLow
-targetMedian
-analystUpsidePercent
-analystRating
-analystCount
-strongBuyCount
-buyCount
-holdCount
-sellCount
-strongSellCount
+Opportunity
+Fundamental
+Analyst Upside
+Rating
+Valuation
+Stability
 ```
 
 ---
 
-# 3. Opportunity Score v2 Formula
+# 3. Rename Risk To Stability
 
-Recommended v2 components:
+## Requirement
 
-| Component | Weight |
-| --- | ---: |
-| Fundamental Quality | 25% |
-| Valuation | 20% |
-| Growth | 15% |
-| Analyst Upside | 20% |
-| Analyst Sentiment / Confidence | 10% |
-| Price Position | 5% |
-| Risk / Context | 5% |
-
-Total:
+Rename visible UI label:
 
 ```txt
-100%
+Risk
 ```
 
----
-
-## Why These Weights
-
-### Fundamental Quality — 25%
-
-The company still needs to be fundamentally strong.
-
-Uses:
+to:
 
 ```txt
-fundamentalScore
+Stability
 ```
 
-### Valuation — 20%
-
-Opportunity should prefer stocks that are not extremely expensive.
-
-Uses:
+This applies to:
 
 ```txt
-valuationScore
+Scanner table header
+Scanner expanded row
+Mobile scanner card if present
+Tooltips
+Any visible scanner labels
 ```
 
-### Growth — 15%
+Do not rename DB fields or scoring fields in this phase.
 
-Growth remains important, especially for tech/growth companies.
-
-Uses:
-
-```txt
-growthScore
-```
-
-### Analyst Upside — 20%
-
-Now that target coverage is 100/100, analyst upside can become a major opportunity signal.
-
-Uses:
-
-```txt
-analystUpsidePercent
-targetPrice
-current price
-```
-
-### Analyst Sentiment / Confidence — 10%
-
-Recommendation counts can help validate or challenge the upside signal.
-
-Uses:
-
-```txt
-strongBuyCount
-buyCount
-holdCount
-sellCount
-strongSellCount
-analystCount
-analystRating
-```
-
-### Price Position — 5%
-
-Helps avoid giving the highest opportunity scores only to stocks already near their 52-week high.
-
-Uses:
-
-```txt
-price
-week52High
-week52Low
-```
-
-### Risk / Context — 5%
-
-Keeps high-beta/speculative stocks from being over-rewarded.
-
-Uses:
+The data source can remain:
 
 ```txt
 riskContextScore
 ```
 
----
-
-# 4. Analyst Upside Scoring
-
-Input:
+But user-facing label should be:
 
 ```txt
-analystUpsidePercent
+Stability
 ```
 
-Recommended scoring scale:
+## Tooltip Text
 
-| Analyst Upside | Score |
-| --- | ---: |
-| >= 60% | 100 |
-| 40% to <60% | 90 |
-| 30% to <40% | 82 |
-| 20% to <30% | 72 |
-| 10% to <20% | 60 |
-| 0% to <10% | 45 |
-| -10% to <0% | 30 |
-| < -10% | 15 |
-| missing | null |
+Use:
+
+```txt
+Stability Score measures the stock's risk context. Higher is better: a higher score generally means lower volatility/risk context based mainly on beta and related risk inputs.
+```
 
 Important:
 
 ```txt
-Missing should be null, not 0.
-```
-
-Even though current coverage is 100/100, keep missing-data handling for future universes.
-
----
-
-# 5. Analyst Sentiment / Confidence Scoring
-
-Use recommendation counts.
-
-Recommended weighted recommendation score:
-
-```txt
-Strong Buy = 100
-Buy = 80
-Hold = 50
-Sell = 20
-Strong Sell = 0
-```
-
-Formula:
-
-```txt
-rawSentiment =
-(
-  strongBuy * 100 +
-  buy * 80 +
-  hold * 50 +
-  sell * 20 +
-  strongSell * 0
-) / totalRecommendations
-```
-
-Where:
-
-```txt
-totalRecommendations = strongBuy + buy + hold + sell + strongSell
-```
-
-If totalRecommendations is missing or zero:
-
-```txt
-sentimentScore = null
+A score of 100 means high stability / favorable risk context.
+It does not mean high risk.
 ```
 
 ---
 
-## Analyst Count Confidence Adjustment
+# 4. Visual Presentation: Make Scores Interesting
 
-Recommendation from 3 analysts should not carry the same weight as recommendation from 50 analysts.
+## Requirement
 
-Use a confidence multiplier:
+Calculated scores should not be shown as plain numbers only.
 
-| Analyst Count | Confidence |
+Use a compact score bar or mini progress bar.
+
+Applies to:
+
+```txt
+Opportunity Score
+Fundamental Score
+Valuation Score
+Stability Score
+```
+
+Optional in expanded row:
+
+```txt
+Growth Score
+Profitability Score
+Financial Health Score
+```
+
+## Suggested Score Cell
+
+Each calculated score cell should show:
+
+```txt
+Score number
+Horizontal mini progress bar
+Color/strength based on score tier
+```
+
+Example:
+
+```txt
+82
+[████████░░]
+```
+
+or compact:
+
+```txt
+82  ━━━━━━━░░
+```
+
+## Score Tiers
+
+Suggested tiers:
+
+```txt
+80–100: strong
+60–79: good
+40–59: caution
+0–39: weak
+```
+
+Keep it clean in dark mode.
+
+---
+
+# 5. Analyst Rating: Stars Instead Of Plain Text Only
+
+## Requirement
+
+Analyst Rating should not be only raw text like:
+
+```txt
+Buy
+Hold
+Strong Buy
+```
+
+Use a 1–5 star visualization, including half stars if possible.
+
+Display both:
+
+```txt
+Stars + label
+```
+
+Example:
+
+```txt
+★★★★☆ Buy
+```
+
+or:
+
+```txt
+4.0 ★ Buy
+```
+
+## Mapping
+
+Use current recommendation / rating data.
+
+Suggested mapping:
+
+| Rating | Stars |
 | --- | ---: |
-| >= 30 | 1.00 |
-| 20–29 | 0.95 |
-| 10–19 | 0.90 |
-| 5–9 | 0.80 |
-| 1–4 | 0.65 |
-| 0 / missing | null |
+| Strong Buy | 5.0 |
+| Buy | 4.0 |
+| Hold | 3.0 |
+| Sell | 2.0 |
+| Strong Sell | 1.0 |
 
-Final sentiment component:
+If half-star is possible based on recommendation mix, implement only if simple and uses existing counts.
+
+Optional half-star approach:
 
 ```txt
-analystSentimentScore = 50 + ((rawSentiment - 50) * confidence)
+Use weighted recommendation score:
+Strong Buy=5, Buy=4, Hold=3, Sell=2, Strong Sell=1
+weighted average = total weighted / analyst count
+round to nearest 0.5
+```
+
+Only do this if the required recommendation counts are already available in the scanner data.
+
+If not simple, use label mapping for v1 of this UI improvement.
+
+---
+
+# 6. Tooltips Everywhere
+
+## Required
+
+Every main table header must have a tooltip.
+
+Every expanded-row parameter label must have a tooltip.
+
+Tooltips should explain:
+
+```txt
+What the value means
+Whether higher is better
+Whether it is calculated by the app or provider/raw data
+The rough source if useful
+```
+
+## Main Table Tooltip Examples
+
+### Symbol
+
+```txt
+Stock ticker, company name, and index membership.
+```
+
+### Price
+
+```txt
+Latest synced market price from Daily Market Data Sync.
+```
+
+### Day %
+
+```txt
+Daily percentage change from the latest synced quote.
+```
+
+### Opportunity
+
+```txt
+Opportunity Score v2. Combines fundamental quality, valuation, growth, analyst upside, analyst sentiment, price position, and stability. Higher is better.
+```
+
+### Fundamental
+
+```txt
+Internal Fundamental Score based on growth, profitability, valuation, financial health, and stability inputs. Higher is better.
+```
+
+### Analyst Upside
+
+```txt
+Analyst target upside: the percentage difference between the current price and the consensus target price. Higher means analysts see more upside.
+```
+
+### Rating
+
+```txt
+Analyst recommendation summary converted to a star view. Based on stored recommendation counts.
+```
+
+### Valuation
+
+```txt
+Internal Valuation Score based on valuation ratios such as P/E, P/S, EV/EBITDA, and PEG. Higher generally means more reasonable valuation.
+```
+
+### Stability
+
+```txt
+Stability Score measures risk context. Higher is better and generally means lower volatility/risk context based mainly on beta and related inputs.
+```
+
+---
+
+# 7. Visual Grouping: Calculated Scores vs Raw Data
+
+## Requirement
+
+The main table should visually distinguish:
+
+```txt
+Calculated app scores
+```
+
+from:
+
+```txt
+Raw / provider market and analyst data
+```
+
+Suggested grouping:
+
+```txt
+Identity / Market
+Symbol, Sector, Price, Day %
+
+Calculated Scores
+Opportunity, Fundamental, Valuation, Stability
+
+Analyst Data
+Analyst Upside, Rating
+```
+
+Use subtle vertical dividers, background tint, or header group styling.
+
+Do not make the table visually noisy.
+
+---
+
+# 8. Default Sort
+
+## Decision
+
+Keep default sort as:
+
+```txt
+Fundamental Score
 ```
 
 Reason:
 
 ```txt
-Low analyst count should pull the score toward neutral, not directly crush it.
+Fundamental Score is more understandable to users than Opportunity Score at this stage.
 ```
 
-Example:
+Opportunity Score still remains visible and filterable.
+
+Ensure the sort dropdown uses clear labels:
 
 ```txt
-rawSentiment = 90
-analystCount = 4
-confidence = 0.65
-
-score = 50 + ((90 - 50) * 0.65)
-score = 76
-```
-
----
-
-# 6. Price Position Scoring
-
-Use 52-week range.
-
-Formula:
-
-```txt
-position = (price - week52Low) / (week52High - week52Low)
-```
-
-Recommended scale:
-
-| Position in 52W Range | Score |
-| --- | ---: |
-| 0.20 to 0.60 | 100 |
-| 0.60 to 0.75 | 80 |
-| 0.75 to 0.90 | 60 |
-| 0.90 to 1.00 | 40 |
-| > 1.00 | 30 |
-| 0.00 to 0.20 | 65 |
-| < 0.00 | 50 |
-| missing / invalid range | null |
-
-Interpretation:
-
-```txt
-Middle-lower part of 52W range is often a better opportunity zone.
-Very high near 52W high is less attractive.
-Very low near 52W low may signal risk, so do not score it as 100 automatically.
-```
-
----
-
-# 7. Missing Data Re-normalization
-
-Keep existing v1 behavior:
-
-```txt
-Do not treat missing components as zero.
-Remove missing components from denominator.
-Re-normalize weights among available components.
-```
-
-Example:
-
-If a stock is missing analyst sentiment but has everything else:
-
-```txt
-Exclude analyst sentiment 10%.
-Re-normalize the remaining 90% to 100%.
-```
-
-Minimum required component:
-
-```txt
-fundamentalScore must exist.
-```
-
-If `fundamentalScore` is missing:
-
-```txt
-oppScore = null
-skip / not calculated
-```
-
----
-
-# 8. Caps and Guardrails
-
-## Analyst Upside Cap
-
-Analyst targets can be overly optimistic.
-
-Cap input for scoring:
-
-```txt
-analystUpsidePercent scoring max = 60%
-```
-
-Do not alter raw stored value.
-
-## Extreme Valuation Guardrail
-
-Do not create hard exclusions in this phase.
-
-Let valuationScore handle expensive stocks.
-
-## Negative Earnings
-
-If valuation metrics like P/E are null:
-
-```txt
-valuationScore already handles missing/available fields.
-Do not add separate penalty in Opportunity v2 unless already existing.
-```
-
-## High Risk
-
-Risk component weight remains low at 5%.
-
-Do not over-penalize high beta if analysts and fundamentals are strong.
-
----
-
-# 9. Score Versioning
-
-Update:
-
-```txt
-oppScoreVersion = "opportunity-v2"
-```
-
-Keep:
-
-```txt
-oppCalculatedAt = now
-```
-
-Do not add new DB fields unless absolutely required.
-
-No migration is expected.
-
----
-
-# 10. Admin Sync Actions Text Update
-
-Update the Calculate Opportunity Scores button/section description.
-
-Current text likely describes v1.
-
-New suggested description:
-
-```txt
-Calculates Opportunity Score v2 using fundamental quality, valuation, growth, analyst upside, analyst sentiment, price position, and risk context. Uses only DB data; no external API calls.
-```
-
-Additional helper text:
-
-```txt
-Run after Company Data Sync and Daily Market Data Sync so analyst targets, quotes, and financial metrics are fresh.
-```
-
-Important:
-
-```txt
-Do not say it calls FMP/Finnhub directly.
-Score calculation is internal and DB-only.
-```
-
----
-
-# 11. Score Methodology Tab Update
-
-Update the Score Methodology tab.
-
-Required section:
-
-```txt
-Opportunity Score v2
-```
-
-Must include:
-
-1. Purpose.
-2. Component weights.
-3. Analyst Upside scoring scale.
-4. Analyst Sentiment formula.
-5. Analyst Count confidence adjustment.
-6. Price Position formula.
-7. Missing-data re-normalization.
-8. Example calculation.
-9. Note that raw analyst target values are not modified.
-10. Note that no external APIs are called during scoring.
-
-Suggested text:
-
-```txt
-Opportunity Score v2 estimates how attractive a stock looks right now by combining internal quality scores with analyst target upside and market context.
-```
-
-Component table:
-
-| Component | Weight | Source |
-| --- | ---: | --- |
-| Fundamental Quality | 25% | StockScore.fundamentalScore |
-| Valuation | 20% | StockScore.valuationScore |
-| Growth | 15% | StockScore.growthScore |
-| Analyst Upside | 20% | StockAnalystData.analystUpsidePercent |
-| Analyst Sentiment | 10% | Finnhub recommendation counts stored in DB |
-| Price Position | 5% | StockQuote 52-week range |
-| Risk / Context | 5% | StockScore.riskContextScore |
-
----
-
-# 12. Data Inventory Updates
-
-Check whether Data Inventory already shows:
-
-```txt
-Opp. Score
-Opp. Version
-Opp. Calc At
+Fundamental Score
+Opportunity Score
 Analyst Upside
-Analyst Rating
-Analyst Count
+Valuation Score
+Stability Score
+Price Change %
+Market Cap
+Symbol A–Z
 ```
 
-Required:
-
-```txt
-Opp. Version should show opportunity-v2 after recalculation.
-```
-
-Optional:
-
-```txt
-Show Analyst Upside near Opportunity Score if already easy.
-```
-
-Do not overload Data Inventory.
-
----
-
-# 13. Scanner Updates
-
-Scanner already shows:
+Do not use unclear labels like:
 
 ```txt
 Opp.
 Fund.
-Target
-Upside
-Rating
 ```
-
-Required:
-
-```txt
-Opportunity Score values should update after calculation.
-Sorting by Opportunity Score should still work.
-High Opportunity pill should still work.
-Expanded row should show Opportunity Score explanation if it already exists.
-```
-
-Optional text update:
-
-```txt
-Opportunity Score v2 now includes analyst upside and sentiment.
-```
-
-Do not redesign Scanner.
 
 ---
 
-# 14. Dashboard Updates
+# 9. Quick Filters Cleanup
 
-Dashboard already has opportunity cards.
+## Current Problem
 
-Required:
+There are too many quick filter pills, including disabled future filters.
+
+## Required Quick Filters
+
+Keep only:
 
 ```txt
-Avg Opportunity should reflect v2 after recalculation.
-High Opportunity count should update.
-Top opportunity/analyst upside sections should still work.
+All Stocks
+High Opportunity
+High Fundamentals
+High Analyst Upside
+Reasonable Valuation
+In Watchlist
 ```
 
 Optional:
 
 ```txt
-Update label/tooltips to mention v2 if present.
+Positive Day %
 ```
 
-Do not redesign Dashboard.
-
----
-
-# 15. QA Requirements
-
-## Before Calculation
-
-Record baseline:
+Move or remove:
 
 ```txt
-Average oppScore
-Top 10 oppScore stocks
-oppScoreVersion distribution
-Number with opportunity-v1
-Number with opportunity-v2
+High Growth
+High Profitability
+Alert Active
 ```
 
----
+These can go into Advanced Filters if still useful.
 
-## Run Calculation
-
-Open:
+Hide unsupported future filters completely:
 
 ```txt
-/admin/sync → Sync Actions
+Hot Today
+Strong Momentum
+Unusual Volume
+FOMO Risk
 ```
 
-Run:
+Do not show disabled future filters in the main scanner.
+
+Reason:
 
 ```txt
-Calculate Opportunity Scores
-```
-
-Confirm:
-
-```txt
-No external API calls.
-Status success or partial_success only if expected.
-100 active Nasdaq 100 calculated.
-0 failed.
-oppScoreVersion = opportunity-v2.
+Disabled pills add visual noise and confuse users.
 ```
 
 ---
 
-## Score Result Coverage
+# 10. Advanced Filters
 
-Report:
+## Requirement
+
+Move detailed filters into a collapsible section:
 
 ```txt
-Total active Nasdaq 100 stocks
-With oppScore
-With oppScoreVersion = opportunity-v2
-With analystUpsidePercent
-With analyst sentiment inputs
-Failed/skipped
+Advanced Filters
 ```
+
+Collapsed by default.
+
+Include:
+
+```txt
+Index
+Sector
+Watchlist
+Alert Active
+Positive Day %
+Min Opportunity
+Min Fundamental
+Min Growth
+Min Profitability
+Min Valuation
+Min Health
+Min Analyst Upside
+```
+
+If there is already a filter row, refactor it into this collapsible section.
+
+The main screen should not show all threshold dropdowns by default.
+
+---
+
+# 11. Highlight Filtered Columns
+
+## Requirement
+
+When a filter affects a specific column, highlight that column.
+
+Examples:
+
+| Active Filter | Highlight Column |
+| --- | --- |
+| High Opportunity | Opportunity |
+| High Fundamentals | Fundamental |
+| High Analyst Upside | Analyst Upside |
+| Reasonable Valuation | Valuation |
+| Positive Day % | Day % |
+| Min Opportunity | Opportunity |
+| Min Fundamental | Fundamental |
+| Min Valuation | Valuation |
+| Min Analyst Upside | Analyst Upside |
+
+Highlight should apply to:
+
+```txt
+Header cell
+Relevant body cells
+```
+
+Use subtle styling.
+
+Do not make it distracting.
+
+---
+
+# 12. Active Filter Summary
+
+Add a small summary line when filters are active.
+
+Examples:
+
+```txt
+Filtering by: High Analyst Upside — see highlighted Analyst Upside column.
+```
+
+or:
+
+```txt
+Active filters: Analyst Upside ≥ 20%, Fundamental Score ≥ 75
+```
+
+This summary should help the user understand:
+
+```txt
+Why only these rows are visible
+Which column to look at
+```
+
+---
+
+# 13. Expanded Row Chevron Bug
+
+## Current Bug
+
+Expanded-row chevron appears only after searching for a stock.
 
 Expected:
 
 ```txt
-100 / 100 active Nasdaq 100 should have opportunity-v2.
+Every row should always show the expand/collapse chevron.
+```
+
+## Requirement
+
+Fix:
+
+```txt
+The chevron must appear in every row, in every list state.
+It must not depend on search state.
+It must work when no search is active.
+It must work when filters are active.
+It must work after sorting.
+It must work on first page load.
+```
+
+Click behavior:
+
+```txt
+Clicking chevron expands/collapses the row.
+Clicking row can still open drawer if that behavior exists.
+Chevron click should stop propagation if needed.
 ```
 
 ---
 
-## Score Spot Check
+# 14. Expanded Row Reorganization
 
-Return table for:
+## Current Problem
+
+Expanded row is useful but visually hard to scan:
 
 ```txt
-AAPL
-MSFT
-NVDA
-META
-TSLA
-AMZN
-PLTR
-AVGO
-AMD
-GOOGL
+Many parameters
+Small section headings
+Dense layout
+No strong grouping
+Labels are unclear
+Tooltips missing
 ```
 
-Columns:
+## Required Structure
+
+Reorganize expanded row into sections:
 
 ```txt
-Symbol
-Old Opp Score
-New Opp Score
-Fundamental
-Valuation
-Growth
+Decision Summary
+Score Breakdown
+Analyst View
+Valuation Metrics
+Growth & Profitability
+Financial Health
+Market Position
+Data Freshness
+```
+
+---
+
+## Section 1: Decision Summary
+
+Purpose:
+
+```txt
+Explain the stock in plain language using available data.
+```
+
+Suggested contents:
+
+```txt
+Opportunity Score
+Main strength
+Main concern
+Overall status badge
+```
+
+No AI call.
+
+Use rule-based explanations.
+
+Example:
+
+```txt
+Main strength: Strong fundamentals and high analyst upside.
+Main concern: Expensive valuation and elevated beta.
+```
+
+Rules can be simple:
+
+```txt
+If fundamentalScore >= 80 → Strong fundamentals
+If analystUpsidePercent >= 20 → High analyst upside
+If valuationScore < 40 → Expensive valuation
+If stabilityScore < 60 → Higher volatility/risk context
+If price position > 0.85 → Near 52-week high
+```
+
+Do not over-engineer.
+
+---
+
+## Section 2: Score Breakdown
+
+Show calculated scores with progress bars:
+
+```txt
+Opportunity Score
+Fundamental Score
+Growth Score
+Profitability Score
+Valuation Score
+Financial Health Score
+Stability Score
+```
+
+Include:
+
+```txt
+Score version
+Last calculated date
+```
+
+Use tooltips for every score.
+
+---
+
+## Section 3: Analyst View
+
+Show:
+
+```txt
+Analyst Rating stars
+Rating label
+Analyst Count
+Consensus Target
+Analyst Upside %
+Target High
+Target Median
+Target Low
+Last analyst sync date
+Source
+```
+
+Use tooltips.
+
+---
+
+## Section 4: Valuation Metrics
+
+Show:
+
+```txt
+P/E
+Forward P/E
+PEG
+Forward PEG
+P/S
+P/B
+EV/EBITDA
+```
+
+Use tooltips.
+
+---
+
+## Section 5: Growth & Profitability
+
+Show:
+
+```txt
+Revenue Growth TTM
+EPS Growth TTM
+Revenue Growth 3Y
+EPS Growth 3Y
+Gross Margin
+Operating Margin
+Net Margin
+ROE
+ROA
+```
+
+Use tooltips.
+
+---
+
+## Section 6: Financial Health
+
+Show:
+
+```txt
+Debt / Equity
+Current Ratio
+Quick Ratio
+Interest Coverage
+```
+
+Use tooltips.
+
+---
+
+## Section 7: Market Position
+
+Show:
+
+```txt
+Current Price
+Day %
+52W High
+52W Low
+Price Avg 50
+Price Avg 200
+52W Position
+```
+
+Use tooltips.
+
+---
+
+## Section 8: Data Freshness
+
+Show:
+
+```txt
+Quote Synced
+Quote Source
+Metrics Synced
+Metrics Source
+Analyst Synced
+Analyst Source
+Opportunity Calculated
+Fundamental Calculated
+```
+
+Use tooltips.
+
+---
+
+# 15. Expanded Row Visual Design
+
+## Requirements
+
+Make expanded row more readable.
+
+Use:
+
+```txt
+Larger section headings
+Better spacing
+Cards or grouped panels
+Subtle borders
+Clear label/value alignment
+Progress bars for scores
+Stars for rating
+N/A display for missing values
+Tooltips for every label
+```
+
+Avoid:
+
+```txt
+Tiny uppercase headings
+Dense grid with no visual separation
+Long rows of raw metrics without context
+```
+
+---
+
+# 16. Mobile Scanner Card
+
+If the mobile scanner card exists, apply the same clarity principles:
+
+```txt
+Use clear labels
+Rename Risk to Stability
+Use score bars
+Show analyst rating stars
+Keep only key decision fields
+Put details in expanded area or secondary section
+```
+
+Do not redesign mobile completely if it is risky.
+
+---
+
+# 17. QA Requirements
+
+## Scanner Initial Load
+
+Open:
+
+```txt
+/scanner
+```
+
+Confirm:
+
+```txt
+100 stocks visible
+Default sort is Fundamental Score
+Main table has reduced columns
+No unsupported future filter pills visible
+Headers use clearer labels
+Every header has tooltip
+Stability replaces Risk
+Calculated scores use visual bars
+Rating uses stars
+```
+
+---
+
+## Expanded Row Bug QA
+
+Confirm:
+
+```txt
+Chevron appears on every row on initial load
+Chevron appears without search
+Chevron appears after search
+Chevron appears after filtering
+Chevron appears after sorting
+Chevron expands and collapses correctly
+Chevron click does not trigger wrong row action
+```
+
+---
+
+## Filter QA
+
+Test:
+
+```txt
+High Opportunity
+High Fundamentals
+High Analyst Upside
+Reasonable Valuation
+Positive Day %
+Advanced Filters thresholds
+```
+
+Confirm:
+
+```txt
+Filtered column is highlighted
+Active filter summary appears
+Summary text is accurate
+Clearing filters removes highlight
+```
+
+---
+
+## Tooltip QA
+
+Confirm tooltips exist for:
+
+```txt
+All main table headers
+All expanded row parameter labels
+Opportunity Score
+Fundamental Score
 Analyst Upside
-Analyst Sentiment
-Price Position
-Risk
-Final Opp v2
-Reason / explanation
-```
-
-Validate:
-
-```txt
-High upside + good fundamentals should improve.
-Very expensive stocks should still be constrained by valuation.
-Negative analyst upside should reduce opportunity.
-High beta should slightly reduce opportunity.
+Rating
+Valuation
+Stability
+P/E
+PEG
+ROE
+Revenue Growth
+Market Cap
+52W High / Low
+Price Avg 50 / 200
+Data freshness fields
 ```
 
 ---
 
-## Plausibility Checks
+## Expanded Row Layout QA
 
-Look for:
+Expand:
 
 ```txt
-Stocks with very high analyst upside but weak fundamentals.
-Stocks with strong fundamentals but low/negative upside.
-Stocks near 52-week highs.
-Stocks with very high valuation.
-Stocks with low analyst count.
+NVDA
+AAPL
+TSLA
+GOOGL
+PLTR
 ```
-
-Confirm the score behaves reasonably.
-
----
-
-## Admin UI QA
 
 Confirm:
 
 ```txt
-Calculate Opportunity Scores button text updated.
-Helper text mentions v2 inputs.
-No misleading v1 text remains.
-Score Methodology tab documents v2.
-```
-
----
-
-## Data Inventory QA
-
-Confirm:
-
-```txt
-Opp. Score updated.
-Opp. Version = opportunity-v2.
-Opp. Calc At updated.
-Analyst Upside remains visible.
-No fake zero values.
-```
-
----
-
-## Scanner QA
-
-Confirm:
-
-```txt
-Scanner loads.
-Opportunity column updated.
-Sort by Opportunity Score works.
-High Opportunity pill works.
-Target/Upside/Rating still visible.
-No provider calls from Scanner.
-```
-
----
-
-## Dashboard QA
-
-Confirm:
-
-```txt
-Dashboard loads.
-Avg Opportunity updated.
-High Opportunity count updated.
-Top rows look plausible.
-No provider calls from Dashboard.
+Sections are clearly separated
+Headings are readable
+Decision Summary is useful
+Score bars render correctly
+Rating stars render correctly
+Missing values show N/A
+No layout overflow
 ```
 
 ---
@@ -964,22 +1172,21 @@ No provider calls from Dashboard.
 Confirm:
 
 ```txt
-Universe Sync loads.
-Company Data Sync loads.
-Daily Market Data Sync loads.
-Score Calculation works.
-Provider Tests load.
-Sync History works.
-Data Inventory loads.
-Score Methodology loads.
-Scanner loads.
-Dashboard loads.
-No provider calls from score calculation.
+Scanner search works
+Sort works
+Universe selector still works
+Watchlist toggle still works
+Alert indicator still works
+Drawer behavior still works if present
+Dashboard still loads
+Admin Sync still loads
+No provider calls from Scanner
+No DB/schema changes
 ```
 
 ---
 
-# 16. Validation
+# 18. Validation
 
 Run:
 
@@ -996,66 +1203,58 @@ If a migration is needed, stop and explain why before adding it.
 
 ---
 
-# 17. Required Implementation Report
+# 19. Required Implementation Report
 
 Return a concise report in English only with:
 
 1. Files inspected.
-2. Current v1 formula summary.
-3. New v2 formula and weights.
-4. Analyst Upside scoring scale.
-5. Analyst Sentiment formula.
-6. Price Position formula.
-7. Files changed.
-8. Whether migration was needed.
-9. Admin Sync button text update.
-10. Score Methodology update.
-11. Data Inventory update if any.
-12. Scanner/Dashboard update if any.
-13. Baseline oppScore vs new oppScore summary.
-14. Score spot-check table.
-15. Plausibility analysis.
-16. Regression QA results.
-17. Automated check results.
-18. Known issues.
-19. Ready for commit or not.
-
----
-
-## Required Formula Table In Report
-
-Include:
-
-| Component | Weight | Source | Missing Handling |
-| --- | ---: | --- | --- |
-| Fundamental Quality | 25% | StockScore.fundamentalScore | required |
-| Valuation | 20% | StockScore.valuationScore | re-normalize |
-| Growth | 15% | StockScore.growthScore | re-normalize |
-| Analyst Upside | 20% | StockAnalystData.analystUpsidePercent | re-normalize |
-| Analyst Sentiment | 10% | recommendation counts | re-normalize |
-| Price Position | 5% | StockQuote 52W range | re-normalize |
-| Risk / Context | 5% | StockScore.riskContextScore | re-normalize |
+2. Files changed.
+3. Columns removed from main table.
+4. Columns kept in main table.
+5. Columns moved to expanded row.
+6. Header tooltip coverage.
+7. Expanded-row tooltip coverage.
+8. Risk → Stability changes.
+9. Score visual components added.
+10. Rating stars implementation.
+11. Filter cleanup performed.
+12. Advanced Filters behavior.
+13. Filtered column highlight behavior.
+14. Expanded row bug fix.
+15. Expanded row layout changes.
+16. Mobile changes if any.
+17. QA results.
+18. Regression results.
+19. Automated check results.
+20. Known issues.
+21. Ready for commit or not.
 
 ---
 
 ## Acceptance Criteria
 
-Phase 20 is complete when:
+Phase 21A is complete when:
 
-- Opportunity Score uses v2 formula.
-- Analyst Upside is included.
-- Analyst Sentiment is included.
-- Price Position still included.
-- Missing data is re-normalized, not treated as zero.
-- oppScoreVersion is `opportunity-v2`.
-- Calculate Opportunity Scores button text is updated.
-- Score Methodology tab fully documents v2.
-- Data Inventory shows opportunity-v2 after recalculation.
-- Scanner and Dashboard reflect updated scores.
-- No new DB table is created.
-- No unnecessary migration is added.
-- Fundamental Score formula is unchanged.
-- No provider calls are added to scoring.
+- Main scanner table is significantly less crowded.
+- Main table uses clear labels instead of unclear abbreviations.
+- Calculated scores are visually represented with progress bars or score bars.
+- Analyst Rating uses stars plus label/score.
+- Risk is renamed to Stability in UI.
+- Stability tooltip explains higher is better / lower risk context.
+- Every main table header has tooltip.
+- Every expanded row parameter label has tooltip.
+- Filtered columns are highlighted.
+- Active filter summary explains active filters.
+- Advanced Filters are collapsed by default.
+- Unsupported future filters are hidden.
+- Expanded row chevron appears on every row without requiring search.
+- Expanded row is reorganized into readable sections.
+- Expanded row remains rich and includes all important parameters.
+- No new API calls are added.
+- No scoring formulas are changed.
+- No DB migration is added.
+- Scanner still loads and works.
+- Dashboard/Admin still load.
 - Build passes.
 - TypeScript passes.
 - Prisma validates.
@@ -1065,12 +1264,14 @@ Phase 20 is complete when:
 
 ## Future Phases
 
-After Phase 20:
+After Phase 21A:
 
 ```txt
-Phase 21 — Historical Daily + Momentum Foundation
-Phase 22 — Analyst Sentiment Score
-Phase 23 — News and Earnings Catalyst Foundation
+Phase 21B — Dashboard Clarity Cleanup
+Phase 21C — Data Inventory / Admin Data Health Cleanup
+Phase 22 — Historical Daily + Momentum Foundation
+Phase 23 — Analyst Sentiment Score
+Phase 24 — News and Earnings Catalyst Foundation
 ```
 
 ---
@@ -1109,3 +1310,4 @@ Phase 23 — News and Earnings Catalyst Foundation
 - Phase 18 completed (2026-06-01): FMP Fundamentals, Ratios & Growth Migration. Extended Company Data Sync to fetch FMP company fundamentals per symbol alongside the existing analyst sync. Added `beta` field to `NormalizedCompanyProfile` in types.ts. Added 5 new FMP provider functions to `fmp.ts`: `fetchFmpKeyMetrics`, `fetchFmpKeyMetricsTtm`, `fetchFmpRatios`, `fetchFmpRatiosTtm`, `fetchFmpFinancialGrowth`. Updated `fetchFmpCompanyProfile` to also extract and return `beta` from the profile response. Extended `app/api/admin/analyst-sync/process-next/route.ts` to call 4 FMP endpoints per symbol in parallel (profile, ratios-ttm, financial-growth, price-target-consensus) plus 1 Finnhub call (recommendation), then upsert both `StockAnalystData` (Phase 17 behavior preserved) and `StockMetric` (FMP data). Field mapping and normalization: FMP margin/ROE/ROA fields (decimal) multiplied by 100 for % scale; growth fields (decimal fraction) multiplied by 100; ratio fields (P/E, D/E, current ratio, etc.) stored as-is. Fields not covered by FMP (forwardPE, forwardPEG, week52High, week52Low, quarterly growth, dividendYield) preserved from Finnhub's last daily sync via safe-update pattern. Provider set to `fmp` on StockMetric after Company Data Sync. Stock.name and Stock.sector updated from FMP profile (only if non-null). Calls per stock: 4 FMP + 1 Finnhub = 5 total; ~500 calls for 100 stocks; estimated 3-5 min. Updated SyncPageClient.tsx Company Data Sync helper text with endpoint details and call estimates. Updated ScoreMethodologyTab.tsx data source overview to reference FMP Starter. No Prisma migration needed (all StockMetric fields already existed). Build passes, tsc --noEmit zero errors, prisma validate valid, prisma migrate status clean (12 migrations). Fixed the field mapping bug from Phase 14/15 where FMP `/stable/price-target-summary` was incorrectly used as a source for targetMean/targetHigh/targetLow/targetMedian (those fields do not exist in that endpoint). Added `fetchFmpPriceTargetConsensus` to `fmp.ts` (calls `/stable/price-target-consensus` which correctly returns targetConsensus, targetHigh, targetLow, targetMedian). Enforced clean provider boundaries: `fmp.ts` contains only FMP calls, `finnhub.ts` contains only Finnhub calls (removed FMP call that was inside `fetchFinnhubAnalystData`). Provider composition moved into `app/api/admin/analyst-sync/process-next/route.ts` which calls `fetchFmpPriceTargetConsensus` + `fetchFinnhubAnalystData` in parallel per symbol and combines results before upsert. Updated upsert to set `targetStatus`, `targetLastFoundAt`, `targetLastAttemptedAt` — repairs old bad rows where `targetStatus = has_target` but `targetPrice = null`. SyncRun type kept as `analyst-data-nasdaq100-sync` (changing would break history/polling); UI label remains "Company Data Sync". SyncRun.provider = `fmp+finnhub`. Updated SyncPageClient.tsx description to reflect FMP consensus as source. Updated ScoreMethodologyTab.tsx to Phase 17 analyst data source table. Legacy Analyst Target Discovery remains in Developer/Legacy Tools with updated labels. No Prisma migration needed (all StockAnalystData fields existed). QA results: pre-sync targetPrice=0/100, bad rows=19; post-sync targetPrice=100/100, targetHigh=100/100, targetLow=100/100, targetMedian=100/100, analystUpsidePercent=100/100, bad rows=0. All 11 SyncRun types unaffected. Scores unchanged (avg fundamental=64.2, avg opportunity=60.3). Build passes, tsc --noEmit zero errors, prisma validate valid, prisma migrate status clean (12 migrations). Approved by user.
 - Phase 19 completed (2026-06-01): FMP Daily Market Data Sync Migration. Migrated Daily Market Data Sync from legacy Finnhub quote + basic metrics to FMP `/stable/quote` only. Added `fetchFmpQuote(symbol)` to `fmp.ts`. Added migration `20260601193636_add_stock_quote_52w_and_averages` to extend `StockQuote` with `week52High`, `week52Low`, `priceAvg50`, `priceAvg200`. Rewrote `app/api/admin/sync-runs/process-next/route.ts` — FMP quote only, all StockMetric writes removed, PROVIDER set to `fmp`, pacing reduced to 250ms (FMP Starter). Updated `app/api/admin/sync-runs/start/route.ts` — provider changed from `finnhub` to `fmp`. Updated `SyncPageClient.tsx` — removed all legacy Finnhub wording, replaced "Legacy metrics coverage" panel with "Quote Coverage" (100/100), updated description and info panel to reference FMP, fixed pre-existing `SYNC_RUN_TYPE_LABELS` bug (added `market-data-nasdaq100-chunked-sync` key). SyncRun type kept as `market-data-nasdaq100-chunked-sync` to preserve Sync History. QA confirmed: 100/100 stocks synced (0 skipped, 0 failed), all 14 StockQuote fields populated including new 52-week and moving-average fields, source=fmp on all rows, StockMetric byte-for-byte unchanged (provider=fmp, same lastSyncedAt, same values — Daily Sync did not touch StockMetric), Scanner loads 100 stocks with real prices/scores, Dashboard coverage 100/100 for quotes/metrics/scores/targets, all 6 admin tabs load, Developer/Legacy Tools preserved. Runtime: ~2m15s for 100 stocks (was ~5min with 2 Finnhub calls/stock). Build passes, tsc --noEmit zero errors, prisma validate valid, prisma migrate status clean (13 migrations). Approved by user.
 - Phase 20 completed (2026-06-02): Opportunity Score v2 with Analyst Targets. Rewrote `src/lib/scoring/opportunity-score.ts` — new v2 formula with 7 components (Fundamental Quality 25%, Valuation 20%, Growth 15%, Analyst Upside 20%, Analyst Sentiment 10%, Price Position 5%, Risk/Context 5%); analyst upside scored on 8-tier scale (≥60%→100 down to <−10%→15), capped at 60% for scoring but raw value untouched; analyst sentiment uses weighted recommendation counts (SB=100, B=80, H=50, S=20, SS=0) divided by total, then pulled toward neutral via confidence multiplier based on analyst count (≥30→1.00, 20–29→0.95, 10–19→0.90, 5–9→0.80, 1–4→0.65); price position reads from StockQuote.week52High/Low (FMP daily sync); missing components re-normalized not zeroed; fundamentalScore required. Updated `calculateOpportunityScoresAction` in `src/actions/market-data-actions.ts` — added `analystData` include, updated input mapping, version constant set to `opportunity-v2`. Updated `src/components/admin/SyncPageClient.tsx` button description to v2 wording referencing all 7 components, DB-only, run after Company/Daily syncs. Rewrote Opportunity Score section in `src/components/admin/ScoreMethodologyTab.tsx` — full v2 documentation including component table, analyst upside scale, sentiment formula, confidence table, price position table, re-normalization note, example calculation; updated Analyst Data section to say fields are now scored in v2; updated legacy Phase 15 note to reference v2. QA results: baseline avg=63.49 (v1), post-calc avg=63.34 (v2); 100/100 Nasdaq 100 calculated, 0 failed, 4 seed stocks skipped (no fundamentalScore — expected); all scores in [0,100]; NVDA improved 79→82 (high upside 41.8%), AMD reduced 62→55 (negative upside −12.3%), AVGO reduced 70→64 (near-zero upside −0.2%), PLTR constrained at 66 (poor valuation despite strong growth), TSLA remains low at 38 (weak fundamentals); no fake zeros; score distribution bell-shaped around 60–74. No migration. No new DB table. No provider calls. Build passes, tsc --noEmit zero errors, prisma validate valid, prisma migrate status clean (13 migrations). Approved by user.
+- Phase 21A completed (2026-06-02): Scanner Decision View Cleanup. Refactored Scanner from a dense data table into a clear Decision View. Main table reduced from 18+ columns to 10 focused columns (Symbol, Sector, Price, Day %, Opportunity, Fundamental, Analyst Upside, Rating, Valuation, Stability). All unclear abbreviations replaced with clear labels (Opp.→Opportunity, Fund.→Fundamental, Valuat.→Valuation, Risk→Stability, Rev Gr.→Revenue Growth). Risk renamed to Stability everywhere in the UI — DB field `riskContextScore` unchanged. All 10 main table headers have tooltips. Calculated scores (Opportunity, Fundamental, Valuation, Stability) use compact mini progress bars with color tiers (80–100 emerald, 60–79 blue, 40–59 amber, 0–39 red). Analyst Rating uses 1–5 star visualization with half-star support via weighted recommendation counts, plus label. Expanded row reorganized into 8 sections: Decision Summary (rule-based plain-language insight with strength/concern/badge), Score Breakdown (all 7 scores with progress bars, version, last calculated), Analyst View (stars, targets, counts, source), Valuation Metrics (P/E, PEG, P/S, P/B, EV/EBITDA, forward variants), Growth & Profitability (revenue growth, EPS growth, margins, ROE, ROA), Financial Health (D/E, current ratio, quick ratio, interest coverage), Market Position (price, 52W high/low, moving averages, 52W position), Data Freshness (quote, metrics, analyst, score sync dates and sources). Every expanded-row parameter label has a tooltip. Expanded row chevron bug fixed — chevron now always appears on every row regardless of search state. Quick filter pills cleaned up — removed disabled future filters (Hot Today, Strong Momentum, Unusual Volume, FOMO Risk); kept All Stocks, High Opportunity, High Fundamentals, High Analyst Upside, Reasonable Valuation, In Watchlist, Positive Day %. Advanced Filters moved to collapsible section collapsed by default, containing Index, Sector, Watchlist, Alert Active, Positive Day %, and all threshold filters (Min Opportunity, Min Fundamental, Min Growth, Min Profitability, Min Valuation, Min Health, Min Analyst Upside). Filtered columns highlighted with subtle tint — header and body cells highlight when a filter targets that column. Active filter summary line appears when any filter is active. Sort dropdown uses full clear labels (Fundamental Score, Opportunity Score, Analyst Upside, Valuation Score, Stability Score, Price Change %, Market Cap, Symbol A–Z). Mobile scanner card updated with same clarity principles (Stability label, score bars, rating stars, key decision fields). Visual grouping: subtle left border dividers separate Identity/Market, Calculated Scores, and Analyst Data column groups. No new API calls. No scoring formula changes. No DB migration. No new Prisma models. Build passes, tsc --noEmit zero errors, prisma validate valid, prisma migrate status clean (13 migrations). Approved by user.
