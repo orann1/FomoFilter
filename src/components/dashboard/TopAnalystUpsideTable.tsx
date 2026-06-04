@@ -55,8 +55,8 @@ export default function TopAnalystUpsideTable({ stocks }: TopAnalystUpsideTableP
               <th className="px-3 py-2 text-xs font-semibold text-slate-500 text-right">Target</th>
               <th className="px-3 py-2 text-xs font-semibold text-slate-500 text-right">Upside</th>
               <th className="px-3 py-2 text-xs font-semibold text-slate-500">Rating</th>
-              <th className="px-3 py-2 text-xs font-semibold text-slate-500 text-right">Fund.</th>
-              <th className="px-3 py-2 text-xs font-semibold text-slate-500 text-right">Opp.</th>
+              <th className="px-3 py-2 text-xs font-semibold text-slate-500 text-right">Fundamental</th>
+              <th className="px-3 py-2 text-xs font-semibold text-slate-500 text-right">Opportunity</th>
             </tr>
           </thead>
           <tbody>

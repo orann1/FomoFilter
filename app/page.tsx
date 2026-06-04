@@ -14,14 +14,16 @@ export default async function Home() {
     <ClientAppShell user={data.user}>
       <DashboardHeader />
       <DataWarningsSection warnings={data.dataWarnings} />
-      <DashboardSummaryCards summary={data.summary} freshness={data.freshness} />
+      <DashboardSummaryCards summary={data.summary} />
       <DashboardGrid
+        topOpportunityStocks={data.topOpportunityStocks}
         topFundamentalStocks={data.topFundamentalStocks}
         sectorSummary={data.sectorSummary}
         watchlistItems={data.watchlistItems}
         summary={data.summary}
         freshness={data.freshness}
         alertRulesBySymbol={data.alertRulesBySymbol}
+        activeAlertsSummary={data.activeAlertsSummary}
         topAnalystUpsideStocks={data.topAnalystUpsideStocks}
       />
     </ClientAppShell>

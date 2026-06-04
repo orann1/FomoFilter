@@ -65,10 +65,10 @@ Watchlist and alert rules
 
 | Route | Status | Purpose |
 | --- | --- | --- |
-| `/` | Implemented | Dashboard overview |
+| `/` | Implemented | Dashboard — high-level overview and action surface |
 | `/scanner` | Implemented | Main stock discovery workspace |
 | `/admin/sync` | Implemented | Manual data sync, provider tests, sync history, data inventory |
-| Drawer from scanner/dashboard | Implemented but partly legacy | Stock preview / action workspace; cleanup planned in Phase 21C |
+| Drawer from Scanner | Implemented | Visual decision cockpit — rule-based narrative, signal cards, watchlist/alert actions |
 
 ---
 
@@ -168,46 +168,24 @@ Expanded row with:
   - Data Freshness
 ```
 
-Next related work:
-
-```txt
-Phase 21C — Drawer Real Data & Decision Workspace Cleanup
-```
-
----
-
-## Known Legacy Area
-
-The stock preview drawer still appears to contain legacy/mock-oriented sections such as:
-
-```txt
-Hot Score
-Signal
-AI Insight
-Main Catalyst
-Price Context mock chart
-Watch Context legacy labels
-Pullback/setup language
-```
-
-This is the active next cleanup area.
-
 ---
 
 ## Planned Roadmap
 
-| Phase | Planned Focus |
-| --- | --- |
-| Phase 21C | Drawer Real Data & Decision Workspace Cleanup |
-| Phase 21D | Dashboard Clarity Cleanup |
-| Phase 21E | Data Inventory / Admin Data Health Cleanup |
-| Phase 22 | Historical Daily + Momentum Foundation |
-| Phase 23 | Momentum Indicators |
-| Phase 24 | Hot Score v1 |
-| Phase 25 | Alert Evaluation Engine |
-| Phase 26 | Stock Details Page |
-| Phase 27 | News / Catalyst Data Foundation |
-| Phase 28 | AI Insight Generation |
+| Phase | Status | Focus |
+| --- | --- | --- |
+| Phase 21A | Completed | Scanner Decision View Cleanup |
+| Phase 21B | Completed | Scanner Pagination, Table Usability & Expanded Row Cleanup |
+| Phase 21C | Completed | Drawer Real Data & Decision Workspace Cleanup |
+| Phase 21D | Completed | Dashboard Clarity Cleanup |
+| Phase 21E | Planned | Data Inventory / Admin Data Health Cleanup |
+| Phase 22 | Planned | Historical Daily + Momentum Foundation |
+| Phase 23 | Planned | Momentum Indicators |
+| Phase 24 | Planned | Hot Score v1 |
+| Phase 25 | Planned | Alert Evaluation Engine |
+| Phase 26 | Planned | Stock Details Page |
+| Phase 27 | Planned | News / Catalyst Data Foundation |
+| Phase 28 | Planned | AI Insight Generation |
 
 ---
 

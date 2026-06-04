@@ -1,4 +1,4 @@
-import { Star } from "lucide-react";
+import { Star, ArrowRight } from "lucide-react";
 import Link from "next/link";
 import type { DashboardWatchlistItem } from "@/src/lib/data/dashboard";
 import { formatCurrency, formatPercent, formatScore } from "@/src/lib/formatters";
@@ -15,8 +15,8 @@ const statusColors: Record<string, string> = {
 
 const statusLabel: Record<string, string> = {
   WATCHING: "Watching",
-  WAITING_FOR_PULLBACK: "Pullback",
-  WAITING: "Pullback",
+  WAITING_FOR_PULLBACK: "Waiting for Pullback",
+  WAITING: "Waiting for Pullback",
   READY_TO_BUY: "Ready",
   HOLDING: "Holding",
   AVOIDING: "Avoiding",
@@ -50,56 +50,71 @@ export default function WatchlistWidget({ watchlistItems }: WatchlistWidgetProps
           </p>
         </div>
       ) : (
-        <div className="divide-y divide-slate-800/60">
-          {watchlistItems.map((item) => (
-            <div key={item.id} className="px-4 py-3 hover:bg-slate-800/20 transition-colors">
-              <div className="flex items-start justify-between mb-1.5">
-                <div>
-                  <span className="text-white font-semibold text-sm">{item.symbol}</span>
-                  <p className="text-slate-500 text-xs">{item.name}</p>
+        <>
+          <div className="divide-y divide-slate-800/60">
+            {watchlistItems.map((item) => (
+              <div key={item.id} className="px-4 py-3 hover:bg-slate-800/20 transition-colors">
+                <div className="flex items-start justify-between mb-1.5">
+                  <div>
+                    <span className="text-white font-semibold text-sm">{item.symbol}</span>
+                    <p className="text-slate-500 text-xs">{item.name}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-white text-sm font-medium">
+                      {item.price != null ? formatCurrency(item.price) : "N/A"}
+                    </p>
+                    <p
+                      className={`text-xs font-medium ${
+                        item.changePercent == null
+                          ? "text-slate-500"
+                          : item.changePercent >= 0
+                            ? "text-emerald-400"
+                            : "text-red-400"
+                      }`}
+                    >
+                      {item.changePercent != null ? formatPercent(item.changePercent) : "N/A"}
+                    </p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-white text-sm font-medium">
-                    {item.price != null ? formatCurrency(item.price) : "N/A"}
-                  </p>
-                  <p
-                    className={`text-xs font-medium ${
-                      item.changePercent == null
-                        ? "text-slate-500"
-                        : item.changePercent >= 0
-                          ? "text-emerald-400"
-                          : "text-red-400"
-                    }`}
-                  >
-                    {item.changePercent != null ? formatPercent(item.changePercent) : "N/A"}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span
-                    className={`text-xs border px-1.5 py-0.5 rounded-full font-medium ${
-                      statusColors[item.status] ?? statusColors["WATCHING"]
-                    }`}
-                  >
-                    {statusLabel[item.status] ?? item.status}
-                  </span>
-                  {item.fundamentalScore != null && (
-                    <span className="text-xs text-slate-500">
-                      Fund: <span className="text-slate-300">{formatScore(item.fundamentalScore)}</span>
+                <div className="flex items-center justify-between flex-wrap gap-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span
+                      className={`text-xs border px-1.5 py-0.5 rounded-full font-medium ${
+                        statusColors[item.status] ?? statusColors["WATCHING"]
+                      }`}
+                    >
+                      {statusLabel[item.status] ?? item.status}
                     </span>
+                    {item.oppScore != null && (
+                      <span className="text-xs text-slate-500">
+                        Opp: <span className="text-emerald-300 font-semibold">{formatScore(item.oppScore)}</span>
+                      </span>
+                    )}
+                    {item.fundamentalScore != null && (
+                      <span className="text-xs text-slate-500">
+                        Fund: <span className="text-slate-300">{formatScore(item.fundamentalScore)}</span>
+                      </span>
+                    )}
+                  </div>
+                  {item.target != null && item.target > 0 && (
+                    <span className="text-xs text-slate-500">T: {formatCurrency(item.target)}</span>
                   )}
                 </div>
-                {item.target != null && item.target > 0 && (
-                  <span className="text-xs text-slate-500">T: {formatCurrency(item.target)}</span>
+                {item.notes && (
+                  <p className="text-xs text-slate-500 mt-1 italic">{item.notes}</p>
                 )}
               </div>
-              {item.notes && (
-                <p className="text-xs text-slate-500 mt-1 italic">{item.notes}</p>
-              )}
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+          <div className="px-4 py-3 border-t border-slate-800/60">
+            <Link
+              href="/scanner"
+              className="flex items-center gap-1 text-xs text-slate-400 hover:text-emerald-400 transition-colors"
+            >
+              Review watchlist in Scanner <ArrowRight size={12} />
+            </Link>
+          </div>
+        </>
       )}
     </div>
   );

@@ -1,43 +1,20 @@
-import {
-  Database,
-  ScanLine,
-  BarChart3,
-  Target,
-  TrendingUp,
-  Award,
-  RefreshCw,
-  Calculator,
-  BadgeDollarSign,
-} from "lucide-react";
-import type { DashboardSummary, DashboardFreshness } from "@/src/lib/data/dashboard";
-
-function formatSyncDate(isoStr: string | null): string {
-  if (!isoStr) return "N/A";
-  const d = new Date(isoStr);
-  return d.toLocaleString("en-US", {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-}
+import { ScanLine, TrendingUp, Award, Target } from "lucide-react";
+import type { DashboardSummary } from "@/src/lib/data/dashboard";
 
 interface CardProps {
   icon: React.ReactNode;
   label: string;
   value: string;
   sub?: string;
-  accent: "emerald" | "blue" | "amber" | "purple" | "slate";
+  accent: "emerald" | "blue" | "amber" | "purple";
 }
 
-function SummaryCard({ icon, label, value, sub, accent }: CardProps) {
+function OpportunityCard({ icon, label, value, sub, accent }: CardProps) {
   const accentMap = {
     emerald: { bg: "bg-emerald-500/10", iconColor: "text-emerald-400", valueColor: "text-emerald-400" },
     blue: { bg: "bg-blue-500/10", iconColor: "text-blue-400", valueColor: "text-blue-400" },
     amber: { bg: "bg-amber-500/10", iconColor: "text-amber-400", valueColor: "text-amber-400" },
     purple: { bg: "bg-purple-500/10", iconColor: "text-purple-400", valueColor: "text-purple-400" },
-    slate: { bg: "bg-slate-700/40", iconColor: "text-slate-400", valueColor: "text-slate-300" },
   };
   const colors = accentMap[accent];
 
@@ -57,98 +34,40 @@ function SummaryCard({ icon, label, value, sub, accent }: CardProps) {
 
 interface DashboardSummaryCardsProps {
   summary: DashboardSummary;
-  freshness: DashboardFreshness;
 }
 
-export default function DashboardSummaryCards({ summary, freshness }: DashboardSummaryCardsProps) {
-  const avgScore =
-    summary.averageFundamentalScore != null
-      ? String(summary.averageFundamentalScore)
-      : "N/A";
+export default function DashboardSummaryCards({ summary }: DashboardSummaryCardsProps) {
+  const totalDisplay = summary.activeNasdaq100 > 0 ? summary.activeNasdaq100 : summary.totalStocks;
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-      <SummaryCard
-        icon={<Database size={16} />}
-        label="Total Stocks"
-        value={String(summary.activeNasdaq100 > 0 ? summary.activeNasdaq100 : summary.totalStocks)}
-        sub="Nasdaq 100 active"
-        accent="blue"
-      />
-      <SummaryCard
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+      <OpportunityCard
         icon={<ScanLine size={16} />}
         label="Scanner Ready"
         value={String(summary.scannerReadyStocks)}
-        sub="Quote + score"
+        sub={`of ${totalDisplay} total stocks`}
         accent="emerald"
       />
-      <SummaryCard
-        icon={<BarChart3 size={16} />}
-        label="With Metrics"
-        value={String(summary.withMetrics)}
-        sub={`${freshness.metricCoveragePercent}% coverage`}
-        accent="blue"
-      />
-      <SummaryCard
-        icon={<Target size={16} />}
-        label="With Scores"
-        value={String(summary.withScores)}
-        sub={`${freshness.scoreCoveragePercent}% coverage`}
-        accent="emerald"
-      />
-      <SummaryCard
-        icon={<TrendingUp size={16} />}
-        label="Avg Fundamental"
-        value={avgScore}
-        sub="Fundamental score avg"
-        accent="purple"
-      />
-      <SummaryCard
-        icon={<Award size={16} />}
-        label="Stocks Above 75"
-        value={String(summary.stocksAbove75)}
-        sub={`${summary.stocksAbove80} above 80`}
-        accent="amber"
-      />
-      <SummaryCard
-        icon={<Target size={16} />}
-        label="Avg Opportunity"
-        value={summary.averageOpportunityScore != null ? String(summary.averageOpportunityScore) : "N/A"}
-        sub="Opportunity score avg"
-        accent="emerald"
-      />
-      <SummaryCard
+      <OpportunityCard
         icon={<Award size={16} />}
         label="High Opportunity"
         value={String(summary.stocksAboveOpportunity75)}
         sub="Opportunity score ≥ 75"
-        accent="emerald"
+        accent="amber"
       />
-      <SummaryCard
-        icon={<BadgeDollarSign size={16} />}
-        label="Rating Coverage"
-        value={`${summary.ratingCoverage} / ${summary.totalStocks}`}
-        sub={summary.stocksWithHighUpside > 0 ? `${summary.stocksWithHighUpside} with ≥20% upside` : "Run Analyst Sync"}
-        accent={summary.ratingCoverage > 0 ? "blue" : "slate"}
+      <OpportunityCard
+        icon={<Target size={16} />}
+        label="Avg Opportunity"
+        value={summary.averageOpportunityScore != null ? String(summary.averageOpportunityScore) : "N/A"}
+        sub="Opportunity score average"
+        accent="blue"
       />
-      <SummaryCard
+      <OpportunityCard
         icon={<TrendingUp size={16} />}
-        label="Target Coverage"
-        value={`${summary.targetCoverage} / ${summary.totalStocks}`}
-        sub={summary.noTargetAvailable > 0 ? `${summary.noTargetAvailable} no data · ${summary.eligibleForTargetRetry} eligible` : "Run Target Discovery"}
-        accent={summary.targetCoverage >= 60 ? "emerald" : summary.targetCoverage > 0 ? "amber" : "slate"}
-      />
-      <SummaryCard
-        icon={<RefreshCw size={16} />}
-        label="Last Market Sync"
-        value={formatSyncDate(freshness.lastMarketDataSyncAt)}
-        accent="slate"
-      />
-      <SummaryCard
-        icon={<Calculator size={16} />}
-        label="Last Score Calc"
-        value={formatSyncDate(freshness.lastScoreCalculationAt)}
-        accent="slate"
+        label="Avg Fundamental"
+        value={summary.averageFundamentalScore != null ? String(summary.averageFundamentalScore) : "N/A"}
+        sub="Fundamental score average"
+        accent="purple"
       />
     </div>
   );

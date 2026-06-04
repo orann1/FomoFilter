@@ -28,6 +28,7 @@ export type DashboardStockRow = {
   financialHealthScore: number | null;
   riskContextScore: number | null;
   oppScore: number | null;
+  analystUpsidePercent?: number | null;
   marketCap: string | null;
   forwardPe: number | null;
   pegRatio: number | null;
@@ -102,6 +103,7 @@ export type DashboardWatchlistItem = {
   price: number | null;
   changePercent: number | null;
   fundamentalScore: number | null;
+  oppScore: number | null;
   status: string;
   entryZoneLow: number | null;
   entryZoneHigh: number | null;
@@ -111,15 +113,25 @@ export type DashboardWatchlistItem = {
   stockId: string;
 };
 
+export type ActiveAlertsSummary = {
+  totalRules: number;
+  bySymbol: Array<{
+    symbol: string;
+    rules: ActiveAlertRule[];
+  }>;
+};
+
 export type DashboardData = {
   user: DashboardUser;
   summary: DashboardSummary;
   freshness: DashboardFreshness;
+  topOpportunityStocks: DashboardStockRow[];
   topFundamentalStocks: DashboardStockRow[];
   sectorSummary: DashboardSectorRow[];
   dataWarnings: DashboardWarning[];
   watchlistItems: DashboardWatchlistItem[];
   alertRulesBySymbol: Record<string, ActiveAlertRule[]>;
+  activeAlertsSummary: ActiveAlertsSummary;
   topAnalystUpsideStocks: DashboardAnalystRow[];
 };
 
@@ -280,6 +292,32 @@ export async function getDashboardData(): Promise<DashboardData> {
     scoreCoveragePercent,
   };
 
+  // ── Top Opportunity Stocks ────────────────────────────────────────────────────
+  const topOpportunityStocks: DashboardStockRow[] = dbStocks
+    .filter((s) => s.score?.oppScore != null && s.quote !== null)
+    .sort((a, b) => Number(b.score!.oppScore!) - Number(a.score!.oppScore!))
+    .slice(0, 10)
+    .map((s) => ({
+      symbol: s.symbol,
+      name: s.name,
+      sector: s.sector ?? null,
+      price: s.quote ? Number(s.quote.price) : null,
+      changePercent: s.quote?.changePercent != null ? Number(s.quote.changePercent) : null,
+      fundamentalScore: s.score?.fundamentalScore != null ? Math.round(Number(s.score.fundamentalScore)) : null,
+      growthScore: s.score?.growthScore != null ? Math.round(Number(s.score.growthScore)) : null,
+      profitabilityScore: s.score?.profitabilityScore != null ? Math.round(Number(s.score.profitabilityScore)) : null,
+      valuationScore: s.score?.valuationScore != null ? Math.round(Number(s.score.valuationScore)) : null,
+      financialHealthScore: s.score?.financialHealthScore != null ? Math.round(Number(s.score.financialHealthScore)) : null,
+      riskContextScore: s.score?.riskContextScore != null ? Math.round(Number(s.score.riskContextScore)) : null,
+      oppScore: s.score?.oppScore != null ? Math.round(Number(s.score.oppScore)) : null,
+      marketCap: s.marketCap != null ? formatCompactCurrency(Number(s.marketCap)) : null,
+      forwardPe: s.metric?.forwardPE != null ? Number(s.metric.forwardPE) : null,
+      pegRatio: s.metric?.forwardPEG != null ? Number(s.metric.forwardPEG) : null,
+      roe: s.metric?.roeTTM != null ? Number(s.metric.roeTTM) : null,
+      revenueGrowthYoY: s.metric?.revenueGrowthTTMYoy != null ? Number(s.metric.revenueGrowthTTMYoy) : null,
+      analystUpsidePercent: s.analystData?.analystUpsidePercent != null ? Number(s.analystData.analystUpsidePercent) : null,
+    }));
+
   // ── Top Fundamental Stocks ────────────────────────────────────────────────────
   const topFundamentalStocks: DashboardStockRow[] = dbStocks
     .filter((s) => s.score?.fundamentalScore != null && s.quote !== null)
@@ -409,6 +447,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     price: w.stock.quote ? Number(w.stock.quote.price) : null,
     changePercent: w.stock.quote?.changePercent != null ? Number(w.stock.quote.changePercent) : null,
     fundamentalScore: w.stock.score?.fundamentalScore != null ? Math.round(Number(w.stock.score.fundamentalScore)) : null,
+    oppScore: w.stock.score?.oppScore != null ? Math.round(Number(w.stock.score.oppScore)) : null,
     status: w.status,
     entryZoneLow: w.entryZoneLow != null ? Number(w.entryZoneLow) : null,
     entryZoneHigh: w.entryZoneHigh != null ? Number(w.entryZoneHigh) : null,
@@ -449,15 +488,23 @@ export async function getDashboardData(): Promise<DashboardData> {
     });
   }
 
+  // ── Active Alerts Summary ─────────────────────────────────────────────────────
+  const activeAlertsSummary: ActiveAlertsSummary = {
+    totalRules: dbAlertRules.length,
+    bySymbol: Object.entries(alertRulesBySymbol).map(([symbol, rules]) => ({ symbol, rules })),
+  };
+
   return {
     user,
     summary,
     freshness,
+    topOpportunityStocks,
     topFundamentalStocks,
     sectorSummary,
     dataWarnings,
     watchlistItems,
     alertRulesBySymbol,
+    activeAlertsSummary,
     topAnalystUpsideStocks,
   };
 }

@@ -405,8 +405,6 @@ Scanner maps and displays real company descriptions.
 
 ---
 
----
-
 ## Phase 21C — Drawer Real Data & Decision Workspace Cleanup
 
 Removed all legacy/mock drawer content (Hot Score, AI Insight, Main Catalyst, FOMO Risk, Signal labels, Risk label, fake SVG chart, hardcoded "US Stocks" chip, StockDrawerDetail mock entry/target data).
@@ -434,3 +432,60 @@ Expanded row retained as the primary detailed dry-data research view. Role split
 **Automated checks:** build ✅  tsc ✅  prisma validate ✅  migrate status ✅ (14 migrations, up to date)
 
 **Files changed:** `src/lib/scoring/decision-summary.ts` (new), `src/components/dashboard/StockPreviewDrawer.tsx`, `src/components/scanner/ScannerExpandedRow.tsx`, `src/components/dashboard/drawer/CreateAlertPanel.tsx`, `src/components/scanner/ScannerPageClient.tsx`, `src/lib/data/scanner.ts`, `app/scanner/page.tsx`, `src/lib/mock-data.ts`, `src/types/drawer.ts`, `Context/Features/drawer-feature-spec.md`, `Context/Features/scanner-feature-spec.md`, `Context/data-model.md`
+
+---
+
+## Phase 21D — Dashboard Clarity Cleanup
+
+Cleaned up the Dashboard from a mixed legacy/admin surface into a clear high-level overview and action surface.
+
+**Deleted 9 orphaned legacy components** — all confirmed to have no active imports before deletion:
+
+```txt
+HotStocksTable.tsx
+MobileHotStockCard.tsx
+AiInsightsWidget.tsx
+TodaysSignalCard.tsx
+TopScoreChanges.tsx
+DiscoverSetups.tsx
+RecentAlertsWidget.tsx
+MarketStatsGrid.tsx
+SummaryCardsGrid.tsx
+```
+
+`StockPreviewDrawer.tsx` was retained — actively imported by `ScannerPageClient.tsx`.
+
+`src/lib/mock-data.ts` was retained — still has active imports from Scanner components and scoring utilities.
+
+**Opportunity Overview:** Replaced the 12-card mixed-purpose summary grid with 4 decision-facing cards (Scanner Ready, High Opportunity, Avg Opportunity, Avg Fundamental). Admin/data-health metrics demoted to the compact Data Health sidebar widget.
+
+**New widgets:**
+- `TopOpportunityStocksTable` — DB-backed, sorted by Opportunity Score descending, top 10. Primary stock-discovery widget on Dashboard. Derived from existing loaded data with no additional DB queries.
+- `ActiveAlertsSummaryWidget` — DB-backed, consumes `alertRulesBySymbol` that was already loaded but unused by any prior Dashboard widget. Shows total active rules with per-symbol breakdown and alert type/threshold.
+
+**Updated widgets:**
+- `TopFundamentalStocksTable` — removed sub-score columns (Growth, Profitability, Valuation, Financial Health). Those belong in Scanner expanded row.
+- `TopAnalystUpsideTable` — fixed labels: `Fund.` → Fundamental, `Opp.` → Opportunity.
+- `SectorSummaryTable` — fixed labels: `Avg Fund.` → Avg Fundamental, `Avg Profit.` → Avg Profitability.
+- `WatchlistWidget` — added Opportunity Score display alongside Fundamental Score; changed `WAITING_FOR_PULLBACK` display label from "Pullback" to "Waiting for Pullback"; added "Review watchlist in Scanner →" CTA.
+- `DataCoverageSection` — redesigned as compact "Data Health" widget with mini coverage bars and freshness timestamps (Last Market Sync, Last Score Calc).
+- `DashboardSummaryCards` — reduced from 12 to 4 cards; removed `freshness` prop dependency.
+
+**Dashboard structure after Phase 21D:**
+
+```txt
+DashboardHeader
+DataWarningsSection              (warnings only)
+DashboardSummaryCards            4 opportunity cards
+DashboardGrid:
+  Left:   TopOpportunityStocksTable → TopAnalystUpsideTable → TopFundamentalStocksTable → SectorSummaryTable
+  Right:  WatchlistWidget → ActiveAlertsSummaryWidget → DataCoverageSection
+```
+
+Scanner CTAs added throughout: "View all in Scanner →", "Open Scanner to compare all stocks", "Review watchlist in Scanner →".
+
+No schema changes. No migrations. No provider calls. No scoring formula changes.
+
+**Automated checks:** build ✅  tsc ✅  prisma validate ✅  migrate status ✅ (14 migrations, up to date)
+
+**Files changed:** `app/page.tsx`, `src/lib/data/dashboard.ts`, `src/components/dashboard/DashboardGrid.tsx`, `src/components/dashboard/DashboardSummaryCards.tsx`, `src/components/dashboard/TopFundamentalStocksTable.tsx`, `src/components/dashboard/TopAnalystUpsideTable.tsx`, `src/components/dashboard/SectorSummaryTable.tsx`, `src/components/dashboard/WatchlistWidget.tsx`, `src/components/dashboard/DataCoverageSection.tsx`, `src/components/dashboard/TopOpportunityStocksTable.tsx` (new), `src/components/dashboard/ActiveAlertsSummary.tsx` (new), `Context/Features/dashboard-feature-spec.md`, `Context/current-feature.md`

@@ -20,9 +20,9 @@ export default function SectorSummaryTable({ sectors }: SectorSummaryTableProps)
             <tr className="border-b border-slate-800">
               <th className="px-4 py-3 text-left text-xs text-slate-500 font-medium">Sector</th>
               <th className="px-4 py-3 text-center text-xs text-slate-500 font-medium">Stocks</th>
-              <th className="px-4 py-3 text-center text-xs text-slate-500 font-medium">Avg Fund.</th>
+              <th className="px-4 py-3 text-center text-xs text-slate-500 font-medium">Avg Fundamental</th>
               <th className="px-4 py-3 text-center text-xs text-slate-500 font-medium">Avg Growth</th>
-              <th className="px-4 py-3 text-center text-xs text-slate-500 font-medium">Avg Profit.</th>
+              <th className="px-4 py-3 text-center text-xs text-slate-500 font-medium">Avg Profitability</th>
               <th className="px-4 py-3 text-left text-xs text-slate-500 font-medium">Top Stock</th>
             </tr>
           </thead>
