@@ -7,12 +7,12 @@ Read this file before changing:
 ```txt
 Stock preview drawer
 Drawer header
-Drawer decision snapshot
-Drawer company snapshot
-Drawer score sections
-Drawer analyst view
+Drawer decision workspace
+Drawer narrative section
+Drawer signal cards
+Drawer market position visual
 Drawer watchlist/alert actions
-Drawer data freshness
+Drawer evidence accordions
 Drawer layout/responsiveness
 ```
 
@@ -26,382 +26,307 @@ Update this file after QA and before commit approval if you change drawer behavi
 
 ## Current Phase
 
-Drawer cleanup is the active planned work:
+Phase 21C completed (Phase 21C Refinement applied).
+
+---
+
+## Product Role
 
 ```txt
-Phase 21C — Drawer Real Data & Decision Workspace Cleanup
+Scanner Row      = fast comparison across stocks
+Expanded Row     = detailed dry data view for deeper research
+Drawer           = visual decision cockpit / decision workspace
+Stock Details    = future full research page (not yet implemented)
+```
+
+The Drawer is **not** a copy of the expanded row. It synthesizes data into a decision-focused layout. The expanded row remains the primary place for dry metric tables.
+
+---
+
+## Current Drawer Implementation
+
+The drawer is a real DB-backed **Visual Decision Cockpit** implemented in Phase 21C (refined in Phase 21C Refinement).
+
+It reads all content from the `stock: HotStock` object, populated by `getScannerData()` from Prisma models:
+
+```txt
+Stock (symbol, name, sector, industry, description, marketCap)
+StockQuote (price, changePercent, week52High/Low, priceAvg50/200, quoteLastSynced, source)
+StockScore (oppScore, fundamentalScore, growthScore, profitabilityScore, valuationScore, financialHealthScore, riskContextScore)
+StockAnalystData (analystRating, analystCount, targets, upside, source, lastSyncedAt)
+StockMetric (all valuation, growth, margin, financial health ratios)
+WatchlistItem (via dbWatchlistItems prop)
+AlertRule (via alertRulesBySymbol prop)
+```
+
+It does NOT depend on `StockDrawerDetail`.
+
+---
+
+## Drawer Sections
+
+```txt
+Hero Decision Header (sticky)
+Why This Stock Stands Out (rule-based narrative)
+Key Decision Signals (5 visual cards)
+Market Position Visual (52W bar with markers + compact stats)
+My Tracking Plan (watchlist CTA or watchlist state)
+Alerts (active alerts + Set Alert CTA)
+Evidence / Details (collapsible accordions):
+  - Analyst Details
+  - All Scores
+  - Fundamentals
+  - Company & Data Freshness
+Sticky Actions Footer
 ```
 
 ---
 
-## Current Problem
+## Hero Decision Header
 
-The drawer was created in early mock phases and appears to still contain legacy/mock-oriented sections:
-
-```txt
-Hot Score
-Signal: Strong but Extended
-Risk: MEDIUM
-AI Insight
-Main Catalyst
-Price Context mock chart
-Watch Context legacy labels
-Pullback/setup labels
-Entry context
-FOMO risk
-```
-
-These should not be presented as real unless backed by current DB data.
-
----
-
-## Target Drawer Role
-
-The drawer is a focused single-stock decision workspace.
-
-| Area | Role |
-| --- | --- |
-| Main Scanner Table | Compare many stocks quickly |
-| Expanded Row | Quick inline detail |
-| Drawer | Focused decision workspace for one stock |
-
-The drawer should answer:
+Gradient background based on opportunity strength:
 
 ```txt
-Why is this stock interesting?
-What are the main strengths?
-What are the main concerns?
-What do analysts think?
-Is valuation reasonable?
-Where is price relative to its range?
-Is data fresh?
-What action can I take?
+Strong Opportunity → emerald gradient
+Attractive         → light emerald gradient
+Watch              → amber gradient
+Lower Priority     → neutral gradient
 ```
 
----
-
-## Target Drawer Sections
-
-```txt
-Header
-Decision Snapshot
-Company Snapshot
-Our Calculated Scores
-Analyst View
-Valuation & Fundamentals
-Market Position
-Watchlist / Alert Context
-Data Freshness
-Actions Footer
-```
-
-Only show real DB-backed sections.
-
-If a section has no real data, hide it or show a truthful empty state.
-
----
-
-## Header
-
-Should show:
+Shows:
 
 ```txt
 Symbol
 Company name
-Watchlist/favorite state
-Sector · Industry
+Sector · Industry (subtext)
+Universe/index tags (Nasdaq 100, S&P 500, Russell 1000)
+Alert Active chip (if real active alerts)
+Watchlist star (if in watchlist)
 Current price
 Day %
-Universe/index tags if available
-Quote synced time if available
+Decision Tag badge (with tooltip)
+4 metric pills: Opportunity, Fundamental, Upside, Stability
+Quote synced date
+Close button
 ```
 
-Remove or replace if not real:
+Does not show:
 
 ```txt
-Pullback Watch
-Signal
-Risk: MEDIUM
-Updated 2m ago
-```
-
----
-
-## Decision Snapshot
-
-Should show:
-
-```txt
-Decision Tag
-Opportunity Score
-Fundamental Score
-Strength chips
-Concern chips
-Optional rule-based next step
-```
-
-Decision Tag must be explained as rule-based.
-
-No AI text unless AI generation is explicitly implemented later.
-
----
-
-## Company Snapshot
-
-Should show real DB-backed profile data:
-
-```txt
-Description
-Sector
-Industry
-Market Cap
-Exchange if available
-```
-
-Description should be readable:
-
-```txt
-2–4 lines
-tooltip/title with full text if truncated
+stock.setup (legacy setupStatus)
+stock.risk / Risk: MEDIUM (legacy riskLevel)
+stock.catalyst
+signal quality
+hardcoded "US Stocks"
+detail.lastUpdatedMinutes
 ```
 
 ---
 
-## Our Calculated Scores
+## Why This Stock Stands Out
 
-Should show app-calculated scores using the same visual language as Scanner:
+Rule-based narrative section. **Not AI-generated. Not labeled as AI.**
 
-```txt
-Opportunity Score v2
-Fundamental Score
-Growth Score
-Profitability Score
-Valuation Score
-Financial Health Score
-Stability Score
-```
+Content:
+- Short headline summarizing the primary signal
+- Summary sentence with specific signal positives
+- Strength chips (green)
+- Concern chips (amber)
+- "Next check" box — the most important concern or caution
 
-Use:
+Built by `buildStockDecisionNarrative(stock)` in `src/lib/scoring/decision-summary.ts`.
 
-```txt
-Score bars
-Score numbers
-Tooltips
-Score version / calculated date if available
-```
+Uses only DB-backed fields. Does not call any provider. Does not invent facts.
 
-Do not show Hot Score unless implemented as a real score.
+Labeled with: "Rule-based · DB-backed"
+
+Language is cautious:
+- "stands out because", "worth reviewing", "check whether", "verify whether"
+- Never uses: buy, sell, guaranteed, safe, will go up
 
 ---
 
-## Analyst View
+## Key Decision Signals
 
-Should show real DB-backed analyst data:
+5 visual cards in a 2-column grid (last card spans full width if 5th is last odd):
 
 ```txt
-Rating stars + numeric value + label
+Quality        — based on fundamentalScore
+Valuation      — based on valuationScore
+Analysts       — based on analystUpsidePercent + analystRatingNormalized
+Stability      — based on riskContextScore
+Price Position — based on 52W range position or priceAvg50
+```
+
+Each card has:
+- Colored left accent bar
+- Status label (e.g., "Strong", "Reasonable", "Elevated")
+- Detail line (e.g., "Fundamental 88 — strong quality signals")
+- Color coding: emerald (favorable), blue (neutral), amber (needs check), red (concern)
+
+Built by `buildSignalCards(stock)` in `src/lib/scoring/decision-summary.ts`.
+
+---
+
+## Market Position Visual
+
+A visual 52W range bar with markers:
+
+```txt
+Horizontal bar with gradient zone (green → neutral → amber)
+White vertical marker — current price position
+Amber vertical marker — 50-day moving average (if available)
+Blue vertical marker  — 200-day moving average (if available)
+Legend below bar
+```
+
+Below the bar: compact 2-column stats grid:
+
+```txt
+Current Price | Day %
+52W High      | 52W Low
+Avg 50        | Avg 200
+Beta
+```
+
+No historical chart. A historical chart tab must not be shown until real historical price-per-date data exists in the DB.
+
+---
+
+## My Tracking Plan
+
+If **not in watchlist:**
+- Large CTA card with explanatory copy
+- "Add to Watchlist" button
+
+If **in watchlist:**
+- Watchlist status chip
+- Entry zone / Target / Stop loss cards (if entered by user)
+- Tracking reason / notes
+- "Edit" action button inline
+
+Preserves all existing Add/Edit/Remove watchlist server actions unchanged.
+
+---
+
+## Alerts
+
+Separate section from "My Tracking Plan":
+
+- Active alert rules list (type, threshold, frequency)
+- "Set Alert" button in section header
+- HOT_SCORE_ABOVE alerts display as "Hot Score Above (legacy)" and do not crash
+- New alert creation does not offer "Hot Score Above" as an option
+
+---
+
+## Evidence (Collapsible Accordions)
+
+Collapsed by default. Contains detailed dry evidence used to support the decision workspace.
+
+### Analyst Details
+
+```txt
+Stars + rating + label
 Analyst count
-Consensus target
-Analyst upside %
-Target high
-Target median
-Target low
+Consensus Target
+Analyst Upside %
+Target High / Median / Low
+Analyst Synced date
 Source
-Last synced date
 ```
 
-Use same star logic as Scanner.
-
----
-
-## Valuation & Fundamentals
-
-Should show key DB-backed metrics:
+### All Scores
 
 ```txt
-P/E
-Forward P/E
-PEG
-Forward PEG
-P/S
-P/B
-EV/EBITDA
-Revenue Growth TTM
-EPS Growth TTM
-Gross Margin
-Operating Margin
-Net Margin
-ROE
-ROA
-Debt / Equity
-Current Ratio
-Interest Coverage
+7 score bars: Opportunity, Fundamental, Growth, Profitability, Valuation, Financial Health, Stability
+Score versions and calculation dates
 ```
 
-Avoid dumping every field if it becomes unreadable.
+### Fundamentals
 
-Group into:
+Grouped into Valuation, Growth & Profitability, Financial Health — same metrics as scanner expanded row.
+
+### Company & Data Freshness
 
 ```txt
-Valuation
-Growth & Profitability
-Financial Health
+Company name, sector/industry, market cap, description (4-line clamp)
+Quote / Metrics / Analyst sync dates and sources
+Opportunity and Fundamental calculation dates
 ```
 
 ---
 
-## Market Position
+## Sticky Actions Footer
 
-Should show real daily quote/market context:
+Always visible at bottom:
 
 ```txt
-Current price
-Day %
-52W high
-52W low
-52W position
-Price Avg 50
-Price Avg 200
-Beta
+In watchlist: Edit Watchlist + Alert
+Not in watchlist: Add to Watchlist + Alert
 ```
 
-Do not show a historical chart unless the chart is real and DB-backed.
-
-Historical charts are future work.
+Removed:
+- View Full Details (non-functional)
+- Details (non-functional)
 
 ---
 
-## Watchlist / Alert Context
+## Alert Creation
 
-Preserve real actions:
-
-```txt
-Add to Watchlist
-Edit Watchlist
-Remove from Watchlist
-Create Alert
-Edit Alert if supported
-```
-
-Show real state:
+Alert type options in UI:
 
 ```txt
-In Watchlist
-Watchlist note
-Alert Active
-Alert rule details
+Price Above
+Price Below
+Opportunity Score Above
+Relative Volume Above
 ```
 
-Do not show mock values like entry/stop/target unless they are real user-entered DB fields.
+Removed from UI: `Hot Score Above`
+
+DB enum `HOT_SCORE_ABOVE` is preserved. Existing alerts display as `Hot Score Above (legacy)`. No schema change.
 
 ---
 
-## Data Freshness
+## Shared Logic
 
-Show:
+`src/lib/scoring/decision-summary.ts` exports:
 
 ```txt
-Quote synced
-Quote source
-Metrics synced
-Metrics source
-Analyst synced
-Analyst source
-Opportunity calculated
-Fundamental calculated
+buildDecisionSummary(stock)          — Decision Tag, Strengths, Concerns (shared with ScannerExpandedRow)
+ratingToStars(stock)                  — star rating (shared with ScannerExpandedRow)
+buildStockDecisionNarrative(stock)   — Drawer narrative: headline, summary, mainCheck
+buildSignalCards(stock)              — 5 signal cards for decision cockpit
 ```
 
-Values should not wrap awkwardly.
-
-Use truncate/tooltips for long sources.
+`StockPreviewDrawer` and `ScannerExpandedRow` both import from this shared utility.
 
 ---
 
-## Remove Legacy / Mock Content
+## StockDrawerDetail Model
 
-Remove or replace if not DB-backed:
+The `StockDrawerDetail` Prisma model remains in the schema but is no longer used by the Drawer or any UI render path.
+
+It is not queried in:
 
 ```txt
-Hot Score
-AI Insight
-Main Catalyst
-Price Context mock chart
-FOMO risk
-Signal
-Setup / Pullback Watch
-Entry context
-Mock Watch Context values
+getScannerData()
+ScannerPageClient
+StockPreviewDrawer
 ```
 
-Real but incomplete is better than polished mock data.
+May be cleaned up (migration to drop the table) in a future phase.
 
 ---
 
-## Tooltips
-
-Required tooltips for important metrics:
+## Data Source Rule
 
 ```txt
-Decision Tag
-Opportunity Score
-Fundamental Score
-Valuation Score
-Stability Score
-Analyst Upside
-Analyst Rating
-P/E
-PEG
-ROE
-Revenue Growth
-52W position
-Beta
-Data freshness fields
-```
-
----
-
-## Responsiveness
-
-Drawer should:
-
-```txt
-Scroll correctly
-Avoid content hidden behind sticky footer
-Avoid horizontal overflow
-Wrap cards cleanly
-Keep close button visible
-Work on desktop and mobile widths
-```
-
----
-
-## QA Checklist
-
-Open drawer for:
-
-```txt
-ADBE
-NVDA
-NFLX
-GOOG
-TSLA
-CHTR
-```
-
-Confirm:
-
-```txt
-No mock/legacy sections remain
-Header uses real data
-Decision Snapshot is rule-based/real
-Company Snapshot uses DB description
-Scores match Scanner/expanded row
-Analyst View matches Scanner/expanded row
-Market Position uses real quote data
-Watchlist/Alert actions still work
-Data Freshness visible
-No overflow
-Drawer updates correctly when another stock is opened
+No provider calls from Drawer.
+All data read from DB via getScannerData().
+getScannerData() does NOT include drawerDetail in its Prisma query.
+Historical chart tabs must not be shown until real price-history DB data exists.
 ```
 
 ---
@@ -413,6 +338,7 @@ Context/Features/scanner-feature-spec.md
 Context/scoring-system.md
 Context/Algorithms/scanner-decision-tags.md
 Context/Algorithms/opportunity-score-v2.md
+Context/Algorithms/analyst-rating-and-upside.md
 Context/data-model.md
 Context/sync-workflows.md
 ```

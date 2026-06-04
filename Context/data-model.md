@@ -47,6 +47,7 @@ If a migration is added, update this file.
 | `StockUniverseMember` | Universe Sync | Scanner membership/index flags |
 | `WatchlistItem` | Watchlist Server Actions | Scanner, Drawer, Dashboard |
 | `AlertRule` | Alert Server Actions | Scanner, Drawer |
+| `StockDrawerDetail` | Legacy — no active owner | Not used by any UI render path (Phase 21C). Schema retained, no migration yet. |
 | `SyncRun` | Admin sync workflows | Admin Sync, freshness checks |
 | `SyncRunItem` | Admin sync workflows | Sync history/details |
 

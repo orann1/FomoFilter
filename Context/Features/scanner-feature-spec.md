@@ -44,6 +44,19 @@ Is the stock stable enough?
 Should I open the drawer for deeper review?
 ```
 
+---
+
+## Product Role Split
+
+```txt
+Scanner Row      = fast comparison across stocks (main table columns)
+Expanded Row     = detailed dry data view for deeper research — full metric tables
+Drawer           = visual decision cockpit — synthesized signals, narrative, action-focused
+Stock Details    = future full research page (not yet implemented)
+```
+
+The Drawer and Expanded Row serve different purposes. The Expanded Row is the primary place for full dry metric tables. The Drawer synthesizes data into a decision-focused layout with narrative and visual signal cards. Do not make them visually identical.
+
 It is not a raw data inventory table.
 
 ---

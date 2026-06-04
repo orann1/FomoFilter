@@ -405,10 +405,32 @@ Scanner maps and displays real company descriptions.
 
 ---
 
-## Next Planned Phase
+---
 
-```txt
-Phase 21C — Drawer Real Data & Decision Workspace Cleanup
-```
+## Phase 21C — Drawer Real Data & Decision Workspace Cleanup
 
-The drawer is the next legacy area and should be cleaned to use real DB-backed data.
+Removed all legacy/mock drawer content (Hot Score, AI Insight, Main Catalyst, FOMO Risk, Signal labels, Risk label, fake SVG chart, hardcoded "US Stocks" chip, StockDrawerDetail mock entry/target data).
+
+Removed end-to-end dependency on `StockDrawerDetail`: Prisma include removed from `getScannerData()`, type removed from `ScannerPageClient`, prop removed from `StockPreviewDrawer`. Drawer now renders for any scanner stock using only `stock: HotStock`.
+
+Rebuilt drawer as a **visual decision cockpit** distinct from the Scanner expanded row:
+
+- **Hero Decision Header** — gradient background tied to opportunity strength (emerald for Strong Opportunity/Attractive, amber for Watch), Decision Tag badge, 4 metric pills (Opportunity, Fundamental, Upside, Stability)
+- **Why This Stock Stands Out** — rule-based narrative (headline + summary + "Next check") built by `buildStockDecisionNarrative()` from DB-backed fields only. Labeled "Rule-based · DB-backed". Not AI-generated.
+- **Key Decision Signals** — 5 colorful signal cards (Quality, Valuation, Analysts, Stability, Price Position) built by `buildSignalCards()`, each with colored left accent, status label, and detail line
+- **Market Position Visual** — enhanced 52W bar with gradient zones and vertical markers for current price, 50-day avg, 200-day avg
+- **My Tracking Plan** — watchlist CTA or current watchlist state as a central inline section
+- **Alerts** — active alerts list with "Set Alert" CTA in section header
+- **Evidence accordions** — dry metric tables (Analyst Details, All Scores, Fundamentals, Company & Data Freshness) collapsed by default so they do not dominate the layout
+
+Extracted `buildDecisionSummary` and `ratingToStars` to shared utility `src/lib/scoring/decision-summary.ts`. Both `StockPreviewDrawer` and `ScannerExpandedRow` import from this file.
+
+Removed `Hot Score Above` from alert creation UI. Existing `HOT_SCORE_ABOVE` DB alerts display as "Hot Score Above (legacy)". DB enum and schema unchanged. No migration added.
+
+`StockDrawerDetail` model remains in schema (not dropped); flagged for future cleanup phase.
+
+Expanded row retained as the primary detailed dry-data research view. Role split documented.
+
+**Automated checks:** build ✅  tsc ✅  prisma validate ✅  migrate status ✅ (14 migrations, up to date)
+
+**Files changed:** `src/lib/scoring/decision-summary.ts` (new), `src/components/dashboard/StockPreviewDrawer.tsx`, `src/components/scanner/ScannerExpandedRow.tsx`, `src/components/dashboard/drawer/CreateAlertPanel.tsx`, `src/components/scanner/ScannerPageClient.tsx`, `src/lib/data/scanner.ts`, `app/scanner/page.tsx`, `src/lib/mock-data.ts`, `src/types/drawer.ts`, `Context/Features/drawer-feature-spec.md`, `Context/Features/scanner-feature-spec.md`, `Context/data-model.md`

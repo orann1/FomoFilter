@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import type { HotStock, WatchlistItem, StockDrawerDetail } from "@/src/lib/mock-data";
+import type { HotStock, WatchlistItem } from "@/src/lib/mock-data";
 import type { LocalWatchlistEntry } from "@/src/types/drawer";
 import type { ActiveAlertRule } from "@/src/lib/data/dashboard";
 import type { ScannerUniverse } from "@/src/lib/data/scanner";
@@ -121,7 +121,6 @@ const UNIVERSE_DISPLAY_ORDER = ["nasdaq-100", "russell-1000", "sp-500"];
 interface ScannerPageClientProps {
   stocks: HotStock[];
   watchlistItems: WatchlistItem[];
-  stockDrawerDetails: Record<string, StockDrawerDetail>;
   alertRulesBySymbol: Record<string, ActiveAlertRule[]>;
   universes: ScannerUniverse[];
   selectedUniverseSlug: string;
@@ -130,7 +129,6 @@ interface ScannerPageClientProps {
 export default function ScannerPageClient({
   stocks,
   watchlistItems,
-  stockDrawerDetails,
   alertRulesBySymbol,
   universes,
   selectedUniverseSlug,
@@ -496,7 +494,6 @@ export default function ScannerPageClient({
           onAddToWatchlist={handleAddToWatchlist}
           onEditWatchlist={handleEditWatchlist}
           onRemoveFromWatchlist={handleRemoveFromWatchlist}
-          stockDrawerDetails={stockDrawerDetails}
           dbWatchlistItems={watchlistItems}
           alertRulesBySymbol={alertRulesBySymbol}
         />

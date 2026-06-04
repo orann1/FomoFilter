@@ -1,5 +1,6 @@
 import type { HotStock } from "@/src/lib/mock-data";
 import { formatRatio, formatCurrency, formatCompactCurrency } from "@/src/lib/formatters";
+import { buildDecisionSummary, ratingToStars } from "@/src/lib/scoring/decision-summary";
 
 // --- Shared helpers ---
 
@@ -120,74 +121,6 @@ function StarDisplay({ stars }: { stars: number }) {
   );
 }
 
-function ratingToStars(stock: HotStock): number {
-  const total = stock.analystCount;
-  if (total && total > 0) {
-    const weighted =
-      ((stock.analystStrongBuyCount ?? 0) * 5 +
-        (stock.analystBuyCount ?? 0) * 4 +
-        (stock.analystHoldCount ?? 0) * 3 +
-        (stock.analystSellCount ?? 0) * 2 +
-        (stock.analystStrongSellCount ?? 0) * 1) /
-      total;
-    return Math.round(weighted * 2) / 2;
-  }
-  switch (stock.analystRatingNormalized) {
-    case "Strong Buy": return 5;
-    case "Buy": return 4;
-    case "Hold": return 3;
-    case "Sell": return 2;
-    case "Strong Sell": return 1;
-    default: return 0;
-  }
-}
-
-// --- Decision Summary logic ---
-
-function buildDecisionSummary(stock: HotStock): {
-  strengths: string[];
-  concerns: string[];
-  badge: string;
-  badgeColor: string;
-} {
-  const strengths: string[] = [];
-  const concerns: string[] = [];
-
-  const fund = stock.fundamentalScore ?? 0;
-  const opp = stock.oppScore ?? 0;
-  const val = stock.valuationScore ?? 0;
-  const stab = stock.riskContextScore ?? 0;
-  const upside = stock.analystUpsidePercent;
-  const growth = stock.growthScore ?? 0;
-  const profit = stock.profitabilityScore ?? 0;
-  const health = stock.financialHealthScore ?? 0;
-
-  if (fund >= 80) strengths.push("Strong fundamentals");
-  if (upside != null && upside >= 20) strengths.push("High analyst upside");
-  if (growth >= 80) strengths.push("Strong growth metrics");
-  if (profit >= 80) strengths.push("Strong profitability");
-  if (val >= 70) strengths.push("Reasonable valuation");
-  if (stab >= 75) strengths.push("Low volatility context");
-  if (health >= 75) strengths.push("Strong financial health");
-
-  if (val < 40) concerns.push("Expensive valuation");
-  else if (val < 55) concerns.push("Elevated valuation");
-  if (stab < 50) concerns.push("High volatility/risk context");
-  else if (stab < 65) concerns.push("Elevated beta / risk context");
-  if (upside != null && upside < 0) concerns.push("Negative analyst upside");
-  else if (upside != null && upside < 10) concerns.push("Limited analyst upside");
-  if (growth < 40 && growth > 0) concerns.push("Weak growth metrics");
-  if (profit < 40 && profit > 0) concerns.push("Weak profitability");
-
-  let badge = "Neutral";
-  let badgeColor = "text-slate-400 bg-slate-800/60 border border-slate-700/50";
-  if (opp >= 80) { badge = "Strong Opportunity"; badgeColor = "text-emerald-300 bg-emerald-500/10 border border-emerald-600/30"; }
-  else if (opp >= 65) { badge = "Attractive"; badgeColor = "text-emerald-400/80 bg-emerald-500/8 border border-emerald-700/30"; }
-  else if (opp >= 50) { badge = "Watch"; badgeColor = "text-amber-300 bg-amber-500/10 border border-amber-600/30"; }
-  else if (opp > 0) { badge = "Weak Signal"; badgeColor = "text-slate-400 bg-slate-800/60 border border-slate-700/50"; }
-
-  return { strengths, concerns, badge, badgeColor };
-}
 
 // --- Main component ---
 

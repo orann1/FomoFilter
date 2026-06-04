@@ -15,7 +15,6 @@ export type LocalWatchlistEntry = {
 export type AlertTypeLocal =
   | "Price Above"
   | "Price Below"
-  | "Hot Score Above"
   | "Opportunity Score Above"
   | "Relative Volume Above";
 

@@ -9,7 +9,6 @@ import { createAlertRule } from "@/src/actions/drawer-actions";
 interface CreateAlertPanelProps {
   symbol: string;
   currentPrice: number;
-  hotScore: number;
   oppScore: number;
   relativeVolume: number;
   existingAlerts: ActiveAlertRule[];
@@ -20,7 +19,6 @@ interface CreateAlertPanelProps {
 const ALERT_TYPES: AlertTypeLocal[] = [
   "Price Above",
   "Price Below",
-  "Hot Score Above",
   "Opportunity Score Above",
   "Relative Volume Above",
 ];
@@ -30,7 +28,6 @@ const FREQUENCIES: AlertFrequencyLocal[] = ["Once", "Daily", "Always"];
 function getDefaultThreshold(
   alertType: AlertTypeLocal,
   price: number,
-  hotScore: number,
   oppScore: number,
   relVol: number
 ): string {
@@ -39,12 +36,12 @@ function getDefaultThreshold(
       return (Math.ceil(price * 1.02 * 100) / 100).toFixed(2);
     case "Price Below":
       return (Math.floor(price * 0.95 * 100) / 100).toFixed(2);
-    case "Hot Score Above":
-      return String(Math.min(hotScore + 5, 100));
     case "Opportunity Score Above":
       return String(Math.min(oppScore + 5, 100));
     case "Relative Volume Above":
       return (relVol + 0.5).toFixed(1);
+    default:
+      return "";
   }
 }
 
@@ -62,12 +59,12 @@ function buildSummary(
       return `Alert ${freqLabel} when ${symbol} price goes above $${val}`;
     case "Price Below":
       return `Alert ${freqLabel} when ${symbol} price drops below $${val}`;
-    case "Hot Score Above":
-      return `Alert ${freqLabel} when ${symbol} Hot Score exceeds ${val}`;
     case "Opportunity Score Above":
       return `Alert ${freqLabel} when ${symbol} Opportunity Score exceeds ${val}`;
     case "Relative Volume Above":
       return `Alert ${freqLabel} when ${symbol} relative volume exceeds ${val}x`;
+    default:
+      return `Alert ${freqLabel} when condition is met for ${symbol}`;
   }
 }
 
@@ -75,7 +72,7 @@ function formatAlertType(type: string): string {
   switch (type) {
     case "PRICE_ABOVE": return "Price Above";
     case "PRICE_BELOW": return "Price Below";
-    case "HOT_SCORE_ABOVE": return "Hot Score Above";
+    case "HOT_SCORE_ABOVE": return "Hot Score Above (legacy)";
     case "OPPORTUNITY_SCORE_ABOVE": return "Opp Score Above";
     case "RELATIVE_VOLUME_ABOVE": return "Rel Vol Above";
     default: return type;
@@ -94,7 +91,6 @@ function formatFrequency(freq: string): string {
 export default function CreateAlertPanel({
   symbol,
   currentPrice,
-  hotScore,
   oppScore,
   relativeVolume,
   existingAlerts,
@@ -103,7 +99,7 @@ export default function CreateAlertPanel({
 }: CreateAlertPanelProps) {
   const [alertType, setAlertType] = useState<AlertTypeLocal>("Price Above");
   const [threshold, setThreshold] = useState(() =>
-    getDefaultThreshold("Price Above", currentPrice, hotScore, oppScore, relativeVolume)
+    getDefaultThreshold("Price Above", currentPrice, oppScore, relativeVolume)
   );
   const [frequency, setFrequency] = useState<AlertFrequencyLocal>("Once");
   const [error, setError] = useState<string | null>(null);
@@ -111,7 +107,7 @@ export default function CreateAlertPanel({
 
   function handleAlertTypeChange(type: AlertTypeLocal) {
     setAlertType(type);
-    setThreshold(getDefaultThreshold(type, currentPrice, hotScore, oppScore, relativeVolume));
+    setThreshold(getDefaultThreshold(type, currentPrice, oppScore, relativeVolume));
     setError(null);
   }
 

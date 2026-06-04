@@ -19,7 +19,6 @@ export default async function ScannerPage({ searchParams }: ScannerPageProps) {
       <ScannerPageClient
         stocks={data.stocks}
         watchlistItems={data.watchlistItems}
-        stockDrawerDetails={data.stockDrawerDetails}
         alertRulesBySymbol={data.alertRulesBySymbol}
         universes={data.universes}
         selectedUniverseSlug={data.selectedUniverseSlug}

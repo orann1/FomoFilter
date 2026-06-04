@@ -1,5 +1,5 @@
 import { prisma } from "@/src/lib/db/prisma";
-import type { HotStock, WatchlistItem, StockDrawerDetail, RiskLevel } from "@/src/lib/mock-data";
+import type { HotStock, WatchlistItem, RiskLevel } from "@/src/lib/mock-data";
 import type { DashboardUser, ActiveAlertRule } from "@/src/lib/data/dashboard";
 
 export type ScannerUniverse = {
@@ -14,7 +14,6 @@ export type ScannerData = {
   user: DashboardUser;
   stocks: HotStock[];
   watchlistItems: WatchlistItem[];
-  stockDrawerDetails: Record<string, StockDrawerDetail>;
   alertRulesBySymbol: Record<string, ActiveAlertRule[]>;
   universes: ScannerUniverse[];
   selectedUniverseSlug: string;
@@ -58,7 +57,6 @@ export async function getScannerData({
       score: true,
       metric: true,
       analystData: true,
-      drawerDetail: true,
       universeMemberships: { include: { universe: { select: { slug: true } } } },
     },
     orderBy: { symbol: "asc" },
@@ -226,57 +224,6 @@ export async function getScannerData({
       notes: w.reason ?? "",
     }));
 
-  const stockDrawerDetails: Record<string, StockDrawerDetail> = {};
-  for (const s of dbStocks) {
-    const d = s.drawerDetail;
-    const score = s.score;
-    if (!d || !score) continue;
-
-    stockDrawerDetails[s.symbol] = {
-      suggestedAction: d.suggestedAction,
-      fomoRisk: d.fomoRisk,
-      entryContext: d.entryContext,
-      hotDelta: d.hotDelta,
-      oppDelta: d.oppDelta,
-      hotScoreExplain: d.hotScoreExplain ?? "",
-      oppScoreExplain: d.oppScoreExplain ?? "",
-      hotBreakdown: {
-        momentum: d.hotMomentum ?? 0,
-        volumeHeat: d.hotVolumeHeat ?? 0,
-        catalyst: d.hotCatalyst ?? 0,
-        technicals: d.hotTechnicals ?? 0,
-      },
-      oppBreakdown: {
-        analystUpside: d.oppAnalystUpside ?? 0,
-        fundamentals: d.oppFundamentals ?? 0,
-        valuation: d.oppValuation ?? 0,
-        entryQuality: d.oppEntryQuality ?? 0,
-      },
-      aiWhatsHappening: d.aiWhatHappening,
-      aiWhatItMeans: d.aiWhatItMeans,
-      aiWhatToWatch: d.aiWhatToWatch,
-      aiSentiment: d.aiSentiment as "bullish" | "cautious" | "bearish",
-      aiGeneratedMinutes: d.aiGeneratedMinutes,
-      catalystType: d.catalystType ?? "",
-      catalystExplanation: d.catalystExplanation ?? "",
-      catalystConfidence: (d.catalystConfidence as "High" | "Medium" | "Low") ?? "Medium",
-      catalystSource: d.catalystSource ?? "",
-      catalystHoursAgo: d.catalystHoursAgo ?? 0,
-      entryZoneLow: Number(d.entryZoneLow ?? 0),
-      entryZoneHigh: Number(d.entryZoneHigh ?? 0),
-      target: Number(d.target ?? 0),
-      distanceToTarget: d.distanceToTarget ?? "",
-      priceEntryContext: d.entryContext,
-      watchSince: d.watchSince ?? undefined,
-      hotScoreChangeSinceAdded: score.hotScoreChange,
-      oppScoreChangeSinceAdded: score.opportunityChange,
-      latestPersonalSignal: d.latestPersonalSignal ?? undefined,
-      signalQuality: d.signalQuality ?? "",
-      lastUpdatedMinutes: d.lastUpdatedMinutes,
-      suggestedTrackingReason: d.suggestedTrackingReason ?? undefined,
-    };
-  }
-
   const alertRulesBySymbol: Record<string, ActiveAlertRule[]> = {};
   for (const rule of dbAlertRules) {
     const sym = rule.stock.symbol;
@@ -293,7 +240,6 @@ export async function getScannerData({
     user,
     stocks,
     watchlistItems,
-    stockDrawerDetails,
     alertRulesBySymbol,
     universes,
     selectedUniverseSlug: selectedUniverse?.slug ?? "nasdaq-100",
