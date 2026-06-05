@@ -32,7 +32,7 @@ interface DataCoverageSectionProps {
 }
 
 export default function DataCoverageSection({ summary, freshness }: DataCoverageSectionProps) {
-  const total = summary.activeNasdaq100 > 0 ? summary.activeNasdaq100 : summary.totalStocks;
+  const total = summary.activeUniverseStocks > 0 ? summary.activeUniverseStocks : summary.totalStocks;
   const scorePct = total > 0 ? Math.round((summary.withScores / total) * 100) : 0;
   const metricPct = total > 0 ? Math.round((summary.withMetrics / total) * 100) : 0;
   const scannerReadyPct = total > 0 ? Math.round((summary.scannerReadyStocks / total) * 100) : 0;

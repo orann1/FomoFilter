@@ -54,29 +54,34 @@ Provider / Static Source
 Purpose:
 
 ```txt
-Build/refresh Nasdaq 100 universe membership.
+Build/refresh stock universe membership.
+Currently supports two universes: Nasdaq 100 and S&P 500.
 ```
+
+#### Nasdaq 100 Universe Sync
 
 Current membership source:
 
 ```txt
-Static fallback list
+Static fallback list (nasdaq100-fallback-symbols.ts)
+compositionAsOf: 2026-01-20 — 100 symbols
 ```
 
 Provider role:
 
 ```txt
-FMP may enrich profile fields.
-FMP is not currently the live Nasdaq 100 membership source.
+FMP /stable/profile is called during Nasdaq 100 universe sync to enrich
+company profile fields (name, sector, marketCap) for new stocks.
+FMP is not the constituent membership source.
 ```
 
 Writes:
 
 ```txt
-Stock
-StockUniverse
+Stock (upsert by symbol — enriched with FMP profile for new entries)
+StockUniverse (slug: nasdaq-100)
 StockUniverseMember
-SyncRun
+SyncRun (type: nasdaq100-universe-sync)
 SyncRunItem
 ```
 
@@ -89,7 +94,63 @@ Manual / weekly or monthly
 Important copy:
 
 ```txt
-Nasdaq 100 membership currently uses a manually validated static fallback list because FMP index constituent endpoints require a higher plan tier or are not used in the current implementation.
+Nasdaq 100 membership currently uses a manually validated static fallback list
+because FMP index constituent endpoints require a higher plan tier or are not
+used in the current implementation.
+```
+
+#### S&P 500 Universe Sync (Phase 22B)
+
+Current membership source:
+
+```txt
+Best-effort static fallback list (sp500-fallback-symbols.ts)
+compositionAsOf: 2025-07-01 — 499 unique symbols
+```
+
+Provider role:
+
+```txt
+No provider calls during S&P 500 universe sync.
+Stock shell records are created with symbol as name.
+Company Data Sync enriches profiles via FMP after universe sync.
+```
+
+Writes:
+
+```txt
+Stock (upsert by symbol — shell only, name = symbol for new entries)
+StockUniverse (slug: sp-500)
+StockUniverseMember
+SyncRun (type: sp500-universe-sync)
+SyncRunItem
+```
+
+Run cadence:
+
+```txt
+Manual / after quarterly rebalancing
+```
+
+Important copy:
+
+```txt
+S&P 500 membership uses a best-effort static fallback list. It is not a live
+provider feed. FMP index constituent endpoints require a higher plan tier.
+After syncing S&P 500 universe membership, run Company Data Sync to enrich
+profile fields via FMP for any new stock shell records.
+```
+
+#### Multi-Universe Overlap Behavior
+
+```txt
+Stock is unique by symbol.
+If a symbol (e.g., NVDA) belongs to both Nasdaq 100 and S&P 500:
+  - One Stock record exists in the database.
+  - Two StockUniverseMember records exist (one per universe).
+  - Company Data Sync and Daily Market Data Sync process the symbol once.
+Stocks leaving one universe have that specific membership deactivated.
+Stocks in other universes are not affected.
 ```
 
 ---
@@ -99,7 +160,16 @@ Nasdaq 100 membership currently uses a manually validated static fallback list b
 Purpose:
 
 ```txt
-Refresh slower-changing company, fundamental, analyst, and profile data.
+Refresh slower-changing company, fundamental, analyst, and profile data
+for all unique active stocks across all synced universes.
+```
+
+Symbol scope (Phase 22B):
+
+```txt
+Operates on deduplicated unique active symbols across all synced universes.
+Overlapping symbols (e.g., NVDA in Nasdaq 100 and S&P 500) are processed once.
+Symbol list is deduplicated before SyncRunItem creation and before provider calls.
 ```
 
 Current sources:
@@ -126,7 +196,7 @@ Writes:
 Stock
 StockMetric
 StockAnalystData
-SyncRun
+SyncRun (type: company-data-active-symbols-sync)
 SyncRunItem
 ```
 
@@ -188,6 +258,12 @@ Calculate Fundamental Scores
 Calculate Opportunity Scores
 ```
 
+Legacy SyncRun type:
+
+```txt
+analyst-data-nasdaq100-sync — still displayed in history as "Company Data Sync (legacy)"
+```
+
 ---
 
 ### 3. Daily Market Data Sync
@@ -195,7 +271,15 @@ Calculate Opportunity Scores
 Purpose:
 
 ```txt
-Refresh daily market quote data.
+Refresh daily market quote data for all unique active stocks across all synced universes.
+```
+
+Symbol scope (Phase 22B):
+
+```txt
+Operates on deduplicated unique active symbols across all synced universes.
+Overlapping symbols are processed once.
+Symbol list is deduplicated before SyncRunItem creation and before provider calls.
 ```
 
 Current source:
@@ -208,7 +292,7 @@ Writes:
 
 ```txt
 StockQuote
-SyncRun
+SyncRun (type: market-data-active-symbols-sync)
 SyncRunItem
 ```
 
@@ -246,6 +330,14 @@ Calculate scores automatically
 
 After running Daily Market Data Sync, run Opportunity Score if price-position freshness matters.
 
+Legacy SyncRun types:
+
+```txt
+market-data-nasdaq100-chunked-sync — still displayed in history as "Daily Market Data Sync (legacy)"
+market-data-nasdaq100-batch — still displayed in history as "Daily Market Data Sync (legacy)"
+quotes-nasdaq100-batch — still displayed in history as "Daily Market Data Sync (legacy)"
+```
+
 ---
 
 ### 4. Calculate Fundamental Scores
@@ -272,7 +364,7 @@ Writes:
 
 ```txt
 StockScore
-SyncRun
+SyncRun (type: fundamental-score-calculation)
 SyncRunItem
 ```
 
@@ -281,6 +373,13 @@ Reads:
 ```txt
 StockMetric
 StockQuote where needed
+```
+
+Operates on:
+
+```txt
+All active Stock records (prisma.stock.findMany where isActive: true).
+Already deduplicated by Stock uniqueness — no universe-specific scoping needed.
 ```
 
 Does not:
@@ -327,7 +426,7 @@ Writes:
 StockScore.oppScore
 StockScore.oppScoreVersion
 StockScore.oppCalculatedAt
-SyncRun
+SyncRun (type: opportunity-score-calculation)
 SyncRunItem
 ```
 
@@ -337,6 +436,13 @@ Reads:
 StockScore fundamental/component scores
 StockAnalystData
 StockQuote
+```
+
+Operates on:
+
+```txt
+All active Stock records (prisma.stock.findMany where isActive: true).
+Already deduplicated by Stock uniqueness.
 ```
 
 Current version:
@@ -390,6 +496,30 @@ Rules:
 ```txt
 Provider tests should not mutate stock data.
 Provider tests should not be used as app sync workflows.
+```
+
+---
+
+## SyncRun Type Reference
+
+Current production types:
+
+```txt
+nasdaq100-universe-sync        — Nasdaq 100 membership sync
+sp500-universe-sync            — S&P 500 membership sync (Phase 22B)
+market-data-active-symbols-sync — Daily Market Data Sync (Phase 22B+)
+company-data-active-symbols-sync — Company Data Sync (Phase 22B+)
+fundamental-score-calculation   — Fundamental Score
+opportunity-score-calculation   — Opportunity Score
+```
+
+Legacy types (backward-compatible, display in history only):
+
+```txt
+analyst-data-nasdaq100-sync         — Company Data Sync before Phase 22B
+market-data-nasdaq100-chunked-sync  — Daily Market Data Sync before Phase 22B
+market-data-nasdaq100-batch         — Daily Market Data Sync (batch variant)
+quotes-nasdaq100-batch              — Quote batch (legacy)
 ```
 
 ---

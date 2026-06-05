@@ -19,6 +19,7 @@ import type {
   SyncRunStatus,
   SyncSymbolResult,
 } from "@/src/lib/market-data/types";
+import { SP500_SYMBOLS, SP500_FALLBACK_METADATA } from "@/src/lib/market-data/sp500-fallback-symbols";
 import {
   calculateFundamentalScore,
   SCORE_VERSION,
@@ -854,6 +855,222 @@ export async function syncNasdaq100UniverseAction(): Promise<UniverseSyncActionR
     provider: "static_fallback",
     action: "nasdaq100-universe-sync",
     requestedCount: constituents.length,
+    successCount,
+    skippedCount,
+    failedCount,
+    deactivatedCount,
+    createdStocks,
+    createdMemberships,
+    reactivated,
+    alreadyActive,
+    message,
+    startedAt: startedAt.toISOString(),
+    finishedAt: finishedAt.toISOString(),
+    durationMs,
+    persisted,
+    items,
+  };
+}
+
+export async function syncSp500UniverseAction(): Promise<UniverseSyncActionResult> {
+  const startedAt = new Date();
+
+  type ItemRecord = { symbol: string; status: string; reason: string; dbAction: string };
+  const items: ItemRecord[] = [];
+
+  let createdStocks = 0;
+  let createdMemberships = 0;
+  let reactivated = 0;
+  let alreadyActive = 0;
+  let deactivatedCount = 0;
+  let failedCount = 0;
+  let skippedCount = 0;
+
+  const sourceSymbols = [...SP500_SYMBOLS];
+  const returnedSymbols = new Set(sourceSymbols.map((s) => s.toUpperCase()));
+
+  // Ensure S&P 500 universe exists
+  const universe = await prisma.stockUniverse.upsert({
+    where: { slug: "sp-500" },
+    create: {
+      name: "S&P 500",
+      slug: "sp-500",
+      type: "INDEX",
+      isDefault: false,
+      isSystem: true,
+    },
+    update: { updatedAt: new Date() },
+  });
+
+  // Get currently active S&P 500 members for deactivation pass
+  const activeBeforeSync = await prisma.stockUniverseMember.findMany({
+    where: { universeId: universe.id, isActive: true },
+    select: { stockId: true, stock: { select: { symbol: true } } },
+  });
+  const activeSymbolsBeforeSync = new Map(
+    activeBeforeSync.map((m) => [m.stock.symbol.toUpperCase(), m.stockId])
+  );
+
+  for (const rawSymbol of sourceSymbols) {
+    const symbol = rawSymbol.toUpperCase();
+    if (!symbol || symbol.trim().length === 0) {
+      skippedCount++;
+      items.push({ symbol, status: "skipped", reason: "Invalid symbol", dbAction: "invalid_symbol" });
+      continue;
+    }
+
+    try {
+      const now = new Date();
+
+      // Upsert stock — create a shell if not present; Company Data Sync enriches later
+      let stock = await prisma.stock.findUnique({ where: { symbol } });
+      let newStockCreated = false;
+
+      if (!stock) {
+        stock = await prisma.stock.create({
+          data: { symbol, name: symbol },
+        });
+        newStockCreated = true;
+        createdStocks++;
+      }
+
+      // Upsert membership
+      const existingMembership = await prisma.stockUniverseMember.findUnique({
+        where: { stockId_universeId: { stockId: stock.id, universeId: universe.id } },
+      });
+
+      if (!existingMembership) {
+        await prisma.stockUniverseMember.create({
+          data: {
+            stockId: stock.id,
+            universeId: universe.id,
+            isActive: true,
+            addedAt: now,
+            lastSeenAt: now,
+            source: "static_fallback",
+            statusReasonCode: "created_from_static_fallback",
+          },
+        });
+        createdMemberships++;
+        const dbAction = newStockCreated ? "created_stock_and_membership" : "created_membership";
+        items.push({
+          symbol,
+          status: "success",
+          reason: newStockCreated ? "Created stock shell and membership" : "Created membership",
+          dbAction,
+        });
+      } else if (!existingMembership.isActive) {
+        await prisma.stockUniverseMember.update({
+          where: { stockId_universeId: { stockId: stock.id, universeId: universe.id } },
+          data: { isActive: true, lastSeenAt: now, removedAt: null, statusReasonCode: "reactivated_from_provider" },
+        });
+        reactivated++;
+        items.push({ symbol, status: "success", reason: "Membership reactivated", dbAction: "reactivated_membership" });
+      } else {
+        await prisma.stockUniverseMember.update({
+          where: { stockId_universeId: { stockId: stock.id, universeId: universe.id } },
+          data: { lastSeenAt: now, statusReasonCode: "provider_active" },
+        });
+        alreadyActive++;
+        items.push({ symbol, status: "success", reason: "Already active", dbAction: "already_active" });
+      }
+    } catch (err) {
+      failedCount++;
+      items.push({
+        symbol,
+        status: "failed",
+        reason: err instanceof Error ? err.message : "Unknown error",
+        dbAction: "failed",
+      });
+    }
+  }
+
+  // Deactivate previously active symbols missing from the current static list
+  const now = new Date();
+  for (const [sym, stockId] of activeSymbolsBeforeSync) {
+    if (!returnedSymbols.has(sym)) {
+      try {
+        await prisma.stockUniverseMember.update({
+          where: { stockId_universeId: { stockId, universeId: universe.id } },
+          data: { isActive: false, removedAt: now, statusReasonCode: "missing_from_latest_provider_sync" },
+        });
+        deactivatedCount++;
+        items.push({
+          symbol: sym,
+          status: "success",
+          reason: "Not in current static fallback list",
+          dbAction: "deactivated_membership",
+        });
+      } catch (err) {
+        failedCount++;
+        items.push({
+          symbol: sym,
+          status: "failed",
+          reason: err instanceof Error ? err.message : "Deactivation error",
+          dbAction: "failed",
+        });
+      }
+    }
+  }
+
+  const finishedAt = new Date();
+  const durationMs = finishedAt.getTime() - startedAt.getTime();
+  const successCount = createdStocks + createdMemberships + reactivated + alreadyActive + deactivatedCount;
+  const status: SyncRunStatus =
+    failedCount > 0 && successCount === 0
+      ? "failed"
+      : failedCount > 0 || skippedCount > 0
+      ? "partial_success"
+      : "success";
+  const persisted = successCount > 0;
+
+  const message = [
+    `Synced ${sourceSymbols.length} symbols from the static S&P 500 fallback list.`,
+    `Static fallback source: compositionAsOf ${SP500_FALLBACK_METADATA.compositionAsOf}, lastVerifiedAt ${SP500_FALLBACK_METADATA.lastVerifiedAt}.`,
+    `This sync creates/updates Stock and StockUniverseMember records only — no provider profile enrichment.`,
+    `Run Company Data Sync after this to enrich new stock profiles via FMP.`,
+    `Created stocks: ${createdStocks}.`,
+    `Created memberships: ${createdMemberships}.`,
+    `Reactivated: ${reactivated}.`,
+    `Already active: ${alreadyActive}.`,
+    `Deactivated: ${deactivatedCount}.`,
+    `Failed: ${failedCount}.`,
+  ].join(" ");
+
+  const syncRun = await prisma.syncRun.create({
+    data: {
+      type: "sp500-universe-sync",
+      provider: "static_fallback",
+      status,
+      requestedCount: sourceSymbols.length,
+      successCount,
+      skippedCount,
+      failedCount,
+      persisted,
+      message,
+      startedAt,
+      finishedAt,
+      durationMs,
+    },
+  });
+
+  if (items.length > 0) {
+    await prisma.syncRunItem.createMany({
+      data: items.map((item) => ({
+        syncRunId: syncRun.id,
+        symbol: item.symbol,
+        status: item.status,
+        reason: item.reason,
+        dbAction: item.dbAction,
+      })),
+    });
+  }
+
+  return {
+    status,
+    provider: "static_fallback",
+    action: "sp500-universe-sync",
+    requestedCount: sourceSymbols.length,
     successCount,
     skippedCount,
     failedCount,

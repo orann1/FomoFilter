@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/src/lib/db/prisma";
-import { getAllActiveNasdaq100Symbols } from "@/src/lib/data/admin-universes";
+import { getAllActiveUniqueSyncableSymbols } from "@/src/lib/data/admin-universes";
 
-export const ANALYST_SYNC_TYPE = "analyst-data-nasdaq100-sync";
+export const ANALYST_SYNC_TYPE = "company-data-active-symbols-sync";
 
 export async function POST(req: Request) {
   const body = await req.json().catch(() => ({}));
   const mode: "start" | "restart" = body.mode === "restart" ? "restart" : "start";
 
-  const symbols = await getAllActiveNasdaq100Symbols();
+  const symbols = await getAllActiveUniqueSyncableSymbols();
 
   if (mode === "restart") {
     await prisma.syncRun.updateMany({

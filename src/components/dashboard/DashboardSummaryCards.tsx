@@ -37,7 +37,7 @@ interface DashboardSummaryCardsProps {
 }
 
 export default function DashboardSummaryCards({ summary }: DashboardSummaryCardsProps) {
-  const totalDisplay = summary.activeNasdaq100 > 0 ? summary.activeNasdaq100 : summary.totalStocks;
+  const totalDisplay = summary.activeUniverseStocks > 0 ? summary.activeUniverseStocks : summary.totalStocks;
 
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">

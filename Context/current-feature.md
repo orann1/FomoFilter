@@ -1,14 +1,14 @@
-# Current Feature — Phase 21E
+# Current Feature — Phase 22B
 
 ## Active Phase
 
 ```txt
-Phase 21E — Data Inventory / Admin Data Health Cleanup
+Phase 22B — Multi-Universe Unique Sync Foundation + S&P 500 Expansion
 ```
 
 ## Status
 
-Phase 21E complete. Committed and merged to main.
+Phase 22B complete. Committed and merged to main.
 
 No active phase. Awaiting next phase definition.
 
@@ -30,12 +30,13 @@ Context/product-lead-workflow.md
 For this phase, also read:
 
 ```txt
-Context/Features/admin-sync-feature-spec.md
+Context/data-model.md
 Context/sync-workflows.md
 Context/Features/market-data-sync-strategy.md
-Context/data-model.md
-Context/scoring-system.md
+Context/Features/admin-sync-feature-spec.md
+Context/Features/scanner-feature-spec.md
 Context/Features/dashboard-feature-spec.md
+Context/scoring-system.md
 ```
 
 Read only if needed:
@@ -46,7 +47,6 @@ Context/feature-history.md
 Context/Algorithms/fundamental-score-v1.md
 Context/Algorithms/opportunity-score-v2.md
 Context/Algorithms/analyst-rating-and-upside.md
-Context/Features/scanner-feature-spec.md
 Context/Features/drawer-feature-spec.md
 ```
 
@@ -54,119 +54,159 @@ Context/Features/drawer-feature-spec.md
 
 ## Goal
 
-Clean up Admin Sync / Data Inventory so it becomes a clear operational data-health surface.
+Expand FomoFilter from a Nasdaq 100-centered universe toward a broader S&P 500-backed universe while first fixing the architecture so sync workflows operate on **unique active stock symbols**, not duplicate universe memberships.
 
-Admin Sync should help the user understand:
-
-```txt
-What data can I sync?
-What provider/source is used?
-Which DB tables are affected?
-When was each data category last refreshed?
-Is the data fresh enough for Scanner / Dashboard / Drawer?
-What data coverage is missing?
-Which production workflows are safe to run?
-Which tools are developer/legacy only?
-What was the last sync result?
-```
-
-The Data Inventory / Admin Data Health area should make data coverage and freshness easier to read without becoming a second Scanner.
+This phase should establish a reusable multi-universe foundation and add S&P 500 support without duplicating provider calls for symbols that belong to both Nasdaq 100 and S&P 500.
 
 ---
 
-## Product Role Split
+## Core Product Principle
+
+Separate stock identity from universe membership:
 
 ```txt
-Scanner Row      = fast comparison across stocks
-Expanded Row     = detailed dry data view for deeper research
-Drawer           = visual decision cockpit / decision workspace
-Dashboard        = high-level overview and action surface
-Admin Sync       = operational data health / sync control center
-Data Inventory   = coverage, freshness, missing data, provider/source status
-Stock Details    = future full research page
+Stock = one unique company/security record by symbol
+StockUniverseMember = membership of that symbol in one or more universes
+```
+
+Example:
+
+```txt
+NVDA exists once in Stock.
+NVDA can have multiple memberships:
+  - nasdaq-100
+  - sp-500
+```
+
+Provider-backed sync workflows must run on:
+
+```txt
+deduplicated unique active symbols
+```
+
+not on:
+
+```txt
+every membership row across every universe
+```
+
+If Nasdaq 100 and S&P 500 overlap, the symbol must not be synced twice.
+
+---
+
+## Why This Matters
+
+Adding S&P 500 will create overlap with existing Nasdaq 100 symbols.
+
+Without unique-symbol sync, overlapping symbols would cause:
+
+```txt
+Duplicate FMP/Finnhub calls
+Longer sync duration
+Unnecessary API quota usage
+Unnecessary Neon writes
+Duplicate SyncRunItem rows
+Confusing sync reports
+No product value
+```
+
+This phase must prevent that.
+
+---
+
+## Product Context
+
+Current architecture rule:
+
+```txt
+External providers / static sources
+→ Admin Sync workflows / future scheduled jobs
+→ Database
+→ Dashboard / Scanner / Drawer
+```
+
+Scanner, Dashboard, and Drawer must not call providers directly.
+
+Current production sync ownership:
+
+```txt
+Universe Sync → Stock / StockUniverse / StockUniverseMember
+Company Data Sync → Stock / StockMetric / StockAnalystData
+Daily Market Data Sync → StockQuote
+Score Calculation → StockScore
+```
+
+Current provider strategy:
+
+```txt
+Nasdaq 100 membership → static fallback list
+Company profile / fundamentals / ratios / growth / analyst targets → FMP
+Analyst recommendation counts → Finnhub
+Daily quote / 52W / 50/200 averages → FMP
+Scores → internal DB-only calculations
 ```
 
 ---
 
-## Current Context
+## Phase 22A Audit Findings To Address
 
-Phase 21D completed the Dashboard cleanup.
-
-The next planned phase is:
+The audit found:
 
 ```txt
-Phase 21E — Data Inventory / Admin Data Health Cleanup
-```
-
-Admin Sync already has production concepts such as:
-
-```txt
-Sync Actions
-Provider Tests
-Sync History
-Data Inventory
-Score Methodology
-```
-
-Current production sync buttons include:
-
-```txt
-Sync Stock Universe
-Sync Daily Market Data
-Sync Company Data
-Calculate Fundamental Scores
-Calculate Opportunity Scores
-```
-
-Known planned cleanup goals:
-
-```txt
-Clean old labels
-Align with FMP Starter strategy
-Make data inventory easier to read
-Separate production workflows from legacy/developer tools
-Improve freshness/status terminology
+The schema already supports multi-universe membership.
+StockUniverse and StockUniverseMember can support S&P 500 without migration.
+Current production sync is hardwired to Nasdaq 100.
+getAllActiveNasdaq100Symbols() is used by sync routes.
+Daily Market Data Sync and Company Data Sync are effectively Nasdaq-100-only.
+Dashboard has Nasdaq-specific field naming such as activeNasdaq100.
+Seed currently sets russell-1000 as default even though production data is Nasdaq 100.
+Scanner currently loads all stocks into the client; 250–500 stocks should be acceptable, 1000 may need later optimization.
+Data Inventory pagination/virtualization is a later blocker before 500–1000, but not required for this phase.
 ```
 
 ---
 
-## Current Problem / Expected Audit Focus
-
-Before implementation, the actual repository state must be audited.
-
-Potential issues to look for:
+## Product Decisions
 
 ```txt
-Old/legacy copy such as Finnhub quote legacy sync, FMP only for profile enrichment, Opportunity v1, Risk instead of Stability.
-Production workflows mixed with developer/legacy tools.
-Data Inventory too dense or too raw.
-Freshness/status terminology unclear.
-Provider/source labels inconsistent with FMP Starter strategy.
-Score Methodology text outdated or inconsistent with Fundamental Score v1 / Opportunity Score v2.
-SyncRun statuses or counts hard to understand.
-Data Inventory duplicating Scanner or Dashboard instead of showing coverage/freshness.
-Admin Sync UI showing plan-limited or legacy tools without clear labels.
+First expansion source: S&P 500.
+Use static fallback list for S&P 500 membership in this phase.
+Do not use FMP live index constituent endpoint in this phase.
+Do not add schema/migration unless implementation proves absolutely required and Product Owner approves.
+Do not change provider responsibilities.
+Do not change scoring formulas.
+Do not build Daily Stock Opportunity Radar yet.
+Do not implement historical price data or Momentum Score yet.
+Do not redesign Data Inventory yet.
+```
+
+Implementation direction:
+
+```txt
+Support S&P 500 full list in code.
+Ensure provider sync runs on deduplicated unique active symbols.
+Preserve existing Nasdaq 100 behavior.
+Allow staged sync/QA operationally if needed.
 ```
 
 ---
 
 ## Scope
 
-Phase 21E likely includes:
+Phase 22B includes:
 
 ```txt
-Audit the current Admin Sync page and Data Inventory.
-Identify production workflows vs developer/legacy tools.
-Clean Admin Sync labels and copy.
-Clarify provider/source labels.
-Clarify which workflow writes which DB models.
-Improve Data Inventory readability.
-Improve freshness/status terminology.
-Improve Sync History readability if needed.
-Improve Score Methodology copy only if it is stale or confusing.
-Keep production sync workflows intact.
-Preserve resumable/chunked sync behavior.
-Update relevant documentation after QA.
+Add S&P 500 static fallback symbol list.
+Create or generalize universe sync logic so S&P 500 can be synced into StockUniverse / StockUniverseMember.
+Preserve existing Nasdaq 100 universe sync behavior.
+Generalize Nasdaq-specific active symbol helper(s).
+Introduce deduplicated unique active syncable symbol helper(s).
+Ensure Daily Market Data Sync and Company Data Sync do not sync overlapping symbols twice.
+Fix default universe mismatch if needed.
+Rename or generalize Nasdaq-specific Dashboard data fields where needed.
+Update Admin Sync UI/copy to support S&P 500 / multi-universe where needed.
+Update Data Inventory / Admin labels only where required for multi-universe clarity.
+Update documentation after QA.
 ```
 
 ---
@@ -176,222 +216,420 @@ Update relevant documentation after QA.
 Do not implement:
 
 ```txt
-New provider integration
-New paid provider endpoint usage
+Russell 1000 expansion
+Thematic universes
+Daily Stock Opportunity Radar
 Historical price data
-Historical charts
 Momentum Score
 Hot Score
 FOMO Risk
-News/catalyst foundation
+News/catalyst ingestion
 AI insight generation
 Alert evaluation engine
-New DB schema unless explicitly approved after audit
-New migrations unless explicitly approved after audit
-New scoring formulas
-New sync workflow behavior unless explicitly approved after audit
+Stock details page
+Server-side Scanner filtering/search
+Data Inventory pagination/virtualization
+CSV import UI
+Live index membership provider integration
+Provider plan upgrade logic
 ```
 
 Do not change:
 
 ```txt
-Provider responsibilities
-Sync workflow ownership
-Score formulas
-Fundamental Score v1
-Opportunity Score v2
 DB schema
 Prisma models
-Existing production sync behavior
-Existing SyncRun / SyncRunItem persistence
-Existing progress/restart/resumable flows
+Existing score formulas
+Fundamental Score v1
+Opportunity Score v2
+Provider responsibilities
+Normal UI provider-call boundaries
+Watchlist/alert behavior
+Drawer decision cockpit behavior
+Scanner main UX unless required for universe selection correctness
+Dashboard structure unless required for naming/summary correctness
 ```
 
-No migration is expected for the first audit.
+No migration is expected.
 
 ---
 
-## Product Rules
+## Required Design Rules
 
-Admin Sync must clearly separate:
+### 1. Unique stock records
 
 ```txt
-Production workflows
-Provider tests
-Sync history
-Data inventory / data health
-Score methodology
-Developer / legacy tools
+Stock.symbol remains the unique identity.
+Do not create duplicate Stock records for overlapping universe symbols.
+Upsert Stock by normalized symbol.
+Universe membership overlap should create multiple StockUniverseMember rows.
 ```
 
-Production workflows should stay focused on:
+### 2. Unique provider sync
 
 ```txt
-Universe Sync
-Daily Market Data Sync
-Company Data Sync
-Score Calculation
+Provider-backed sync workflows must dedupe symbols before creating SyncRunItems or calling providers.
+If syncing all active stocks or multiple universes, dedupe by normalized symbol.
+A symbol that belongs to both Nasdaq 100 and S&P 500 should be processed once.
 ```
 
-Provider/source wording must be accurate:
+### 3. Membership sync vs data sync
+
+Universe membership sync:
 
 ```txt
-Nasdaq 100 membership source = static fallback
-Profile/fundamentals/ratios/growth/analyst targets = FMP
-Analyst recommendation counts = Finnhub
-Daily quote / 52W / averages = FMP
-Scores = internal DB-only calculations
-Watchlist / alerts = internal DB
+Owns StockUniverse / StockUniverseMember membership.
+May create Stock shell records.
+Should not fetch full fundamentals/quotes unless already part of the existing approved universe sync behavior.
 ```
 
-Data Inventory should show:
+Provider data sync:
 
 ```txt
-Coverage
-Freshness
-Missing data
-Provider/source
-Sync status
-Score version
+Daily Market Data Sync writes StockQuote.
+Company Data Sync writes Stock / StockMetric / StockAnalystData.
+Score Calculation writes StockScore.
 ```
 
-Data Inventory should not become:
+Do not mix workflow ownership.
+
+### 4. Static fallback list
+
+For S&P 500 in this phase:
 
 ```txt
-A second Scanner
-A stock discovery table
-A dashboard duplicate
-A raw debug-only dump
+Use a static fallback list.
+Include metadata similar to Nasdaq 100 fallback metadata if practical.
+Do not present static fallback membership as live provider data.
 ```
 
----
+### 5. Backward compatibility
 
-## First Required Step
-
-Start with an Audit / Planning task only.
-
-Reason:
+Existing Nasdaq 100 behavior must continue to work.
 
 ```txt
-Admin Sync touches sync workflows, provider labels, SyncRun history, data inventory, and score methodology.
-The exact current repo state must be verified before any implementation.
-```
-
-The first Claude task must not change code or docs.
-
-After the audit report, the Product Lead will decide the implementation scope and write a separate implementation prompt.
-
----
-
-## Audit Questions
-
-The audit should answer:
-
-```txt
-What Admin Sync tabs/sections currently exist?
-Which sections are production workflows?
-Which sections are provider tests?
-Which sections are developer/legacy tools?
-Which labels/copy are stale or inaccurate?
-Which data-source labels are wrong or unclear?
-Does the UI still reference old provider responsibilities?
-Does the UI still reference Opportunity v1 or Risk when it should say Opportunity v2 / Stability?
-Does Data Inventory clearly show coverage, freshness, missing data, source, sync status, and score version?
-Does Data Inventory duplicate Scanner/Dashboard?
-Does Score Methodology match current scoring docs?
-Does Sync History clearly show status, provider/source, counts, failures/skips, and elapsed time?
-Are progress panels and resumable behavior preserved and clear?
-Are there any provider calls from normal UI render paths?
-What implementation changes are recommended?
-What files are likely to change?
-What documentation updates will likely be needed?
+Nasdaq 100 sync still works.
+Existing scanner universe selection still works.
+Existing dashboard still loads.
+Existing drawer still works.
+Existing admin sync flows still load.
 ```
 
 ---
 
-## Expected Implementation Direction After Audit
+## Implementation Requirements
 
-Implementation is likely to focus on:
+### 1. Add S&P 500 fallback symbols
+
+Add an S&P 500 static fallback list.
+
+Preferred location:
 
 ```txt
-Admin Sync copy cleanup
-Production vs legacy/developer grouping
-Data Inventory readability
-Freshness/source/status terminology
-Score Methodology text alignment
-Minor UI layout improvements
-Documentation updates
+src/lib/market-data/sp500-fallback-symbols.ts
 ```
 
-Implementation should avoid:
+or a nearby naming pattern if the repository convention suggests a better file.
+
+Requirements:
 
 ```txt
-Schema changes
-Provider changes
-Sync orchestration changes
-Scoring formula changes
-Large refactors
+Export S&P 500 symbols as a typed readonly list.
+Include metadata: source = static_fallback, composition/verification notes if known, symbol count.
+Normalize symbols consistently with existing Nasdaq 100 list.
+Do not include duplicate symbols inside the list.
+Do not include invalid symbols.
+```
+
+If obtaining a full accurate S&P 500 list is not feasible inside implementation time, stop and report. Do not invent symbols.
+
+### 2. Generalize universe sync
+
+Current Nasdaq 100 universe sync should be generalized or extended.
+
+Requirements:
+
+```txt
+S&P 500 universe row should be created or updated with slug "sp-500".
+Nasdaq 100 universe row should keep slug "nasdaq-100".
+Sync should upsert Stock records by symbol.
+Sync should upsert StockUniverseMember by stockId + universeId.
+Stocks that disappear from a specific universe should be deactivated for that universe membership, not globally deleted.
+Overlapping symbols should keep all active memberships.
+```
+
+Do not break:
+
+```txt
+syncNasdaq100UniverseAction
+existing Admin Sync button behavior
+existing SyncRun / SyncRunItem history
+```
+
+If adding a new action is safer than over-generalizing, do that. Keep the diff focused.
+
+### 3. Generalize active symbol helpers
+
+Replace or supplement:
+
+```txt
+getAllActiveNasdaq100Symbols()
+```
+
+with helpers such as:
+
+```txt
+getAllActiveUniverseSymbols(universeSlug)
+getAllActiveUniqueSyncableSymbols()
+getAllActiveUniqueSymbolsForUniverses(universeSlugs)
+```
+
+Exact names can vary, but behavior must be clear.
+
+Requirements:
+
+```txt
+Helpers must return deduplicated normalized symbols.
+Helpers should not return duplicate symbols because of overlapping memberships.
+Existing Nasdaq 100 callers should continue to work or be updated safely.
+Provider sync routes should use deduped helpers.
+```
+
+### 4. Daily Market Data Sync dedupe
+
+Update Daily Market Data Sync routes/actions if needed so the symbol list is deduped before:
+
+```txt
+creating SyncRunItems
+calling FMP quote
+persisting StockQuote
+reporting requested/processed counts
+```
+
+Do not change provider behavior or endpoint.
+
+Current source remains:
+
+```txt
+FMP /stable/quote
+```
+
+### 5. Company Data Sync dedupe
+
+Update Company Data Sync routes/actions if needed so the symbol list is deduped before:
+
+```txt
+creating SyncRunItems
+calling FMP profile/ratios/growth/target endpoints
+calling Finnhub recommendation counts
+persisting Stock / StockMetric / StockAnalystData
+reporting requested/processed counts
+```
+
+Do not change provider behavior or endpoints.
+
+Current sources remain:
+
+```txt
+FMP: profile, ratios, growth, price-target consensus
+Finnhub: recommendation counts
+```
+
+### 6. Score Calculation scope
+
+Inspect score calculation actions.
+
+If they already operate on unique Stock records, do not change them.
+
+If they are universe-specific or duplicate-prone, adjust to process unique active Stock records only.
+
+Do not change formulas or weights.
+
+### 7. Default universe consistency
+
+Fix default universe mismatch if confirmed in code/seed.
+
+Expected product behavior:
+
+```txt
+The operational default should not point to an empty/demo Russell 1000 universe.
+Default should reflect the current useful production universe or a clear All/Primary universe behavior.
+```
+
+Options:
+
+```txt
+Set nasdaq-100 as default until broader universe is production-ready.
+Or define a clear default once S&P 500 is populated.
+```
+
+Choose the minimal safe change and document it in the final report.
+
+### 8. Dashboard naming cleanup
+
+Generalize Nasdaq-specific naming where needed.
+
+Examples from audit:
+
+```txt
+activeNasdaq100
+Nasdaq-specific total stock fallback logic
+Nasdaq-specific freshness queries
+```
+
+Requirements:
+
+```txt
+Dashboard should not mislabel broader universe coverage as Nasdaq 100.
+Dashboard totals should reflect the selected/default operational universe or active unique syncable stocks, whichever is currently implemented.
+Do not redesign Dashboard.
+Do not change Dashboard structure unless required for correct naming/data.
+```
+
+### 9. Admin Sync UI/copy
+
+Update Admin Sync as needed:
+
+```txt
+Show S&P 500 universe sync option if implemented.
+Keep Nasdaq 100 universe sync available.
+Clarify static fallback source for S&P 500.
+Clarify that Company/Daily syncs operate on unique active symbols and do not duplicate overlapping universe members.
+Preserve production workflow grouping.
+Preserve provider tests.
+Preserve sync history.
+Preserve progress panels and resumable behavior.
+```
+
+### 10. Scanner universe behavior
+
+Ensure Scanner universe selection remains correct.
+
+Requirements:
+
+```txt
+Nasdaq 100 selection still works.
+S&P 500 selection works after sync has membership data.
+All/default behavior is not misleading.
+Pagination/search/filter/sort still work.
+No duplicate rows for symbols that belong to multiple universes.
+```
+
+### 11. Data Inventory behavior
+
+Do not redesign Data Inventory in this phase.
+
+But ensure:
+
+```txt
+Overlapping universe memberships do not create duplicate stock rows.
+Universe/membership display remains understandable.
+Expanded universe rows do not break filters.
+```
+
+### 12. Documentation
+
+After implementation and QA:
+
+Update relevant docs if behavior changed:
+
+```txt
+Context/sync-workflows.md
+Context/Features/market-data-sync-strategy.md
+Context/Features/admin-sync-feature-spec.md
+Context/data-model.md, only if ownership/behavior notes changed
+Context/Features/scanner-feature-spec.md, only if scanner universe behavior changed
+Context/Features/dashboard-feature-spec.md, only if Dashboard data contract/naming changed
+Context/project-overview.md
+Context/current-feature.md
+```
+
+Do not update algorithm docs unless scoring formulas changed.
+
+---
+
+## Acceptance Criteria
+
+Phase 22B is complete when:
+
+```txt
+S&P 500 static fallback list exists and is valid.
+S&P 500 universe can be synced into StockUniverse / StockUniverseMember.
+Nasdaq 100 universe sync still works.
+Overlapping Nasdaq 100 + S&P 500 symbols produce one Stock record and multiple memberships.
+Provider-backed syncs dedupe symbols before provider calls and SyncRunItems.
+No duplicate provider calls are made for overlapping symbols during combined/active sync.
+No duplicate scanner rows appear for overlapping symbols.
+Dashboard no longer uses misleading Nasdaq-only naming for broader universe counts.
+Default universe behavior is corrected or explicitly justified.
+Admin Sync clearly distinguishes Nasdaq 100 and S&P 500 universe membership sync.
+Company/Daily sync copy clarifies unique active symbols where appropriate.
+No schema changes.
+No migrations.
+No provider responsibility changes.
+No scoring formula changes.
+Scanner, Dashboard, Drawer, Admin Sync all load.
+Build passes.
+TypeScript passes.
+Prisma validates.
+Migration status is clean.
+Documentation updated after QA.
 ```
 
 ---
 
-## Acceptance Criteria For Final Phase Completion
+## QA Requirements
 
-Phase 21E will be complete when:
+Browser QA:
 
 ```txt
-Admin Sync clearly separates production workflows, provider tests, sync history, data inventory, score methodology, and legacy/developer tools.
-All production sync copy accurately reflects current provider/source responsibilities.
-Data Inventory is easier to read and focused on data health.
-Data Inventory shows coverage, freshness, missing data, source/provider, sync status, and score version where available.
-Data Inventory does not behave like a second Scanner.
-Score Methodology accurately reflects Fundamental Score v1 and Opportunity Score v2.
-Old/stale labels are removed or clearly marked as legacy/developer only.
-Risk is not used as a user-facing score label where Stability is intended.
-Opportunity v1 is not presented as current production scoring.
-Progress panels and resumable sync behavior remain intact.
-Provider tests remain non-mutating.
-No provider calls are added to normal UI render paths.
-No schema change or migration occurs unless explicitly approved.
-No score formula changes occur.
-Dashboard, Scanner, Drawer, and Admin Sync still load.
-Build, TypeScript, Prisma validate, and migrate status pass.
-Documentation is updated after QA.
+/admin/sync loads.
+Sync Actions tab shows Nasdaq 100 and S&P 500 universe sync options if implemented.
+Admin copy clearly says S&P 500 membership uses static fallback.
+Sync History remains readable.
+Data Inventory loads.
+Scanner loads.
+Scanner universe selector works.
+Nasdaq 100 view has no duplicate rows.
+S&P 500 view has no duplicate rows after membership exists.
+All/default view has no duplicate rows if available.
+Dashboard loads.
+Drawer opens from Scanner.
 ```
 
----
-
-## QA Requirements For Final Implementation
-
-Browser QA should verify:
+Functional QA:
 
 ```txt
-/admin/sync initial load
-Sync Actions tab
-Provider Tests tab
-Sync History tab
-Data Inventory tab
-Score Methodology tab
-Production workflow labels and descriptions
-Developer/legacy tool labeling
-Progress panel behavior if visible
-Sync history table readability
-Data Inventory readability
-Data freshness/source/status labels
-Score Methodology current formulas
-No old user-facing Risk label where Stability is intended
-No Opportunity v1 displayed as current score
-No broken layout or overflow
+Run or dry-run universe sync for S&P 500 if safe.
+Confirm S&P 500 StockUniverse exists.
+Confirm StockUniverseMember records exist for S&P 500.
+Confirm overlapping symbols have one Stock row and multiple memberships.
+Confirm active unique sync helper returns deduped symbols.
+Confirm Daily Market Data Sync symbol count is deduped.
+Confirm Company Data Sync symbol count is deduped.
+Confirm no duplicate SyncRunItem rows for overlapping symbols in the same run.
 ```
 
-Regression QA should verify:
+If full provider sync for 500 symbols is too expensive/time-consuming during QA:
 
 ```txt
-Dashboard loads
-Scanner loads
-Scanner Drawer opens
-Admin Sync loads
-No provider calls from Dashboard/Scanner/Drawer normal UI render paths
+Run a small controlled test subset if supported.
+Otherwise verify dedupe logic with local DB queries and report exactly what was not fully run.
+```
+
+Regression QA:
+
+```txt
+Nasdaq 100 sync still works.
+Dashboard loads and values are not obviously wrong.
+Scanner search works.
+Scanner sort works.
+Scanner pagination works.
+Scanner expanded row opens.
+Scanner Drawer opens and still shows decision cockpit.
+Admin Sync Provider Tests render.
+Data Inventory filters still work if testable.
+No provider calls from Dashboard/Scanner/Drawer normal UI render paths.
 ```
 
 Automated checks:
@@ -410,17 +648,26 @@ npx prisma migrate status
 Before requesting commit approval, check and update if needed:
 
 ```txt
-Context/Features/admin-sync-feature-spec.md
 Context/sync-workflows.md
 Context/Features/market-data-sync-strategy.md
-Context/scoring-system.md
+Context/Features/admin-sync-feature-spec.md
 Context/data-model.md
+Context/Features/scanner-feature-spec.md
+Context/Features/dashboard-feature-spec.md
 Context/project-overview.md
 Context/current-feature.md
-Context/feature-history.md
 ```
 
-Only update files whose documented concepts changed.
+Do not update unless relevant:
+
+```txt
+Context/scoring-system.md
+Context/Algorithms/fundamental-score-v1.md
+Context/Algorithms/opportunity-score-v2.md
+Context/Algorithms/analyst-rating-and-upside.md
+Context/Algorithms/scanner-decision-tags.md
+Context/Features/drawer-feature-spec.md
+```
 
 The final implementation report must include:
 
@@ -444,6 +691,42 @@ MD files changed:
 
 ## Reporting Requirements
 
-Audit, implementation, QA, and final reports must be written in English only.
+Implementation and QA reports must be written in English only.
+
+Required final implementation report:
+
+```txt
+1. Branch name used.
+2. Files inspected.
+3. Files changed.
+4. New files added.
+5. Implementation summary.
+6. Universe sync changes.
+7. Unique/deduped sync behavior.
+8. S&P 500 support details.
+9. Nasdaq 100 regression result.
+10. Dashboard/scanner/admin impacts.
+11. QA results.
+12. Regression QA results.
+13. Automated check results.
+14. Documentation Updates:
+   - Updated:
+   - Checked but not updated:
+   - Reason:
+   - MD files changed:
+15. Known issues.
+16. Ready for commit or not.
+```
+
+Explicitly confirm:
+
+```txt
+prisma/schema.prisma changed or not.
+Migrations added or not.
+Provider calls added or not.
+Provider responsibilities changed or not.
+Scoring formulas changed or not.
+Duplicate provider sync for overlapping symbols prevented or not.
+```
 
 Do not commit without explicit user approval.

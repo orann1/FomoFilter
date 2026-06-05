@@ -48,7 +48,7 @@ Is the data fresh enough?
 Production-oriented workflows:
 
 ```txt
-Universe Sync
+Universe Sync (Nasdaq 100 + S&P 500)
 Daily Market Data Sync
 Company Data Sync
 Score Calculation
@@ -72,6 +72,8 @@ Purpose:
 Show SyncRun / SyncRunItem history.
 ```
 
+Both current and legacy SyncRun type strings are displayed with readable labels.
+
 ### Data Inventory
 
 Purpose:
@@ -90,15 +92,121 @@ Document the calculation logic used by current scores.
 
 ---
 
-## Current Production Sync Buttons
+## Current Production Sync Buttons (Phase 22B)
 
 | Button | Role |
 | --- | --- |
-| Sync Stock Universe | Refresh static fallback Nasdaq 100 universe membership |
-| Sync Daily Market Data | Refresh FMP quote data |
-| Sync Company Data | Refresh FMP/Finnhub company, metrics, analyst data |
-| Calculate Fundamental Scores | Internal DB-only scoring |
-| Calculate Opportunity Scores | Internal DB-only Opportunity Score v2 |
+| Sync Nasdaq 100 Universe | Refresh Nasdaq 100 membership from static fallback list. Includes FMP profile enrichment for new stocks. |
+| Sync S&P 500 Universe | Refresh S&P 500 membership from best-effort static fallback list. Membership only — no FMP profile calls. Run Company Data Sync after to enrich new stocks. |
+| Sync Daily Market Data | Refresh FMP quote data for all unique active universe stocks (deduplicated). |
+| Sync Company Data | Refresh FMP/Finnhub company, metrics, and analyst data for all unique active universe stocks (deduplicated). |
+| Calculate Fundamental Scores | Internal DB-only Fundamental Score v1 calculation. |
+| Calculate Opportunity Scores | Internal DB-only Opportunity Score v2 calculation. |
+
+---
+
+## Universe Sync — Multi-Universe Behavior (Phase 22B)
+
+Both Nasdaq 100 and S&P 500 use static fallback membership:
+
+```txt
+Nasdaq 100:
+  source: static_fallback
+  compositionAsOf: 2026-01-20
+  symbolCount: 100
+  FMP profile enrichment: yes (called during sync for new stocks)
+  SyncRun type: nasdaq100-universe-sync
+
+S&P 500:
+  source: static_fallback / manual (best-effort)
+  compositionAsOf: 2025-07-01
+  symbolCount: 499 unique symbols
+  FMP profile enrichment: no (membership only — run Company Data Sync separately)
+  SyncRun type: sp500-universe-sync
+```
+
+Important:
+
+```txt
+Neither Nasdaq 100 nor S&P 500 membership uses a live provider index constituent feed.
+FMP index constituent endpoints require a higher plan tier than currently used.
+```
+
+Overlap behavior:
+
+```txt
+Stock is unique by symbol.
+If a symbol belongs to both Nasdaq 100 and S&P 500:
+  - One Stock record exists.
+  - Two StockUniverseMember records exist (one per universe).
+Stocks leaving one universe have that specific membership deactivated.
+Stocks in other universes are unaffected.
+Existing quotes, watchlist items, and alerts are untouched.
+```
+
+---
+
+## Daily Market Data Sync — Multi-Universe Scope (Phase 22B)
+
+```txt
+Operates on all unique active symbols across all synced universes.
+Symbols are deduplicated before SyncRunItem creation and before FMP quote calls.
+A symbol in both Nasdaq 100 and S&P 500 is processed once per run.
+SyncRun type: market-data-active-symbols-sync
+Provider: FMP /stable/quote
+```
+
+Latest/status query (Phase 22B fix):
+
+```txt
+/api/admin/sync-runs/latest queries both market-data-active-symbols-sync and market-data-nasdaq100-chunked-sync.
+Most recent run (by startedAt) is returned — new type is preferred once it exists.
+getLatestChunkedSyncRun() helper in admin-sync.ts uses the same both-type query.
+```
+
+---
+
+## Company Data Sync — Multi-Universe Scope (Phase 22B)
+
+```txt
+Operates on all unique active symbols across all synced universes.
+Symbols are deduplicated before SyncRunItem creation and before provider calls.
+A symbol in both Nasdaq 100 and S&P 500 is processed once per run.
+SyncRun type: company-data-active-symbols-sync
+Providers: FMP (profile, ratios, growth, price-target-consensus) + Finnhub (recommendation counts)
+```
+
+Latest/status query (Phase 22B fix):
+
+```txt
+/api/admin/analyst-sync/latest queries both company-data-active-symbols-sync and analyst-data-nasdaq100-sync.
+Most recent run (by startedAt) is returned — new type is preferred once it exists.
+getLatestAnalystSyncRun() helper in admin-sync.ts uses the same both-type query.
+```
+
+---
+
+## SyncRun Type Labels
+
+Current production types and their display labels:
+
+| SyncRun type | Display label |
+| --- | --- |
+| `nasdaq100-universe-sync` | Nasdaq 100 Universe Sync |
+| `sp500-universe-sync` | S&P 500 Universe Sync |
+| `market-data-active-symbols-sync` | Daily Market Data Sync |
+| `company-data-active-symbols-sync` | Company Data Sync |
+| `fundamental-score-calculation` | Fundamental Score Calc |
+| `opportunity-score-calculation` | Opportunity Score Calc |
+
+Legacy types (backward-compatible — display in history only):
+
+| SyncRun type | Display label |
+| --- | --- |
+| `analyst-data-nasdaq100-sync` | Company Data Sync (legacy) |
+| `market-data-nasdaq100-chunked-sync` | Daily Market Data Sync (legacy) |
+| `market-data-nasdaq100-batch` | Daily Market Data Sync (legacy) |
+| `analyst-target-discovery` | Target Discovery (Legacy) |
 
 ---
 
@@ -116,6 +224,8 @@ Risk score if UI now says Stability
 ```
 
 unless specifically describing history or legacy tools.
+
+Do not describe S&P 500 or Nasdaq 100 membership as a live provider feed.
 
 ---
 
@@ -191,6 +301,8 @@ Score version
 
 Do not turn it into a second stock discovery screen.
 
+Data Inventory pagination/virtualization is future work.
+
 ---
 
 ## Legacy / Developer Tools
@@ -257,6 +369,25 @@ Updated Fundamental Score action description: "FMP financial metrics" (not "Finn
 Updated Score Methodology tab subtitle to "How scores are calculated"
 Labeled Twelve Data provider test and Sync Quotes Sample as legacy / not current production
 Added Duration column to Sync History using durationMs or computed from startedAt/finishedAt
+```
+
+---
+
+## Phase 22B — Multi-Universe Unique Sync Foundation + S&P 500 Expansion
+
+Phase 22B completed the following changes:
+
+```txt
+Added S&P 500 best-effort static fallback symbol list (499 unique symbols).
+Added Sync S&P 500 Universe button (membership-only sync, no FMP profile calls).
+Renamed Sync Stock Universe → Sync Nasdaq 100 Universe (behavior preserved).
+Updated Universe Sync info copy to explain multi-universe overlap behavior.
+Updated Daily Market Data Sync to operate on unique active symbols across all universes.
+Updated Company Data Sync to operate on unique active symbols across all universes.
+Updated Daily/Company sync copy to explain unique-symbol deduplication.
+Added SyncRun type labels for new types and legacy backward-compatible display.
+Updated paused sync panel copy (removed Nasdaq-100-specific reference).
+Added "Nasdaq 100 Quote Coverage" label to the quote coverage panel (scoped label).
 ```
 
 ---

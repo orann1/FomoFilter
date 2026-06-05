@@ -116,7 +116,7 @@ function buildFilterSummary(
   return { parts, sortLabel };
 }
 
-const UNIVERSE_DISPLAY_ORDER = ["nasdaq-100", "russell-1000", "sp-500"];
+const UNIVERSE_DISPLAY_ORDER = ["all", "nasdaq-100", "sp-500", "russell-1000"];
 
 interface ScannerPageClientProps {
   stocks: HotStock[];

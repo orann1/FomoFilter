@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/src/lib/db/prisma";
-import { getAllActiveNasdaq100Symbols } from "@/src/lib/data/admin-universes";
+import { getAllActiveUniqueSyncableSymbols } from "@/src/lib/data/admin-universes";
 import {
   fetchFmpPriceTargetConsensus,
   fetchFmpCompanyProfile,
@@ -10,7 +10,7 @@ import {
 import { fetchFinnhubAnalystData } from "@/src/lib/market-data/providers/finnhub";
 import { isValidNumber } from "@/src/lib/market-data/safe-update";
 
-const ANALYST_SYNC_TYPE = "analyst-data-nasdaq100-sync";
+const ANALYST_SYNC_TYPE = "company-data-active-symbols-sync";
 const CHUNK_SIZE = 10;
 // One FMP consensus + 3 FMP fundamentals + one Finnhub call per symbol, run in parallel.
 // Pacing: ≥1200ms between symbol starts to respect Finnhub free plan (~60 calls/min).
@@ -95,7 +95,7 @@ export async function POST() {
     });
   }
 
-  const allSymbols = await getAllActiveNasdaq100Symbols();
+  const allSymbols = await getAllActiveUniqueSyncableSymbols();
 
   const processedItems = await prisma.syncRunItem.findMany({
     where: { syncRunId: run.id },

@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/src/lib/db/prisma";
 
-const ANALYST_SYNC_TYPE = "analyst-data-nasdaq100-sync";
-
 export async function GET() {
   const run = await prisma.syncRun.findFirst({
-    where: { type: ANALYST_SYNC_TYPE },
+    where: {
+      type: { in: ["company-data-active-symbols-sync", "analyst-data-nasdaq100-sync"] },
+    },
     orderBy: { startedAt: "desc" },
     select: {
       id: true,

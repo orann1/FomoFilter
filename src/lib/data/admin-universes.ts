@@ -20,6 +20,7 @@ export type UniverseOverviewRow = {
 export type DbStockSummary = {
   totalStocks: number;
   activeInAtLeastOneUniverse: number;
+  activeWithQuotes: number;
   inactiveOnly: number;
   watchlistOnly: number;
   notClassified: number;
@@ -46,7 +47,7 @@ export async function getUniverseOverview(): Promise<UniverseOverviewRow[]> {
 
   // Latest SyncRun per universe slug for universe sync
   const universeSyncRuns = await prisma.syncRun.findMany({
-    where: { type: { startsWith: "nasdaq100-universe" } },
+    where: { type: { in: ["nasdaq100-universe-sync", "sp500-universe-sync"] } },
     orderBy: { startedAt: "desc" },
     take: 50,
   });
@@ -222,8 +223,12 @@ export async function getNextNasdaq100MarketDataBatch(limit = 25): Promise<strin
 }
 
 export async function getAllActiveNasdaq100Symbols(): Promise<string[]> {
+  return getAllActiveUniverseSymbols("nasdaq-100");
+}
+
+export async function getAllActiveUniverseSymbols(universeSlug: string): Promise<string[]> {
   const universe = await prisma.stockUniverse.findUnique({
-    where: { slug: "nasdaq-100" },
+    where: { slug: universeSlug },
   });
 
   if (!universe) return [];
@@ -237,10 +242,32 @@ export async function getAllActiveNasdaq100Symbols(): Promise<string[]> {
   return members.map((m) => m.stock.symbol);
 }
 
+// Returns deduplicated symbols across all active universe memberships.
+// If a symbol belongs to multiple universes, it appears once.
+export async function getAllActiveUniqueSyncableSymbols(): Promise<string[]> {
+  const members = await prisma.stockUniverseMember.findMany({
+    where: { isActive: true },
+    include: { stock: { select: { symbol: true } } },
+    orderBy: { stock: { symbol: "asc" } },
+  });
+
+  const seen = new Set<string>();
+  const symbols: string[] = [];
+  for (const m of members) {
+    const sym = m.stock.symbol;
+    if (!seen.has(sym)) {
+      seen.add(sym);
+      symbols.push(sym);
+    }
+  }
+  return symbols;
+}
+
 export async function getDbStockSummary(): Promise<DbStockSummary> {
   const [
     totalStocks,
     stocksWithActiveMembership,
+    stocksWithActiveMembershipAndQuote,
     stocksInWatchlist,
   ] = await Promise.all([
     prisma.stock.count(),
@@ -249,6 +276,12 @@ export async function getDbStockSummary(): Promise<DbStockSummary> {
         universeMemberships: {
           some: { isActive: true },
         },
+      },
+    }),
+    prisma.stock.count({
+      where: {
+        universeMemberships: { some: { isActive: true } },
+        quote: { isNot: null },
       },
     }),
     prisma.stock.count({
@@ -293,6 +326,7 @@ export async function getDbStockSummary(): Promise<DbStockSummary> {
   return {
     totalStocks,
     activeInAtLeastOneUniverse: stocksWithActiveMembership,
+    activeWithQuotes: stocksWithActiveMembershipAndQuote,
     inactiveOnly,
     watchlistOnly,
     notClassified,

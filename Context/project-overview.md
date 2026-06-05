@@ -89,7 +89,8 @@ No provider calls should happen from normal UI render paths.
 
 | Area | Current Source |
 | --- | --- |
-| Nasdaq 100 membership | Static fallback list |
+| Nasdaq 100 membership | Static fallback list (100 symbols) |
+| S&P 500 membership | Best-effort static fallback list (499 unique symbols, Phase 22B) |
 | Company profile | FMP |
 | Company fundamentals / ratios / growth | FMP |
 | Analyst target consensus | FMP |
@@ -103,9 +104,10 @@ No provider calls should happen from normal UI render paths.
 
 | Workflow | Role |
 | --- | --- |
-| Universe Sync | Builds/refreshes Nasdaq 100 membership from static fallback list |
-| Company Data Sync | Refreshes profile, industry, description, fundamentals, ratios, growth, analyst targets, recommendation counts |
-| Daily Market Data Sync | Refreshes daily quote, price, daily change, volume, 52-week context, 50/200 averages |
+| Nasdaq 100 Universe Sync | Builds/refreshes Nasdaq 100 membership from static fallback list. Enriches new stocks via FMP profile. |
+| S&P 500 Universe Sync | Builds/refreshes S&P 500 membership from best-effort static fallback list (499 symbols, Phase 22B). Membership only — no provider profile calls. |
+| Company Data Sync | Refreshes profile, industry, description, fundamentals, ratios, growth, analyst targets, and recommendation counts for all unique active universe stocks (deduplicated). |
+| Daily Market Data Sync | Refreshes daily quote, price, daily change, volume, 52-week context, and 50/200 averages for all unique active universe stocks (deduplicated). |
 | Calculate Fundamental Scores | Internal DB-only score calculation |
 | Calculate Opportunity Scores | Internal DB-only Opportunity Score v2 calculation |
 | Provider Tests | Validates API connectivity without writing app data |
@@ -139,12 +141,14 @@ Context/Algorithms/scanner-decision-tags.md
 
 ## Current Scanner State
 
-Scanner is now a DB-backed decision view.
+Scanner is now a DB-backed decision view supporting multi-universe selection.
 
 Implemented:
 
 ```txt
-All Stocks default view
+US Stocks default view (all unique active stocks across all synced universes)
+Universe selector: US Stocks / Nasdaq 100 / S&P 500 (selectable)
+No duplicate rows for symbols in multiple universes
 Opportunity Score default sort
 Pagination: 10 / 20 / 50 / 100
 Search/filter/sort before pagination
@@ -179,13 +183,15 @@ Expanded row with:
 | Phase 21C | Completed | Drawer Real Data & Decision Workspace Cleanup |
 | Phase 21D | Completed | Dashboard Clarity Cleanup |
 | Phase 21E | Completed | Data Inventory / Admin Data Health Cleanup |
-| Phase 22 | Planned | Historical Daily + Momentum Foundation |
-| Phase 23 | Planned | Momentum Indicators |
-| Phase 24 | Planned | Hot Score v1 |
-| Phase 25 | Planned | Alert Evaluation Engine |
-| Phase 26 | Planned | Stock Details Page |
-| Phase 27 | Planned | News / Catalyst Data Foundation |
-| Phase 28 | Planned | AI Insight Generation |
+| Phase 22B | Completed | Multi-Universe Unique Sync Foundation + S&P 500 Expansion |
+| Phase 22C | Planned | Data Inventory pagination / sync hardening |
+| Phase 23 | Planned | Historical Daily + Momentum Foundation |
+| Phase 24 | Planned | Momentum Indicators |
+| Phase 25 | Planned | Hot Score v1 |
+| Phase 26 | Planned | Alert Evaluation Engine |
+| Phase 27 | Planned | Stock Details Page |
+| Phase 28 | Planned | News / Catalyst Data Foundation |
+| Phase 29 | Planned | AI Insight Generation |
 
 ---
 

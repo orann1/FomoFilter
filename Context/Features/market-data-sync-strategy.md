@@ -61,7 +61,8 @@ Explicit approved enrichment flows with DB caching
 
 | Data Category | Current Source | Workflow |
 | --- | --- | --- |
-| Nasdaq 100 membership | Static fallback list | Universe Sync |
+| Nasdaq 100 membership | Static fallback list (100 symbols) | Universe Sync |
+| S&P 500 membership | Best-effort static fallback list (499 symbols) | Universe Sync |
 | Company profile | FMP | Company Data Sync |
 | Company industry / description | FMP | Company Data Sync |
 | Company fundamentals / ratios / growth | FMP | Company Data Sync |
@@ -77,19 +78,27 @@ Explicit approved enrichment flows with DB caching
 
 ### Universe Membership
 
-Current Nasdaq 100 membership source:
+Current membership sources:
 
 ```txt
-static_fallback
+Nasdaq 100 — static_fallback
+S&P 500 — static_fallback / manual (best-effort, not a live provider feed)
 ```
 
-FMP profile enrichment does not make FMP the membership source.
+FMP profile enrichment does not make FMP the membership source for either index.
 
 Correct wording:
 
 ```txt
-Universe membership source = static fallback
-Profile enrichment source = FMP
+Universe membership source = static fallback (both Nasdaq 100 and S&P 500)
+Profile enrichment source = FMP (called during Nasdaq 100 sync; called separately via Company Data Sync for S&P 500)
+```
+
+Important:
+
+```txt
+Do not describe S&P 500 or Nasdaq 100 membership as live provider data.
+Do not present the static fallback list as a real-time index constituent feed.
 ```
 
 ### Company Data
@@ -130,15 +139,25 @@ Daily sync should not say Finnhub legacy unless referencing history or legacy to
 Used for:
 
 ```txt
-Nasdaq 100 membership
+Nasdaq 100 membership (100 symbols, compositionAsOf 2026-01-20)
+S&P 500 membership (499 unique symbols, best-effort, compositionAsOf 2025-07-01)
 ```
 
 Rules:
 
 ```txt
-Be explicit that this is static fallback.
-Do not describe it as live provider membership.
+Be explicit that these are static fallback lists.
+Do not describe them as live provider membership.
 Keep metadata/verification notes where implemented.
+Update lists when quarterly rebalancing occurs.
+```
+
+Multi-universe overlap:
+
+```txt
+A symbol in both Nasdaq 100 and S&P 500 produces one Stock record and two
+StockUniverseMember rows. Provider-backed data sync deduplicates by symbol
+before calling providers — overlapping symbols are synced once per run.
 ```
 
 Future:
@@ -156,20 +175,11 @@ Primary provider for paid Starter plan data.
 Current responsibilities:
 
 ```txt
-Company profile
-Company name
-Sector
-Industry
-Description
-Market cap
-Beta
-Ratios
-Key metrics
-Financial growth
+Company profile (name, sector, industry, description, marketCap, beta)
+Ratios / key metrics / financial growth
 Analyst target consensus
-Daily quote
-52-week context
-50/200 averages
+Daily quote / 52-week context / 50/200 averages
+Profile enrichment during Nasdaq 100 universe sync (for new stock entries)
 ```
 
 Current important endpoints:
@@ -250,6 +260,24 @@ Derived values should come from DB data, not direct provider calls in UI.
 
 ---
 
+## Multi-Universe Provider Sync Scope (Phase 22B)
+
+Company Data Sync and Daily Market Data Sync now operate on all unique active symbols across all synced universes.
+
+```txt
+Symbol list is deduplicated before:
+  - SyncRunItem creation
+  - Provider calls (FMP quote, FMP profile/ratios/growth, Finnhub recommendation counts)
+
+A symbol that belongs to both Nasdaq 100 and S&P 500 is processed once per run.
+No duplicate SyncRunItem rows are created for overlapping symbols in the same run.
+```
+
+Score calculation operates on all active `Stock` records, which are unique by symbol.
+No scope change was needed for score calculation.
+
+---
+
 ## Current Data Storage Policy
 
 Persist data in DB if it affects:
@@ -297,9 +325,10 @@ Summary:
 
 | Workflow | Source | Writes |
 | --- | --- | --- |
-| Universe Sync | Static fallback + optional FMP profile enrichment | Stock, StockUniverse, StockUniverseMember |
-| Company Data Sync | FMP + Finnhub | Stock, StockMetric, StockAnalystData |
-| Daily Market Data Sync | FMP quote | StockQuote |
+| Nasdaq 100 Universe Sync | Static fallback + FMP profile enrichment for new stocks | Stock, StockUniverse, StockUniverseMember |
+| S&P 500 Universe Sync | Best-effort static fallback only (no provider calls) | Stock (shell), StockUniverse, StockUniverseMember |
+| Company Data Sync | FMP + Finnhub — all unique active universe symbols | Stock, StockMetric, StockAnalystData |
+| Daily Market Data Sync | FMP quote — all unique active universe symbols | StockQuote |
 | Fundamental Score Calculation | Internal DB-only | StockScore |
 | Opportunity Score Calculation | Internal DB-only | StockScore |
 
@@ -330,6 +359,7 @@ Mark expected provider plan limitations as app failures.
 Mix daily quote writes into Company Data Sync.
 Mix fundamental writes into Daily Market Data Sync.
 Present static fallback membership as live provider data.
+Describe S&P 500 or Nasdaq 100 membership as a live provider feed.
 ```
 
 ---

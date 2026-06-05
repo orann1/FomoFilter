@@ -171,6 +171,19 @@ Admin/data-health metrics (With Metrics, With Scores, Rating Coverage, Target Co
 - Shown only when warnings exist (missing sync, missing scores, stale scores).
 - Rendered above the summary cards, high prominence.
 
+Warning thresholds (Phase 22B):
+
+```txt
+missing_metrics warning: only fires when metrics coverage < 95%
+missing_scores warning: only fires when score coverage < 95%
+no_sync warning: always fires if no market data sync has run
+no_scores warning: always fires if no scores exist
+stale_scores warning: always fires if market data is newer than scores
+```
+
+Small gaps (e.g., 1–5 missing out of 518) do not produce top-level warnings.
+Gaps below the threshold remain visible in the Data Health widget (coverage bars).
+
 ---
 
 ## What Dashboard Should Not Be
@@ -272,11 +285,24 @@ sectorSummary            — aggregated by sector, sorted by avgFundamentalScore
 alertRulesBySymbol       — active alertRules grouped by symbol
 activeAlertsSummary      — totalRules + bySymbol array from alertRulesBySymbol
 watchlistItems           — includes oppScore (added Phase 21D)
-summary                  — DashboardSummary with coverage counts and averages
+summary                  — DashboardSummary with coverage counts and averages (see DashboardSummary below)
 freshness                — lastMarketDataSyncAt, lastScoreCalculationAt, coverage percents
 dataWarnings             — generated from sync and score state
 user                     — from DB
 ```
+
+### DashboardSummary — Key Fields (Phase 22B)
+
+The `DashboardSummary` type uses `activeUniverseStocks` (renamed from `activeNasdaq100` in Phase 22B):
+
+```txt
+activeUniverseStocks — count of unique active stocks with any active universe membership.
+                       Before Phase 22B this was Nasdaq 100 count only.
+                       After Phase 22B it reflects any universe membership.
+totalStocks          — falls back to activeUniverseStocks if > 0, else all active stocks.
+```
+
+The Dashboard is not Nasdaq-100-only after Phase 22B. Coverage counts reflect all active unique universe members.
 
 ---
 

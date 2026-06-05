@@ -19,12 +19,14 @@ export type ScannerData = {
   selectedUniverseSlug: string;
 };
 
+const ALL_UNIVERSE_SLUG = "all";
+
 interface GetScannerDataParams {
   universeSlug?: string;
 }
 
 export async function getScannerData({
-  universeSlug = "nasdaq-100",
+  universeSlug = ALL_UNIVERSE_SLUG,
 }: GetScannerDataParams = {}): Promise<ScannerData> {
   const [dbUser, dbUniverses, dbWatchlistItems] = await Promise.all([
     prisma.user.findFirst({ orderBy: { createdAt: "asc" } }),
@@ -35,22 +37,27 @@ export async function getScannerData({
     }),
   ]);
 
-  // Resolve the selected universe
-  const selectedUniverse =
-    dbUniverses.find((u) => u.slug === universeSlug) ??
-    dbUniverses.find((u) => u.slug === "nasdaq-100") ??
-    dbUniverses.find((u) => u.isDefault) ??
-    dbUniverses[0] ??
-    null;
+  const isAllUniverse = universeSlug === ALL_UNIVERSE_SLUG;
+
+  // Resolve the selected universe (null for "all" mode)
+  const selectedUniverse = isAllUniverse
+    ? null
+    : (dbUniverses.find((u) => u.slug === universeSlug) ??
+      dbUniverses.find((u) => u.slug === "nasdaq-100") ??
+      null);
 
   const dbStocks = await prisma.stock.findMany({
     where: {
       isActive: true,
       quote: { isNot: null },
       score: { isNot: null },
-      ...(selectedUniverse
-        ? { universeMemberships: { some: { universeId: selectedUniverse.id, isActive: true } } }
-        : {}),
+      // "all" mode: must have at least one active membership (no filter by specific universe)
+      // specific universe mode: filter to that universe's active members
+      universeMemberships: isAllUniverse
+        ? { some: { isActive: true } }
+        : selectedUniverse
+        ? { some: { universeId: selectedUniverse.id, isActive: true } }
+        : { some: { isActive: true } },
     },
     include: {
       quote: true,
@@ -90,13 +97,24 @@ export async function getScannerData({
     universeScoredCounts.map((r) => [r.universeId, r._count.stockId])
   );
 
-  const universes: ScannerUniverse[] = dbUniverses.map((u) => ({
+  const dbUniverseEntries: ScannerUniverse[] = dbUniverses.map((u) => ({
     name: u.name,
     slug: u.slug,
     type: u.type,
     isDefault: u.isDefault,
     hasData: (scoredCountByUniverseId.get(u.id) ?? 0) > 0,
   }));
+
+  // Inject synthetic "All Active" entry at the front if there are any scored stocks
+  const totalScoredInAnyUniverse = dbStocks.length;
+  const allEntry: ScannerUniverse = {
+    name: "US Stocks",
+    slug: ALL_UNIVERSE_SLUG,
+    type: "all",
+    isDefault: false,
+    hasData: totalScoredInAnyUniverse > 0,
+  };
+  const universes: ScannerUniverse[] = [allEntry, ...dbUniverseEntries];
 
   function toNum(val: unknown): number | null {
     if (val == null) return null;
@@ -242,7 +260,7 @@ export async function getScannerData({
     watchlistItems,
     alertRulesBySymbol,
     universes,
-    selectedUniverseSlug: selectedUniverse?.slug ?? "nasdaq-100",
+    selectedUniverseSlug: isAllUniverse ? ALL_UNIVERSE_SLUG : (selectedUniverse?.slug ?? ALL_UNIVERSE_SLUG),
   };
 }
 

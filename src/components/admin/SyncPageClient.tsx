@@ -9,6 +9,7 @@ import {
   syncQuotesSampleAction,
   syncProfilesSampleAction,
   syncNasdaq100UniverseAction,
+  syncSp500UniverseAction,
   calculateFundamentalScoresAction,
   calculateOpportunityScoresAction,
 } from "@/src/actions/market-data-actions";
@@ -231,8 +232,12 @@ function ScoreCalcResultViewer({ result }: { result: ScoreCalcResult }) {
 
 const SYNC_ACTION_META: Record<string, { label: string; durationNote: string }> = {
   "sync-nasdaq100": {
-    label: "Sync Stock Universe",
-    durationNote: "Universe sync may take around 45–75 seconds.",
+    label: "Sync Nasdaq 100 Universe",
+    durationNote: "Nasdaq 100 universe sync may take around 45–75 seconds (includes FMP profile enrichment).",
+  },
+  "sync-sp500": {
+    label: "Sync S&P 500 Universe",
+    durationNote: "S&P 500 universe sync typically completes in under 30 seconds (membership only, no FMP profile calls).",
   },
   "sync-quotes": {
     label: "Sync Quotes Sample",
@@ -244,11 +249,11 @@ const SYNC_ACTION_META: Record<string, { label: string; durationNote: string }> 
   },
   "calc-fundamental-scores": {
     label: "Calculate Fundamental Scores",
-    durationNote: "Score calculation is internal — typically completes in a few seconds for 100 stocks.",
+    durationNote: "Score calculation is internal — typically completes in a few seconds.",
   },
   "calc-opportunity-scores": {
     label: "Calculate Opportunity Scores",
-    durationNote: "Opportunity Score calculation is internal — typically completes in a few seconds for 100 stocks.",
+    durationNote: "Opportunity Score calculation is internal — typically completes in a few seconds.",
   },
 };
 
@@ -566,7 +571,7 @@ function PausedSyncPanel({
       )}
 
       <p className="text-xs text-slate-500">
-        You can continue from the last saved progress, or restart to rescan all active Nasdaq 100 stocks.
+        You can continue from the last saved progress, or restart to rescan all active universe stocks.
       </p>
     </div>
   );
@@ -836,12 +841,15 @@ function UniverseSyncResultViewer({ result }: { result: UniverseSyncActionResult
 // ── Recent Sync Runs ──────────────────────────────────────────────────────────
 
 const SYNC_RUN_TYPE_LABELS: Record<string, string> = {
-  "analyst-data-nasdaq100-sync": "Company Data Sync",
-  "market-data-nasdaq100-chunked-sync": "Daily Market Data Sync",
+  "company-data-active-symbols-sync": "Company Data Sync",
+  "analyst-data-nasdaq100-sync": "Company Data Sync (legacy)",
+  "market-data-active-symbols-sync": "Daily Market Data Sync",
+  "market-data-nasdaq100-chunked-sync": "Daily Market Data Sync (legacy)",
   "market-data-nasdaq100-batch": "Daily Market Data Sync (legacy)",
   "fundamental-score-calculation": "Fundamental Score Calc",
   "opportunity-score-calculation": "Opportunity Score Calc",
-  "nasdaq100-universe-sync": "Universe Sync",
+  "nasdaq100-universe-sync": "Nasdaq 100 Universe Sync",
+  "sp500-universe-sync": "S&P 500 Universe Sync",
   "analyst-target-discovery": "Target Discovery (Legacy)",
 };
 
@@ -1664,12 +1672,9 @@ export default function SyncPageClient({
     activeAction && activeAction in SYNC_ACTION_META ? SYNC_ACTION_META[activeAction] : null;
   const isSyncRunning = activeSyncMeta !== null;
 
-  const nasdaq100Overview = universeOverview.find((r) => r.universeSlug === "nasdaq-100") ?? null;
-  const nasdaq100QuoteTotal = nasdaq100Overview?.activeMembers ?? null;
-  const nasdaq100QuoteSynced = nasdaq100Overview
-    ? nasdaq100Overview.activeMembers - nasdaq100Overview.missingQuotes
-    : null;
-  const nasdaq100QuoteMissing = nasdaq100Overview?.missingQuotes ?? null;
+  const activeUniqueStocksTotal = dbStockSummary.activeInAtLeastOneUniverse;
+  const activeUniqueWithQuotes = dbStockSummary.activeWithQuotes;
+  const activeUniqueMissingQuotes = activeUniqueStocksTotal - activeUniqueWithQuotes;
 
   const lastSyncResult =
     lastResult?.kind === "sync" ||
@@ -1772,17 +1777,20 @@ export default function SyncPageClient({
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Builds and updates the active stock universe. Creates missing stocks, updates membership,
-                and marks removed symbols inactive. Does not sync market or financial data.
+                Builds and updates index membership for each universe. Creates missing stock records, upserts memberships,
+                and marks removed symbols inactive. Symbols in multiple universes remain unique — one Stock record,
+                multiple memberships. Does not sync market or financial data.
               </p>
             </div>
+
+            {/* Nasdaq 100 */}
             <ActionButton
               variant="sync"
               onClick={() => runUniverseSync("sync-nasdaq100", syncNasdaq100UniverseAction)}
               disabled={isLoading || anyChunkedRunning}
               loading={activeAction === "sync-nasdaq100"}
-              label="Sync Stock Universe"
-              description="Syncs Nasdaq 100 membership from the static fallback list. FMP index constituent endpoints require a higher plan tier, so static fallback is the current universe membership source. No quote or financial data sync."
+              label="Sync Nasdaq 100 Universe"
+              description="Syncs Nasdaq 100 membership from the static fallback list. Also enriches company profiles via FMP for any new stocks. compositionAsOf 2026-01-20 · lastVerifiedAt 2026-05-21 · 100 symbols."
             />
             {isSyncRunning && activeAction === "sync-nasdaq100" && activeSyncMeta && (
               <SyncInProgressPanel
@@ -1791,32 +1799,45 @@ export default function SyncPageClient({
                 durationNote={activeSyncMeta.durationNote}
               />
             )}
+
+            {/* S&P 500 */}
+            <ActionButton
+              variant="sync"
+              onClick={() => runUniverseSync("sync-sp500", syncSp500UniverseAction)}
+              disabled={isLoading || anyChunkedRunning}
+              loading={activeAction === "sync-sp500"}
+              label="Sync S&P 500 Universe"
+              description="Syncs S&P 500 membership from the static fallback list (membership only — no FMP profile enrichment). Run Company Data Sync after to enrich new stocks. compositionAsOf 2025-07-01 · ~503 symbols."
+            />
+            {isSyncRunning && activeAction === "sync-sp500" && activeSyncMeta && (
+              <SyncInProgressPanel
+                actionLabel={activeSyncMeta.label}
+                elapsedSeconds={elapsedSeconds2}
+                durationNote={activeSyncMeta.durationNote}
+              />
+            )}
+
             <div className="rounded bg-slate-900/60 border border-slate-700/60 px-3 py-2.5 space-y-2">
               <div className="flex items-start gap-2">
                 <Info className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
                 <div className="text-xs space-y-0.5">
                   <p className="text-slate-300 font-medium">
-                    Current source: Static fallback list
+                    Source: Static fallback lists (both indexes)
                   </p>
                   <p className="text-slate-500">
-                    Nasdaq 100 membership currently uses a manually validated static fallback list
-                    because FMP index constituent endpoints require a higher plan tier. This affects
-                    universe membership only. FMP Starter is still used for company, market,
-                    financial, and analyst target data in other sync workflows.
+                    Both Nasdaq 100 and S&P 500 membership use manually validated static fallback lists
+                    because FMP index constituent endpoints require a higher plan tier. Membership source
+                    is independent of FMP profile enrichment. Overlapping symbols (e.g., NVDA in both
+                    indexes) create one Stock record with multiple memberships — not duplicate rows.
                   </p>
-                  <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1.5 text-slate-500 font-mono">
-                    <span>compositionAsOf: <span className="text-slate-400">2026-01-20</span></span>
-                    <span>lastVerifiedAt: <span className="text-slate-400">2026-05-21</span></span>
-                    <span>symbolCount: <span className="text-slate-400">100</span></span>
-                  </div>
                 </div>
               </div>
               <div className="flex items-start gap-2 border-t border-slate-700/60 pt-2">
                 <Info className="w-3.5 h-3.5 text-slate-500 shrink-0 mt-0.5" />
                 <p className="text-xs text-slate-500 leading-relaxed">
                   <span className="text-slate-400 font-medium">Safe: </span>
-                  Stocks leaving the index have their membership marked inactive — they are never
-                  deleted. Stocks re-entering the index are reactivated. Existing quotes, watchlist
+                  Stocks leaving an index have that specific membership marked inactive — they are never
+                  globally deleted. Memberships in other indexes remain active. Existing quotes, watchlist
                   items, and alerts are untouched.
                 </p>
               </div>
@@ -1837,10 +1858,10 @@ export default function SyncPageClient({
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Refreshes daily-changing market data for all active stocks: quotes, price movement,
-                volume, 52-week context, and moving-average context from FMP. Does not sync company
-                financial metrics. Runs in resumable chunks — progress is saved after each stock so
-                the sync can be continued if interrupted.
+                Refreshes daily-changing market data from FMP for all unique active stocks across all
+                synced universes (Nasdaq 100, S&P 500, etc.) — deduplicated so overlapping symbols are
+                synced once. Writes quotes, price movement, volume, 52-week context, and moving averages.
+                Does not sync company financials. Runs in resumable chunks.
               </p>
             </div>
 
@@ -1917,20 +1938,20 @@ export default function SyncPageClient({
                 <Info className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
                 <div className="text-xs space-y-0.5 text-slate-500">
                   <p>Run once per trading day, preferably after market close.</p>
-                  <p>Current provider: FMP /stable/quote. Fetches one quote snapshot per active stock. Company metrics are handled by Company Data Sync. Chunk size: 10.</p>
-                  {nasdaq100QuoteTotal !== null && (
+                  <p>Current provider: FMP /stable/quote. Fetches one quote snapshot per unique active stock across all synced universes — deduplicated, no duplicate calls for overlapping symbols. Company metrics are handled by Company Data Sync. Chunk size: 10.</p>
+                  {activeUniqueStocksTotal > 0 && (
                     <>
                       <p>
-                        Active Nasdaq 100 stocks:{" "}
-                        <span className="text-slate-300 font-mono">{nasdaq100QuoteTotal}</span>
+                        Active unique stocks:{" "}
+                        <span className="text-slate-300 font-mono">{activeUniqueStocksTotal}</span>
                       </p>
                       <p>
                         Estimated FMP calls:{" "}
-                        <span className="text-slate-300 font-mono">{nasdaq100QuoteTotal}</span>
+                        <span className="text-slate-300 font-mono">{activeUniqueStocksTotal}</span>
                       </p>
                     </>
                   )}
-                  <p>Estimated duration: ~30 seconds for 100 stocks.</p>
+                  <p>Estimated duration: ~{Math.ceil(activeUniqueStocksTotal * 0.3 / 60)} min for {activeUniqueStocksTotal} stocks at ~250ms per call.</p>
                   <p>Rate limited to ~250ms between calls (conservative pacing for FMP Starter).</p>
                   <p className="text-amber-500">Please keep this page open while the sync runs.</p>
                 </div>
@@ -1946,25 +1967,25 @@ export default function SyncPageClient({
               </div>
             </div>
 
-            {nasdaq100QuoteTotal !== null && (
+            {activeUniqueStocksTotal > 0 && (
               <div className="rounded bg-slate-900/60 border border-slate-700/60 px-3 py-2.5 space-y-1.5">
                 <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                  Quote Coverage
+                  Active Universe Quote Coverage
                 </p>
                 <p className="text-xs text-slate-600 leading-relaxed">
-                  Provider source: FMP. Company metrics are owned by Company Data Sync.
+                  All synced universes (Nasdaq 100, S&amp;P 500, etc.) — deduplicated unique active stocks. Provider source: FMP. Company metrics are owned by Company Data Sync.
                 </p>
                 <div className="grid grid-cols-2 gap-3 text-xs">
                   <div>
                     <p className="text-slate-500 mb-0.5">Have quote</p>
-                    <p className={`font-mono font-semibold ${nasdaq100QuoteSynced === nasdaq100QuoteTotal ? "text-emerald-400" : "text-slate-200"}`}>
-                      {nasdaq100QuoteSynced} / {nasdaq100QuoteTotal}
+                    <p className={`font-mono font-semibold ${activeUniqueWithQuotes === activeUniqueStocksTotal ? "text-emerald-400" : "text-slate-200"}`}>
+                      {activeUniqueWithQuotes} / {activeUniqueStocksTotal}
                     </p>
                   </div>
                   <div>
                     <p className="text-slate-500 mb-0.5">Missing quote</p>
-                    <p className={`font-mono font-semibold ${nasdaq100QuoteMissing! > 0 ? "text-amber-400" : "text-slate-600"}`}>
-                      {nasdaq100QuoteMissing}
+                    <p className={`font-mono font-semibold ${activeUniqueMissingQuotes > 0 ? "text-amber-400" : "text-slate-600"}`}>
+                      {activeUniqueMissingQuotes}
                     </p>
                   </div>
                 </div>
@@ -1986,8 +2007,9 @@ export default function SyncPageClient({
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Syncs slower-changing company and financial data for all active stocks. Fetches FMP
-                company profile, financial ratios (TTM), financial growth, and analyst target prices.
+                Syncs slower-changing company and financial data for all unique active stocks across all
+                synced universes — deduplicated so overlapping symbols (e.g., NVDA in Nasdaq 100 and S&P 500)
+                are synced once. Fetches FMP company profile, ratios, growth, and analyst target prices.
                 Fetches Finnhub analyst recommendation counts. Updates StockMetric and StockAnalystData.
                 Does not calculate scores automatically — run Score Calculation after sync.
               </p>
@@ -2067,7 +2089,7 @@ export default function SyncPageClient({
                   <p>• <span className="font-mono text-slate-400">/stable/price-target-consensus</span> → targetConsensus, high, low, median</p>
                   <p className="text-slate-400 font-medium mt-1">Finnhub calls per stock (1):</p>
                   <p>• <span className="font-mono text-slate-400">/stock/recommendation</span> → strongBuy/buy/hold/sell/strongSell counts</p>
-                  <p className="mt-1">Total for 100 stocks: ~500 calls (400 FMP + 100 Finnhub). Chunk size: 10. Pacing: ~1.2s between symbols. Estimated duration: 3–5 minutes.</p>
+                  <p className="mt-1">Total for {activeUniqueStocksTotal} unique active stocks: ~{activeUniqueStocksTotal * 5} calls ({activeUniqueStocksTotal * 4} FMP + {activeUniqueStocksTotal} Finnhub). Chunk size: 10. Pacing: ~1.2s between symbols. Estimated duration: ~{Math.ceil(activeUniqueStocksTotal * 1.2 / 60)} min.</p>
                   <p>Upside % calculated internally: <span className="font-mono text-slate-400">((targetConsensus − price) / price) × 100</span>.</p>
                   <p>Margins/ROE/ROA stored as % scale. Growth stored as % scale. Safe update — existing values are never overwritten with null.</p>
                 </div>

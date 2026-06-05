@@ -308,14 +308,36 @@ Defines stock universes and index membership.
 Current usage:
 
 ```txt
-Nasdaq 100 active universe
-S&P 500 / Russell 1000 concepts where seeded or planned
+Nasdaq 100 active universe (slug: nasdaq-100)
+S&P 500 universe (slug: sp-500, Phase 22B)
+Russell 1000 (slug: russell-1000, seeded but not production-populated)
 ```
 
-Current Nasdaq 100 membership source:
+Current membership sources:
 
 ```txt
-static fallback list
+Nasdaq 100 — static fallback list (100 symbols)
+S&P 500 — best-effort static fallback list (499 unique symbols, Phase 22B)
+```
+
+Multi-universe overlap behavior (Phase 22B):
+
+```txt
+Stock is unique by symbol (Stock.symbol has a unique DB constraint).
+If a symbol belongs to both Nasdaq 100 and S&P 500:
+  - One Stock record exists.
+  - Two StockUniverseMember records exist (one per universe).
+Do not create duplicate Stock records for overlapping universe symbols.
+Upsert Stock by normalized symbol.
+Universe membership overlap creates multiple StockUniverseMember rows, not multiple Stock rows.
+```
+
+Membership deactivation:
+
+```txt
+When a symbol is removed from one universe, only that specific StockUniverseMember
+is deactivated (isActive: false). The Stock record and memberships in other universes
+are not affected.
 ```
 
 Rules:
@@ -323,6 +345,7 @@ Rules:
 ```txt
 Universe membership source is not the same as profile provider.
 FMP profile enrichment does not make FMP the universe membership source.
+Do not describe static fallback lists as live provider membership.
 ```
 
 ---
@@ -392,14 +415,24 @@ Dashboard freshness warnings
 QA/debugging
 ```
 
-Typical types include:
+Current production types:
 
 ```txt
-nasdaq100-universe-sync
-market-data-nasdaq100-chunked-sync
-analyst-data-nasdaq100-sync
-fundamental-score-calculation
-opportunity-score-calculation
+nasdaq100-universe-sync           — Nasdaq 100 membership sync
+sp500-universe-sync               — S&P 500 membership sync (Phase 22B)
+market-data-active-symbols-sync   — Daily Market Data Sync (Phase 22B+)
+company-data-active-symbols-sync  — Company Data Sync (Phase 22B+)
+fundamental-score-calculation     — Fundamental Score
+opportunity-score-calculation     — Opportunity Score
+```
+
+Legacy types (backward-compatible — displayed in history only):
+
+```txt
+analyst-data-nasdaq100-sync          — Company Data Sync before Phase 22B
+market-data-nasdaq100-chunked-sync   — Daily Market Data Sync before Phase 22B
+market-data-nasdaq100-batch          — Daily Market Data Sync (batch variant)
+quotes-nasdaq100-batch               — Quote batch (legacy)
 ```
 
 Rules:

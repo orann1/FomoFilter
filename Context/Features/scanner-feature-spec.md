@@ -125,7 +125,7 @@ Data freshness
 ## Current Default State
 
 ```txt
-View: All Stocks
+View: US Stocks (all active unique stocks across all synced universes)
 Sort: Opportunity Score descending
 Page size: 20
 Highlighted column: Opportunity
@@ -134,9 +134,28 @@ Highlighted column: Opportunity
 Result text example:
 
 ```txt
-Showing 1–20 of 100 stocks
+Showing 1–20 of 518 stocks
 Showing all stocks — sorted by Opportunity Score
 ```
+
+---
+
+## Universe Selector
+
+Scanner displays a universe selector above the table. Available options:
+
+```txt
+US Stocks (slug: "all")  — default — all unique active stocks across all synced universes
+Nasdaq 100 (slug: "nasdaq-100") — Nasdaq 100 members only
+S&P 500 (slug: "sp-500")        — S&P 500 members only (after membership sync)
+Russell 1000 (slug: "russell-1000") — Russell 1000 (future/no data yet)
+```
+
+URL parameter: `?universe=nasdaq-100`, `?universe=sp-500`, etc.
+
+Default route `/scanner` with no parameter loads US Stocks (all active unique).
+
+No duplicate rows: stocks belonging to multiple universes appear once in all views.
 
 ---
 

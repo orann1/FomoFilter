@@ -58,7 +58,7 @@ export type DashboardSummary = {
   withQuotes: number;
   withMetrics: number;
   withScores: number;
-  activeNasdaq100: number;
+  activeUniverseStocks: number;
   averageFundamentalScore: number | null;
   stocksAbove75: number;
   stocksAbove80: number;
@@ -160,7 +160,14 @@ export async function getDashboardData(): Promise<DashboardData> {
     }),
     prisma.syncRun.findFirst({
       where: {
-        type: { in: ["market-data-nasdaq100-chunked-sync", "market-data-nasdaq100-batch", "quotes-nasdaq100-batch"] },
+        type: {
+          in: [
+            "market-data-active-symbols-sync",
+            "market-data-nasdaq100-chunked-sync",
+            "market-data-nasdaq100-batch",
+            "quotes-nasdaq100-batch",
+          ],
+        },
         status: { in: ["success", "partial_success"] },
       },
       orderBy: { startedAt: "desc" },
@@ -190,11 +197,12 @@ export async function getDashboardData(): Promise<DashboardData> {
   };
 
   // ── Coverage counts ───────────────────────────────────────────────────────────
-  const nasdaq100Stocks = dbStocks.filter((s) =>
-    s.universeMemberships.some((m) => m.universe.slug === "nasdaq-100" && m.isActive)
+  // Count unique stocks with at least one active universe membership
+  const stocksWithActiveMembership = dbStocks.filter((s) =>
+    s.universeMemberships.some((m) => m.isActive)
   );
-  const activeNasdaq100 = nasdaq100Stocks.length;
-  const totalStocks = activeNasdaq100 > 0 ? activeNasdaq100 : dbStocks.filter((s) => s.isActive).length;
+  const activeUniverseStocks = stocksWithActiveMembership.length;
+  const totalStocks = activeUniverseStocks > 0 ? activeUniverseStocks : dbStocks.filter((s) => s.isActive).length;
 
   const withQuotes = dbStocks.filter((s) => s.quote !== null).length;
   const withMetrics = dbStocks.filter((s) => s.metric !== null).length;
@@ -260,7 +268,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     withQuotes,
     withMetrics,
     withScores,
-    activeNasdaq100,
+    activeUniverseStocks,
     averageFundamentalScore,
     stocksAbove75,
     stocksAbove80,
@@ -389,9 +397,13 @@ export async function getDashboardData(): Promise<DashboardData> {
     .sort((a, b) => (b.avgFundamentalScore ?? 0) - (a.avgFundamentalScore ?? 0));
 
   // ── Data Warnings ─────────────────────────────────────────────────────────────
+  const COVERAGE_WARN_THRESHOLD = 0.95;
+
   const dataWarnings: DashboardWarning[] = [];
   const missingMetrics = totalStocks - withMetrics;
   const missingScores = totalStocks - withScores;
+  const metricsCoverage = totalStocks > 0 ? withMetrics / totalStocks : 1;
+  const scoresCoverage = totalStocks > 0 ? withScores / totalStocks : 1;
 
   if (!lastMarketDataSync) {
     dataWarnings.push({
@@ -399,11 +411,11 @@ export async function getDashboardData(): Promise<DashboardData> {
       message: "Market data has not been synced yet.",
       action: "Run Market Data Sync in Admin.",
     });
-  } else if (missingMetrics > 0) {
+  } else if (missingMetrics > 0 && metricsCoverage < COVERAGE_WARN_THRESHOLD) {
     dataWarnings.push({
       key: "missing_metrics",
-      message: `${missingMetrics} stock${missingMetrics > 1 ? "s are" : " is"} missing metrics.`,
-      action: "Run Market Data Sync to fill gaps.",
+      message: `${missingMetrics} stock${missingMetrics > 1 ? "s are" : " is"} missing metrics (${Math.round(metricsCoverage * 100)}% coverage).`,
+      action: "Run Company Data Sync to fill gaps.",
     });
   }
 
@@ -419,10 +431,10 @@ export async function getDashboardData(): Promise<DashboardData> {
       message: "Scores exist, but no score calculation run record was found. Re-run to track freshness.",
       action: "Run Calculate Fundamental Scores in Admin.",
     });
-  } else if (missingScores > 0) {
+  } else if (missingScores > 0 && scoresCoverage < COVERAGE_WARN_THRESHOLD) {
     dataWarnings.push({
       key: "missing_scores",
-      message: `${missingScores} stock${missingScores > 1 ? "s are" : " is"} missing scores.`,
+      message: `${missingScores} stock${missingScores > 1 ? "s are" : " is"} missing scores (${Math.round(scoresCoverage * 100)}% coverage).`,
       action: "Run Calculate Fundamental Scores to fill gaps.",
     });
   }

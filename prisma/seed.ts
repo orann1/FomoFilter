@@ -676,13 +676,13 @@ async function main() {
   // ── Stock Universes ──────────────────────────────────────────────────────────
   const russell1000 = await prisma.stockUniverse.upsert({
     where: { slug: "russell-1000" },
-    update: {},
+    update: { isDefault: false },
     create: {
       name: "Russell 1000",
       slug: "russell-1000",
-      description: "Large and mid-cap US-listed stocks — base scanning universe",
+      description: "Large and mid-cap US-listed stocks — base scanning universe (demo only, not production-populated)",
       type: "BASE_UNIVERSE",
-      isDefault: true,
+      isDefault: false,
       isSystem: true,
     },
   });
@@ -693,7 +693,7 @@ async function main() {
     create: {
       name: "S&P 500",
       slug: "sp-500",
-      description: "S&P 500 index members",
+      description: "S&P 500 index members — static fallback list",
       type: "INDEX",
       isDefault: false,
       isSystem: true,
@@ -702,13 +702,13 @@ async function main() {
 
   const nasdaq100 = await prisma.stockUniverse.upsert({
     where: { slug: "nasdaq-100" },
-    update: {},
+    update: { isDefault: true },
     create: {
       name: "Nasdaq 100",
       slug: "nasdaq-100",
-      description: "Nasdaq 100 index members",
+      description: "Nasdaq 100 index members — static fallback list",
       type: "INDEX",
-      isDefault: false,
+      isDefault: true,
       isSystem: true,
     },
   });

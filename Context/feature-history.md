@@ -527,3 +527,42 @@ Added Duration column using `durationMs` when available, falling back to `finish
 **Automated checks:** build ✅  tsc ✅  prisma validate ✅  migrate status ✅ (14 migrations, up to date)
 
 **Files changed:** `src/components/admin/DataInventoryTab.tsx`, `src/components/admin/SyncPageClient.tsx`, `src/components/admin/ScoreMethodologyTab.tsx`, `Context/Features/admin-sync-feature-spec.md`, `Context/current-feature.md`
+
+---
+
+## Phase 22B — Multi-Universe Unique Sync Foundation + S&P 500 Expansion
+
+Expanded FomoFilter from a Nasdaq 100-centered universe to a multi-universe architecture supporting S&P 500. Established a reusable deduplication foundation so provider-backed sync workflows operate on unique active stock symbols across all synced universes, never syncing overlapping symbols twice.
+
+**No schema changes. No migrations. No provider responsibility changes. No scoring formula changes.**
+
+**Key deliverables:**
+
+- Added S&P 500 best-effort static fallback list (`src/lib/market-data/sp500-fallback-symbols.ts`): 499 unique symbols, compositionAsOf 2025-07-01.
+- Added `syncSp500UniverseAction` — syncs S&P 500 membership into `StockUniverse` / `StockUniverseMember`. Membership only; no FMP profile enrichment at sync time.
+- Generalized universe sync so both Nasdaq 100 and S&P 500 use the same upsert-by-symbol / upsert-membership pattern.
+- Added `getAllActiveUniqueSyncableSymbols()` — returns deduplicated normalized symbols across all active memberships.
+- Updated Daily Market Data Sync (`market-data-active-symbols-sync`) and Company Data Sync (`company-data-active-symbols-sync`) to use the deduped helper. After S&P 500 sync, both syncs operate on ~518 unique active symbols, not 100.
+- Fixed latest sync status endpoints (`/api/admin/sync-runs/latest`, `/api/admin/analyst-sync/latest`) to query both new and legacy run types, returning the most recent run. The UI now correctly shows 518-stock runs, not 100-stock legacy runs.
+- Changed Scanner default from Nasdaq 100 to "US Stocks" (slug: `all`) — shows all unique active stocks across all synced universes. Nasdaq 100 and S&P 500 remain selectable. No duplicate rows.
+- Suppressed Dashboard top-level warnings for small coverage gaps (< 5% missing). Threshold: coverage must fall below 95% to trigger `missing_metrics` or `missing_scores` warnings.
+- Fixed default seed universe from `russell-1000` to `nasdaq-100`.
+- Renamed Dashboard active universe count field from `activeNasdaq100` to `activeUniverseStocks`.
+- Updated Admin Sync copy: "Active Nasdaq 100 stocks: 100" → "Active unique stocks: N", "Nasdaq 100 Quote Coverage" → "Active Universe Quote Coverage".
+- Added `activeWithQuotes` to `DbStockSummary` for accurate active-universe coverage reporting.
+
+**DB state after Phase 22B:**
+
+```txt
+nasdaq-100 active members: 100
+sp-500 active members: 499
+unique active stocks across all universes: 518
+overlap (in both): 84
+duplicate Stock rows by symbol: 0
+```
+
+**Automated checks:** build ✅  tsc ✅  prisma validate ✅  migrate status ✅ (14 migrations, up to date)
+
+**Files changed (application code):** `src/lib/market-data/sp500-fallback-symbols.ts` (new), `src/actions/market-data-actions.ts`, `src/lib/data/admin-universes.ts`, `src/lib/data/admin-sync.ts`, `src/lib/data/scanner.ts`, `src/lib/data/dashboard.ts`, `src/components/admin/SyncPageClient.tsx`, `src/components/scanner/ScannerPageClient.tsx`, `app/api/admin/sync-runs/start/route.ts`, `app/api/admin/sync-runs/process-next/route.ts`, `app/api/admin/sync-runs/latest/route.ts`, `app/api/admin/analyst-sync/start/route.ts`, `app/api/admin/analyst-sync/process-next/route.ts`, `app/api/admin/analyst-sync/latest/route.ts`, `app/scanner/page.tsx`, `prisma/seed.ts`
+
+**Files changed (documentation):** `Context/current-feature.md`, `Context/feature-history.md`, `Context/project-overview.md`, `Context/data-model.md`, `Context/sync-workflows.md`, `Context/Features/market-data-sync-strategy.md`, `Context/Features/admin-sync-feature-spec.md`, `Context/Features/scanner-feature-spec.md`, `Context/Features/dashboard-feature-spec.md`

@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/src/lib/db/prisma";
-import { getAllActiveNasdaq100Symbols } from "@/src/lib/data/admin-universes";
+import { getAllActiveUniqueSyncableSymbols } from "@/src/lib/data/admin-universes";
 import { fetchFmpQuote } from "@/src/lib/market-data/providers/fmp";
 import { isValidNumber } from "@/src/lib/market-data/safe-update";
 
-const CHUNKED_SYNC_TYPE = "market-data-nasdaq100-chunked-sync";
+const CHUNKED_SYNC_TYPE = "market-data-active-symbols-sync";
 const CHUNK_SIZE = 10;
 // FMP Starter allows ~750+ calls/minute — 250ms pacing is conservative but fast.
 const CALL_DELAY_MS = 250;
@@ -85,7 +85,7 @@ export async function POST() {
     });
   }
 
-  const allSymbols = await getAllActiveNasdaq100Symbols();
+  const allSymbols = await getAllActiveUniqueSyncableSymbols();
 
   // Source of truth: which symbols already have a SyncRunItem for this run
   const processedItems = await prisma.syncRunItem.findMany({

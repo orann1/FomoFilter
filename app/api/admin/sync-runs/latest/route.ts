@@ -3,7 +3,9 @@ import { prisma } from "@/src/lib/db/prisma";
 
 export async function GET() {
   const run = await prisma.syncRun.findFirst({
-    where: { type: "market-data-nasdaq100-chunked-sync" },
+    where: {
+      type: { in: ["market-data-active-symbols-sync", "market-data-nasdaq100-chunked-sync"] },
+    },
     orderBy: { startedAt: "desc" },
     select: {
       id: true,
