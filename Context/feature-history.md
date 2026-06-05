@@ -489,3 +489,41 @@ No schema changes. No migrations. No provider calls. No scoring formula changes.
 **Automated checks:** build ✅  tsc ✅  prisma validate ✅  migrate status ✅ (14 migrations, up to date)
 
 **Files changed:** `app/page.tsx`, `src/lib/data/dashboard.ts`, `src/components/dashboard/DashboardGrid.tsx`, `src/components/dashboard/DashboardSummaryCards.tsx`, `src/components/dashboard/TopFundamentalStocksTable.tsx`, `src/components/dashboard/TopAnalystUpsideTable.tsx`, `src/components/dashboard/SectorSummaryTable.tsx`, `src/components/dashboard/WatchlistWidget.tsx`, `src/components/dashboard/DataCoverageSection.tsx`, `src/components/dashboard/TopOpportunityStocksTable.tsx` (new), `src/components/dashboard/ActiveAlertsSummary.tsx` (new), `Context/Features/dashboard-feature-spec.md`, `Context/current-feature.md`
+
+---
+
+## Phase 21E — Data Inventory / Admin Data Health Cleanup
+
+Corrected inaccurate provider/source labels, cleaned stale terminology, labeled legacy developer tools, improved Sync History readability, and aligned Score Methodology language with current product terminology.
+
+**No schema changes. No migrations. No provider calls. No scoring formula changes. No sync workflow behavior changes.**
+
+**Data Inventory source label corrections:**
+
+Quote columns (Price, Change %, Open, Day High, Day Low, Prev Close, Volume, Src Updated, 52W High, 52W Low): `Finnhub` / `N/A` → `FMP`
+
+Metric columns (Rev Growth TTM, EPS Growth TTM, Rev Growth 3Y, Gross Margin, Op Margin, Net Margin, ROE, ROA, D/E, Current Ratio, P/E TTM, Fwd P/E, PEG, P/S, EV/EBITDA, Beta, Mkt Cap (Metric)): `Finnhub` → `FMP`
+
+Analyst target columns (Target Price, Target High, Target Low): `Finnhub` → `FMP`
+
+Analyst recommendation columns (Analyst Rating, Analyst Count): unchanged, remain `Finnhub`
+
+**Terminology cleanup:**
+
+- `Risk Scr` column label renamed to `Stability Scr`. Internal field `riskContextScore` unchanged.
+- `Risk / Context` → `Stability / Risk Context` in all Score Methodology user-facing text (8 occurrences: Category Weights, Metric Scoring Rules, Example Calculation ×2, Opportunity Score v2 component table, re-normalization note).
+- Fundamental Score action description: "Finnhub metrics" → "FMP financial metrics".
+- Score Methodology tab subtitle: "How Fundamental Score v1 is calculated" → "How scores are calculated".
+
+**Legacy tool labeling:**
+
+- Test Twelve Quote: amber note — daily market data uses FMP, not Twelve Data.
+- Sync Quotes Sample: amber note — legacy Twelve Data sample, not current production workflow.
+
+**Sync History Duration column:**
+
+Added Duration column using `durationMs` when available, falling back to `finishedAt − startedAt`. Format: `<1s`, `30s`, `4m 15s`. `colSpan` updated from 10 → 11.
+
+**Automated checks:** build ✅  tsc ✅  prisma validate ✅  migrate status ✅ (14 migrations, up to date)
+
+**Files changed:** `src/components/admin/DataInventoryTab.tsx`, `src/components/admin/SyncPageClient.tsx`, `src/components/admin/ScoreMethodologyTab.tsx`, `Context/Features/admin-sync-feature-spec.md`, `Context/current-feature.md`

@@ -54,8 +54,8 @@ const METRIC_ROWS = [
   { metric: "P/S TTM", category: "Valuation", source: "psTTM", direction: "Lower is better", rule: "≤1 → 10, 1-3 → 8, 3-6 → 6, 6-10 → 4, 10-20 → 2, >20 → 1", notes: "" },
   { metric: "EV/EBITDA TTM", category: "Valuation", source: "evEbitdaTTM", direction: "Lower is better", rule: "8-12 → 10, ≤8 → 9, 12-18 → 8, 18-25 → 6, 25-35 → 3, >35 → 1", notes: "Negative EV/EBITDA excluded. Very low values score 9 to avoid over-rewarding." },
   // Risk / Context
-  { metric: "Beta", category: "Risk / Context", source: "beta", direction: "Ideal range", rule: "0.8-1.4 → 10, 0.5-0.8 → 8, 1.4-1.8 → 6, 1.8-2.5 → 3, >2.5 → 1, <0.5 → 6", notes: "Moderate beta rewarded. Extreme volatility penalized." },
-  { metric: "Market Cap", category: "Risk / Context", source: "marketCapitalization", direction: "Higher is better", rule: "≥$100B → 10, $50-100B → 8, $20-50B → 6, $5-20B → 4, $1-5B → 2, <$1B → 1", notes: "Slightly rewards company scale/stability. Not a major driver due to 5% category weight." },
+  { metric: "Beta", category: "Stability / Risk Context", source: "beta", direction: "Ideal range", rule: "0.8-1.4 → 10, 0.5-0.8 → 8, 1.4-1.8 → 6, 1.8-2.5 → 3, >2.5 → 1, <0.5 → 6", notes: "Moderate beta rewarded. Extreme volatility penalized." },
+  { metric: "Market Cap", category: "Stability / Risk Context", source: "marketCapitalization", direction: "Higher is better", rule: "≥$100B → 10, $50-100B → 8, $20-50B → 6, $5-20B → 4, $1-5B → 2, <$1B → 1", notes: "Slightly rewards company scale/stability. Not a major driver due to 5% category weight." },
 ];
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -63,7 +63,7 @@ const CATEGORY_COLORS: Record<string, string> = {
   "Profitability": "text-blue-400",
   "Financial Health": "text-cyan-400",
   "Valuation": "text-purple-400",
-  "Risk / Context": "text-amber-400",
+  "Stability / Risk Context": "text-amber-400",
 };
 
 export default function ScoreMethodologyTab() {
@@ -107,7 +107,7 @@ export default function ScoreMethodologyTab() {
                 { cat: "Profitability", weight: "30%", idea: "Margins and returns on equity / assets", icon: <DollarSign className="w-3.5 h-3.5" />, color: "text-blue-400" },
                 { cat: "Valuation", weight: "20%", idea: "Price paid relative to earnings / sales / EBITDA / growth", icon: <BarChart3 className="w-3.5 h-3.5" />, color: "text-purple-400" },
                 { cat: "Financial Health", weight: "15%", idea: "Debt, liquidity, and interest coverage", icon: <Shield className="w-3.5 h-3.5" />, color: "text-cyan-400" },
-                { cat: "Risk / Context", weight: "5%", idea: "Beta and company size context", icon: <Activity className="w-3.5 h-3.5" />, color: "text-amber-400" },
+                { cat: "Stability / Risk Context", weight: "5%", idea: "Beta and company size context", icon: <Activity className="w-3.5 h-3.5" />, color: "text-amber-400" },
               ].map((row) => (
                 <tr key={row.cat} className="border-b border-slate-700/40">
                   <td className="px-3 py-2.5">
@@ -200,19 +200,19 @@ export default function ScoreMethodologyTab() {
           <p>Profitability Score:    <span className="text-emerald-300">75</span></p>
           <p>Valuation Score:        <span className="text-emerald-300">60</span></p>
           <p>Financial Health Score: <span className="text-emerald-300">70</span></p>
-          <p>Risk / Context Score:   <span className="text-emerald-300">65</span></p>
+          <p>Stability / Risk Context Score: <span className="text-emerald-300">65</span></p>
           <div className="border-t border-slate-700 pt-2 mt-2 space-y-1">
             <p className="text-slate-400">Final Score =</p>
             <p>  80 × 0.30  =  24.00  <span className="text-slate-500">(Growth)</span></p>
             <p>  75 × 0.30  =  22.50  <span className="text-slate-500">(Profitability)</span></p>
             <p>  60 × 0.20  =  12.00  <span className="text-slate-500">(Valuation)</span></p>
             <p>  70 × 0.15  =  10.50  <span className="text-slate-500">(Financial Health)</span></p>
-            <p>  65 × 0.05  =   3.25  <span className="text-slate-500">(Risk / Context)</span></p>
+            <p>  65 × 0.05  =   3.25  <span className="text-slate-500">(Stability / Risk Context)</span></p>
             <p className="border-t border-slate-700 pt-1 mt-1 font-bold text-white">= 72.25  →  Fundamental Score: <span className="text-emerald-300">72</span></p>
           </div>
         </div>
         <p className="text-xs text-slate-500">
-          If one category had no scoreable metrics (e.g., Risk / Context), the remaining 95% of weights
+          If one category had no scoreable metrics (e.g., Stability / Risk Context), the remaining 95% of weights
           would be re-normalized to 100% before computing the final score.
         </p>
       </Section>
@@ -250,7 +250,7 @@ export default function ScoreMethodologyTab() {
                   { comp: "Analyst Upside", weight: "20%", source: "StockAnalystData.analystUpsidePercent", missing: "re-normalize" },
                   { comp: "Analyst Sentiment", weight: "10%", source: "Finnhub recommendation counts stored in DB", missing: "re-normalize" },
                   { comp: "Price Position", weight: "5%", source: "StockQuote 52-week range", missing: "re-normalize" },
-                  { comp: "Risk / Context", weight: "5%", source: "StockScore.riskContextScore", missing: "re-normalize" },
+                  { comp: "Stability / Risk Context", weight: "5%", source: "StockScore.riskContextScore", missing: "re-normalize" },
                 ].map((row) => (
                   <tr key={row.comp} className="border-b border-slate-700/40">
                     <td className="px-3 py-2 font-medium text-slate-200">{row.comp}</td>
@@ -392,7 +392,7 @@ export default function ScoreMethodologyTab() {
               <p>Analyst Upside 28% (20%):  <span className="text-emerald-300">72</span>  →  72 × 0.20 = 14.40</p>
               <p>Analyst Sentiment (10%):   <span className="text-emerald-300">76</span>  →  76 × 0.10 =  7.60</p>
               <p>Price Position (5%):       <span className="text-emerald-300">80</span>  →  80 × 0.05 =  4.00</p>
-              <p>Risk / Context (5%):       <span className="text-emerald-300">60</span>  →  60 × 0.05 =  3.00</p>
+              <p>Stability / Risk Context (5%): <span className="text-emerald-300">60</span>  →  60 × 0.05 =  3.00</p>
               <div className="border-t border-slate-700 pt-2 mt-2">
                 <p className="font-bold text-white">Total = 71.50  →  Opportunity Score v2: <span className="text-emerald-300">72</span></p>
               </div>

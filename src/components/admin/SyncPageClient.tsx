@@ -147,6 +147,29 @@ function formatDuration(ms: number): string {
   return `${mins}:${secs}`;
 }
 
+function formatSyncRunDuration(run: SyncRunData): string {
+  if (run.durationMs !== null) {
+    const ms = run.durationMs;
+    if (ms < 1000) return ms < 100 ? "<1s" : `${(ms / 1000).toFixed(1)}s`;
+    const totalSec = Math.round(ms / 1000);
+    if (totalSec < 60) return `${totalSec}s`;
+    const mins = Math.floor(totalSec / 60);
+    const secs = totalSec % 60;
+    return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+  }
+  if (run.startedAt && run.finishedAt) {
+    const ms = new Date(run.finishedAt).getTime() - new Date(run.startedAt).getTime();
+    if (ms < 0) return "N/A";
+    if (ms < 1000) return "<1s";
+    const totalSec = Math.round(ms / 1000);
+    if (totalSec < 60) return `${totalSec}s`;
+    const mins = Math.floor(totalSec / 60);
+    const secs = totalSec % 60;
+    return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
+  }
+  return "N/A";
+}
+
 // ── Score calc result viewer ──────────────────────────────────────────────────
 
 function ScoreCalcResultViewer({ result }: { result: ScoreCalcResult }) {
@@ -879,6 +902,9 @@ function SyncRunRow({ run }: { run: SyncRunData }) {
             <span className="text-slate-600">No</span>
           )}
         </td>
+        <td className="px-3 py-2.5 text-xs text-right font-mono text-slate-400 whitespace-nowrap">
+          {formatSyncRunDuration(run)}
+        </td>
         <td className="px-3 py-2.5 text-slate-500">
           {expanded ? (
             <ChevronDown className="w-3.5 h-3.5" />
@@ -889,7 +915,7 @@ function SyncRunRow({ run }: { run: SyncRunData }) {
       </tr>
       {expanded && run.items.length > 0 && (
         <tr className="border-b border-slate-700/30 bg-slate-900/40">
-          <td colSpan={10} className="px-4 py-3">
+          <td colSpan={11} className="px-4 py-3">
             <div className="space-y-1">
               {run.items.map((item) => (
                 <div key={item.id} className="flex items-start gap-2 text-xs">
@@ -922,7 +948,7 @@ function SyncRunRow({ run }: { run: SyncRunData }) {
       )}
       {expanded && run.items.length === 0 && (
         <tr className="border-b border-slate-700/30 bg-slate-900/40">
-          <td colSpan={10} className="px-4 py-3 text-xs text-slate-600">
+          <td colSpan={11} className="px-4 py-3 text-xs text-slate-600">
             No symbol-level items recorded.
           </td>
         </tr>
@@ -948,7 +974,7 @@ function RecentSyncRunsTable({ runs }: { runs: SyncRunData[] }) {
       <table className="w-full text-left min-w-[700px]">
         <thead>
           <tr className="border-b border-slate-700">
-            {["Time", "Type", "Provider", "Status", "Req", "Updated", "Skipped", "Failed", "Persisted", ""].map(
+            {["Time", "Type", "Provider", "Status", "Req", "Updated", "Skipped", "Failed", "Persisted", "Duration", ""].map(
               (h) => (
                 <th
                   key={h}
@@ -2060,7 +2086,7 @@ export default function SyncPageClient({
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Calculates internal Fundamental Score v1 for stocks with synced Finnhub metrics. Does not call external APIs.
+                Calculates internal Fundamental Score v1 for stocks with synced FMP financial metrics. Does not call external APIs.
               </p>
             </div>
             <ActionButton
@@ -2323,14 +2349,19 @@ FINNHUB_API_KEY=`}
                 label="Test FMP Profile"
                 description="Fetches NVDA company profile from FMP. No DB write."
               />
-              <ActionButton
-                variant="test"
-                onClick={() => runTest("twelve-quote", testTwelveQuoteAction)}
-                disabled={isLoading}
-                loading={activeAction === "twelve-quote"}
-                label="Test Twelve Quote"
-                description="Fetches NVDA latest quote from Twelve Data. No DB write."
-              />
+              <div className="space-y-1">
+                <ActionButton
+                  variant="test"
+                  onClick={() => runTest("twelve-quote", testTwelveQuoteAction)}
+                  disabled={isLoading}
+                  loading={activeAction === "twelve-quote"}
+                  label="Test Twelve Quote"
+                  description="Fetches NVDA latest quote from Twelve Data. No DB write."
+                />
+                <p className="text-[10px] text-amber-500/80 pl-1">
+                  Legacy provider — Daily Market Data Sync currently uses FMP, not Twelve Data. This test is for developer reference only.
+                </p>
+              </div>
               <ActionButton
                 variant="test"
                 onClick={() => runTest("finnhub-news", testFinnhubNewsAction)}
@@ -2373,14 +2404,19 @@ FINNHUB_API_KEY=`}
               </p>
             </div>
             <div className="space-y-2.5">
-              <ActionButton
-                variant="sync"
-                onClick={() => runSync("sync-quotes", syncQuotesSampleAction)}
-                disabled={isLoading}
-                loading={activeAction === "sync-quotes"}
-                label="Sync Quotes Sample"
-                description="Updates StockQuote (price, changePercent, volume, source, lastSyncedAt) for up to 5 existing DB symbols via Twelve Data."
-              />
+              <div className="space-y-1">
+                <ActionButton
+                  variant="sync"
+                  onClick={() => runSync("sync-quotes", syncQuotesSampleAction)}
+                  disabled={isLoading}
+                  loading={activeAction === "sync-quotes"}
+                  label="Sync Quotes Sample"
+                  description="Updates StockQuote (price, changePercent, volume, source, lastSyncedAt) for up to 5 existing DB symbols via Twelve Data."
+                />
+                <p className="text-[10px] text-amber-500/80 pl-1">
+                  Legacy sample — uses Twelve Data. Not the current production daily market data workflow (which uses FMP). Developer use only.
+                </p>
+              </div>
               <ActionButton
                 variant="sync"
                 onClick={() => runSync("sync-profiles", syncProfilesSampleAction)}
@@ -2441,7 +2477,7 @@ FINNHUB_API_KEY=`}
           <div className="flex items-center gap-2">
             <BookOpen className="w-4 h-4 text-slate-400" />
             <h2 className="text-sm font-semibold text-slate-200">Score Methodology</h2>
-            <span className="text-xs text-slate-500 ml-1">How Fundamental Score v1 is calculated</span>
+            <span className="text-xs text-slate-500 ml-1">How scores are calculated</span>
           </div>
           <ScoreMethodologyTab />
         </div>

@@ -171,7 +171,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     label: "Price",
-    sourceLabel: "Finnhub",
+    sourceLabel: "FMP",
     align: "right",
     minWidth: "70px",
     render: (r) =>
@@ -179,7 +179,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     label: "Change %",
-    sourceLabel: "Finnhub",
+    sourceLabel: "FMP",
     align: "right",
     minWidth: "80px",
     render: (r) => {
@@ -191,7 +191,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     label: "Open",
-    sourceLabel: "Finnhub",
+    sourceLabel: "FMP",
     align: "right",
     minWidth: "70px",
     render: (r) =>
@@ -199,7 +199,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     label: "Day High",
-    sourceLabel: "Finnhub",
+    sourceLabel: "FMP",
     align: "right",
     minWidth: "70px",
     render: (r) =>
@@ -207,7 +207,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     label: "Day Low",
-    sourceLabel: "Finnhub",
+    sourceLabel: "FMP",
     align: "right",
     minWidth: "70px",
     render: (r) =>
@@ -215,7 +215,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     label: "Prev Close",
-    sourceLabel: "Finnhub",
+    sourceLabel: "FMP",
     align: "right",
     minWidth: "80px",
     render: (r) =>
@@ -227,7 +227,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     label: "Volume",
-    sourceLabel: "N/A",
+    sourceLabel: "FMP",
     align: "right",
     minWidth: "90px",
     render: (r) =>
@@ -263,7 +263,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     label: "Src Updated",
-    sourceLabel: "Finnhub",
+    sourceLabel: "FMP",
     align: "left",
     minWidth: "120px",
     render: (r) =>
@@ -307,7 +307,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     label: "Rev Growth TTM",
-    sourceLabel: "Finnhub",
+    sourceLabel: "FMP",
     align: "right",
     minWidth: "100px",
     render: (r) =>
@@ -319,7 +319,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     label: "EPS Growth TTM",
-    sourceLabel: "Finnhub",
+    sourceLabel: "FMP",
     align: "right",
     minWidth: "100px",
     render: (r) =>
@@ -331,7 +331,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     label: "Rev Growth 3Y",
-    sourceLabel: "Finnhub",
+    sourceLabel: "FMP",
     align: "right",
     minWidth: "95px",
     render: (r) =>
@@ -343,7 +343,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     label: "Gross Margin",
-    sourceLabel: "Finnhub",
+    sourceLabel: "FMP",
     align: "right",
     minWidth: "90px",
     render: (r) =>
@@ -355,7 +355,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     label: "Op Margin",
-    sourceLabel: "Finnhub",
+    sourceLabel: "FMP",
     align: "right",
     minWidth: "85px",
     render: (r) =>
@@ -367,7 +367,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     label: "Net Margin",
-    sourceLabel: "Finnhub",
+    sourceLabel: "FMP",
     align: "right",
     minWidth: "85px",
     render: (r) =>
@@ -379,7 +379,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     label: "ROE",
-    sourceLabel: "Finnhub",
+    sourceLabel: "FMP",
     align: "right",
     minWidth: "70px",
     render: (r) =>
@@ -391,7 +391,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     label: "ROA",
-    sourceLabel: "Finnhub",
+    sourceLabel: "FMP",
     align: "right",
     minWidth: "70px",
     render: (r) =>
@@ -403,7 +403,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     label: "D/E",
-    sourceLabel: "Finnhub",
+    sourceLabel: "FMP",
     align: "right",
     minWidth: "60px",
     render: (r) =>
@@ -415,7 +415,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     label: "Current Ratio",
-    sourceLabel: "Finnhub",
+    sourceLabel: "FMP",
     align: "right",
     minWidth: "90px",
     render: (r) =>
@@ -427,7 +427,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     label: "P/E TTM",
-    sourceLabel: "Finnhub",
+    sourceLabel: "FMP",
     align: "right",
     minWidth: "70px",
     render: (r) =>
@@ -439,7 +439,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     label: "Fwd P/E",
-    sourceLabel: "Finnhub",
+    sourceLabel: "FMP",
     align: "right",
     minWidth: "70px",
     render: (r) =>
@@ -451,7 +451,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     label: "PEG",
-    sourceLabel: "Finnhub",
+    sourceLabel: "FMP",
     align: "right",
     minWidth: "60px",
     render: (r) =>
@@ -463,7 +463,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     label: "P/S",
-    sourceLabel: "Finnhub",
+    sourceLabel: "FMP",
     align: "right",
     minWidth: "60px",
     render: (r) =>
@@ -475,7 +475,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     label: "EV/EBITDA",
-    sourceLabel: "Finnhub",
+    sourceLabel: "FMP",
     align: "right",
     minWidth: "80px",
     render: (r) =>
@@ -487,7 +487,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     label: "Beta",
-    sourceLabel: "Finnhub",
+    sourceLabel: "FMP",
     align: "right",
     minWidth: "60px",
     render: (r) =>
@@ -499,7 +499,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     label: "Mkt Cap (Metric)",
-    sourceLabel: "Finnhub",
+    sourceLabel: "FMP",
     align: "right",
     minWidth: "100px",
     render: (r) =>
@@ -511,7 +511,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     label: "52W High",
-    sourceLabel: "Finnhub",
+    sourceLabel: "FMP",
     align: "right",
     minWidth: "70px",
     render: (r) =>
@@ -523,7 +523,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     label: "52W Low",
-    sourceLabel: "Finnhub",
+    sourceLabel: "FMP",
     align: "right",
     minWidth: "70px",
     render: (r) =>
@@ -602,10 +602,10 @@ const COLUMNS: ColumnDef[] = [
       ),
   },
   {
-    label: "Risk Scr",
+    label: "Stability Scr",
     sourceLabel: "Internal",
     align: "right",
-    minWidth: "70px",
+    minWidth: "80px",
     render: (r) =>
       r.riskContextScore ? (
         <span className="font-mono text-xs text-slate-300">{r.riskContextScore}</span>
@@ -705,7 +705,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     label: "Target Price",
-    sourceLabel: "Finnhub",
+    sourceLabel: "FMP",
     align: "right",
     minWidth: "90px",
     render: (r) =>
@@ -758,7 +758,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     label: "Target High",
-    sourceLabel: "Finnhub",
+    sourceLabel: "FMP",
     align: "right",
     minWidth: "90px",
     render: (r) =>
@@ -770,7 +770,7 @@ const COLUMNS: ColumnDef[] = [
   },
   {
     label: "Target Low",
-    sourceLabel: "Finnhub",
+    sourceLabel: "FMP",
     align: "right",
     minWidth: "90px",
     render: (r) =>
