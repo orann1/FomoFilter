@@ -184,7 +184,7 @@ Expanded row with:
 | Phase 21D | Completed | Dashboard Clarity Cleanup |
 | Phase 21E | Completed | Data Inventory / Admin Data Health Cleanup |
 | Phase 22B | Completed | Multi-Universe Unique Sync Foundation + S&P 500 Expansion |
-| Phase 22C | Planned | Data Inventory pagination / sync hardening |
+| Phase 22C | Completed | Data Inventory pagination / sync hardening |
 | Phase 23 | Planned | Historical Daily + Momentum Foundation |
 | Phase 24 | Planned | Momentum Indicators |
 | Phase 25 | Planned | Hot Score v1 |

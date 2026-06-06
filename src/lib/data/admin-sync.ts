@@ -135,12 +135,14 @@ export async function getLatestChunkedSyncRun(): Promise<LatestChunkedSyncRun | 
   };
 }
 
+export const SYNC_HISTORY_ITEM_LIMIT = 100;
+
 export async function getRecentSyncRuns(limit = 10): Promise<SyncRunRow[]> {
   return prisma.syncRun.findMany({
     take: limit,
     orderBy: { startedAt: "desc" },
     include: {
-      items: { orderBy: { createdAt: "asc" } },
+      items: { orderBy: { createdAt: "asc" }, take: SYNC_HISTORY_ITEM_LIMIT },
     },
   });
 }

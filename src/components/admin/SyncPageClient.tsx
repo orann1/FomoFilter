@@ -609,10 +609,27 @@ function ChunkedSyncResultPanel({ progress }: { progress: ChunkedSyncProgress })
         {progress.durationMs !== null && (
           <MetaRow label="Duration" value={formatDuration(progress.durationMs)} />
         )}
+        {progress.finishedAt && (
+          <MetaRow
+            label="Completed"
+            value={new Date(progress.finishedAt).toLocaleString([], {
+              month: "short",
+              day: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          />
+        )}
       </div>
 
       {progress.message && (
         <p className="text-xs text-slate-400">{progress.message}</p>
+      )}
+
+      {isPartial && progress.skippedCount > 0 && (
+        <p className="text-xs text-blue-400 bg-blue-900/20 border border-blue-800/40 rounded px-2.5 py-1.5">
+          Skipped symbols are expected — typically S&P 500 stocks without full FMP coverage, or symbols the provider returned no data for. Check Sync History for symbol-level detail.
+        </p>
       )}
 
       <p className="text-xs text-slate-500">
@@ -872,7 +889,13 @@ function dbActionLabel(action: string): string {
 
 function SyncRunRow({ run }: { run: SyncRunData }) {
   const [expanded, setExpanded] = useState(false);
+  const [showFailedOnly, setShowFailedOnly] = useState(false);
   const startedDate = new Date(run.startedAt);
+
+  const isTruncated = run.items.length >= 100 && run.requestedCount > 100;
+  const displayedItems = showFailedOnly
+    ? run.items.filter((item) => item.status !== "success")
+    : run.items;
 
   return (
     <>
@@ -924,32 +947,60 @@ function SyncRunRow({ run }: { run: SyncRunData }) {
       {expanded && run.items.length > 0 && (
         <tr className="border-b border-slate-700/30 bg-slate-900/40">
           <td colSpan={11} className="px-4 py-3">
-            <div className="space-y-1">
-              {run.items.map((item) => (
-                <div key={item.id} className="flex items-start gap-2 text-xs">
-                  <ItemStatusIcon status={item.status} />
-                  <span className="font-mono font-semibold text-slate-200 w-14 shrink-0">
-                    {item.symbol}
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setShowFailedOnly((v) => !v); }}
+                  className={`px-2 py-0.5 text-[10px] font-medium rounded border transition-colors ${
+                    showFailedOnly
+                      ? "bg-amber-900/40 text-amber-300 border-amber-800/60"
+                      : "text-slate-500 border-slate-700 hover:text-slate-300"
+                  }`}
+                >
+                  {showFailedOnly ? "Showing failed/skipped only" : "Show failed/skipped only"}
+                </button>
+                {isTruncated && !showFailedOnly && (
+                  <span className="text-[10px] text-amber-400">
+                    Showing first 100 of {run.requestedCount} items — use failed/skipped filter to surface problems.
                   </span>
-                  <span
-                    className={
-                      item.status === "success"
-                        ? "text-emerald-400"
-                        : item.status === "skipped"
-                        ? "text-amber-400"
-                        : "text-red-400"
-                    }
-                  >
-                    {item.status}
+                )}
+                {isTruncated && showFailedOnly && (
+                  <span className="text-[10px] text-slate-500">
+                    Note: items list is capped at 100 — failures beyond the first 100 items may not appear here.
                   </span>
-                  {item.reason && (
-                    <span className="text-slate-500">— {item.reason}</span>
-                  )}
-                  <span className="ml-auto text-slate-600 shrink-0">
-                    {dbActionLabel(item.dbAction)}
-                  </span>
-                </div>
-              ))}
+                )}
+              </div>
+              <div className="space-y-1">
+                {displayedItems.length === 0 ? (
+                  <p className="text-xs text-slate-500">No failed or skipped items in the first 100 records.</p>
+                ) : (
+                  displayedItems.map((item) => (
+                    <div key={item.id} className="flex items-start gap-2 text-xs">
+                      <ItemStatusIcon status={item.status} />
+                      <span className="font-mono font-semibold text-slate-200 w-14 shrink-0">
+                        {item.symbol}
+                      </span>
+                      <span
+                        className={
+                          item.status === "success"
+                            ? "text-emerald-400"
+                            : item.status === "skipped"
+                            ? "text-amber-400"
+                            : "text-red-400"
+                        }
+                      >
+                        {item.status}
+                      </span>
+                      {item.reason && (
+                        <span className="text-slate-500">— {item.reason}</span>
+                      )}
+                      <span className="ml-auto text-slate-600 shrink-0">
+                        {dbActionLabel(item.dbAction)}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           </td>
         </tr>

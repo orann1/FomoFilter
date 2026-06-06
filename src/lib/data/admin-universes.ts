@@ -54,9 +54,17 @@ export async function getUniverseOverview(): Promise<UniverseOverviewRow[]> {
 
   const quoteSyncRuns = await prisma.syncRun.findMany({
     where: {
-      type: { contains: "quote" },
+      type: {
+        in: [
+          "market-data-active-symbols-sync",
+          "market-data-nasdaq100-chunked-sync",
+          "market-data-nasdaq100-batch",
+          "quotes-nasdaq100-batch",
+        ],
+      },
       successCount: { gt: 0 },
-      persisted: true,
+      // persisted flag is not reliably set for chunked market-data-active-symbols-sync runs;
+      // successCount > 0 is sufficient to confirm real data was written.
     },
     orderBy: { startedAt: "desc" },
     take: 5,

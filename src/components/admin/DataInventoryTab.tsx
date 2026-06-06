@@ -1,18 +1,22 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import type { ReactNode } from "react";
-import { Search, CheckCircle, XCircle, List } from "lucide-react";
+import { Search, CheckCircle, XCircle, List, ChevronLeft, ChevronRight } from "lucide-react";
 import type { AdminStockDataInventoryRow } from "@/src/lib/data/admin-stock-data";
 
 type FilterId =
   | "all"
   | "scanner-eligible"
+  | "not-scanner-eligible"
+  | "problem-rows"
   | "missing-score"
   | "missing-quote"
+  | "stale-quote"
   | "missing-metrics"
   | "missing-analyst"
   | "nasdaq100"
+  | "sp500"
   | "missing-target"
   | "has-target"
   | "no-target-available"
@@ -23,10 +27,14 @@ type FilterId =
 const FILTERS: Array<{ id: FilterId; label: string }> = [
   { id: "all", label: "All" },
   { id: "scanner-eligible", label: "Scanner Eligible" },
-  { id: "missing-score", label: "Missing Score" },
+  { id: "not-scanner-eligible", label: "Not Eligible" },
+  { id: "problem-rows", label: "Problem Rows" },
   { id: "missing-quote", label: "Missing Quote" },
+  { id: "stale-quote", label: "Stale Quote" },
   { id: "missing-metrics", label: "Missing Metrics" },
+  { id: "missing-score", label: "Missing Score" },
   { id: "missing-analyst", label: "Missing Analyst" },
+  { id: "sp500", label: "S&P 500" },
   { id: "nasdaq100", label: "Nasdaq 100" },
   { id: "missing-target", label: "Missing Target" },
   { id: "has-target", label: "Has Target" },
@@ -129,6 +137,13 @@ const COLUMNS: ColumnDef[] = [
     align: "center",
     minWidth: "90px",
     render: (r) => <YesNoBadge value={r.inNasdaq100} />,
+  },
+  {
+    label: "S&P 500",
+    sourceLabel: "Static Fallback",
+    align: "center",
+    minWidth: "80px",
+    render: (r) => <YesNoBadge value={r.inSp500} />,
   },
   {
     label: "Univ. Source",
@@ -892,6 +907,8 @@ interface DataInventoryTabProps {
 export default function DataInventoryTab({ rows }: DataInventoryTabProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterId>("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState<25 | 50 | 100>(50);
 
   const summary = useMemo(
     () => ({
@@ -905,6 +922,8 @@ export default function DataInventoryTab({ rows }: DataInventoryTabProps) {
       withAnalystData: rows.filter((r) => r.hasAnalystData).length,
       missingAnalyst: rows.filter((r) => !r.hasAnalystData).length,
       nasdaq100Active: rows.filter((r) => r.inNasdaq100 && r.membershipActive).length,
+      sp500Active: rows.filter((r) => r.inSp500).length,
+      staleQuote: rows.filter((r) => r.quoteIsStale).length,
       hasTarget: rows.filter((r) => r.targetStatus === "has_target").length,
       planLimited: rows.filter((r) => r.targetStatus === "plan_limited").length,
       missingTarget: rows.filter((r) => !r.targetStatus || r.targetStatus === "not_checked" || r.targetStatus === "no_target_available").length,
@@ -929,17 +948,29 @@ export default function DataInventoryTab({ rows }: DataInventoryTabProps) {
       case "scanner-eligible":
         result = result.filter((r) => r.scannerEligible);
         break;
+      case "not-scanner-eligible":
+        result = result.filter((r) => !r.scannerEligible);
+        break;
+      case "problem-rows":
+        result = result.filter((r) => !r.hasQuote || !r.hasMetric || !r.hasScore || !r.scannerEligible);
+        break;
       case "missing-score":
         result = result.filter((r) => !r.hasScore);
         break;
       case "missing-quote":
         result = result.filter((r) => !r.hasQuote);
         break;
+      case "stale-quote":
+        result = result.filter((r) => r.quoteIsStale);
+        break;
       case "missing-metrics":
         result = result.filter((r) => !r.hasMetric);
         break;
       case "missing-analyst":
         result = result.filter((r) => !r.hasAnalystData);
+        break;
+      case "sp500":
+        result = result.filter((r) => r.inSp500);
         break;
       case "nasdaq100":
         result = result.filter((r) => r.inNasdaq100 && r.membershipActive);
@@ -976,6 +1007,17 @@ export default function DataInventoryTab({ rows }: DataInventoryTabProps) {
     return result;
   }, [rows, searchQuery, activeFilter]);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, activeFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+
+  const paginatedRows = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filteredRows.slice(start, start + pageSize);
+  }, [filteredRows, currentPage, pageSize]);
+
   return (
     <div className="space-y-5">
 
@@ -997,6 +1039,7 @@ export default function DataInventoryTab({ rows }: DataInventoryTabProps) {
             color={summary.scannerEligible > 0 ? "text-emerald-400" : "text-amber-400"}
           />
           <SummaryCard label="Nasdaq 100 Active" value={summary.nasdaq100Active} color="text-blue-400" />
+          <SummaryCard label="S&P 500 Active" value={summary.sp500Active} color="text-blue-400" />
         </div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-slate-700/50">
           <SummaryCard label="With Analyst Data" value={summary.withAnalystData} color="text-emerald-400" />
@@ -1020,16 +1063,21 @@ export default function DataInventoryTab({ rows }: DataInventoryTabProps) {
       </section>
 
       {/* Search + filter controls */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px]">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search symbol or company…"
-            className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-1.5 pl-8 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-slate-500"
-          />
+      <div className="space-y-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative flex-1 min-w-[200px]">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search symbol or company…"
+              className="w-full bg-slate-800 border border-slate-700 rounded px-3 py-1.5 pl-8 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-slate-500"
+            />
+          </div>
+          <span className="text-xs text-slate-500 whitespace-nowrap">
+            {filteredRows.length} / {rows.length} rows
+          </span>
         </div>
         <div className="flex flex-wrap gap-1.5">
           {FILTERS.map((f) => (
@@ -1046,9 +1094,48 @@ export default function DataInventoryTab({ rows }: DataInventoryTabProps) {
             </button>
           ))}
         </div>
-        <span className="text-xs text-slate-500 whitespace-nowrap">
-          {filteredRows.length} / {rows.length} rows
-        </span>
+      </div>
+
+      {/* Pagination controls */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-slate-500">Rows per page:</span>
+          {([25, 50, 100] as const).map((size) => (
+            <button
+              key={size}
+              onClick={() => { setPageSize(size); setCurrentPage(1); }}
+              className={`px-2 py-0.5 text-xs rounded border transition-colors ${
+                pageSize === size
+                  ? "bg-slate-700 text-slate-200 border-slate-600"
+                  : "text-slate-500 border-slate-700 hover:text-slate-300"
+              }`}
+            >
+              {size}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-slate-500">
+            {filteredRows.length === 0
+              ? "0 rows"
+              : `${(currentPage - 1) * pageSize + 1}–${Math.min(currentPage * pageSize, filteredRows.length)} of ${filteredRows.length}`}
+          </span>
+          <button
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            disabled={currentPage === 1}
+            className="p-1 rounded text-slate-400 hover:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <span className="text-xs text-slate-400 font-mono tabular-nums">{currentPage} / {totalPages}</span>
+          <button
+            onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+            disabled={currentPage >= totalPages}
+            className="p-1 rounded text-slate-400 hover:text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
       </div>
 
       {/* Table */}
@@ -1093,7 +1180,7 @@ export default function DataInventoryTab({ rows }: DataInventoryTabProps) {
               </tr>
             </thead>
             <tbody>
-              {filteredRows.length === 0 ? (
+              {paginatedRows.length === 0 ? (
                 <tr>
                   <td
                     colSpan={COLUMNS.length}
@@ -1103,7 +1190,7 @@ export default function DataInventoryTab({ rows }: DataInventoryTabProps) {
                   </td>
                 </tr>
               ) : (
-                filteredRows.map((row) => (
+                paginatedRows.map((row) => (
                   <tr
                     key={row.id}
                     className="border-b border-slate-700/30 hover:bg-slate-800/40"
@@ -1130,8 +1217,12 @@ export default function DataInventoryTab({ rows }: DataInventoryTabProps) {
         </div>
         <div className="px-4 py-2 border-t border-slate-700/40 bg-slate-900/30">
           <p className="text-[10px] text-slate-600">
-            Showing {filteredRows.length} of {rows.length} stocks. Data is read directly from the
-            DB — no external API calls.
+            Showing{" "}
+            {filteredRows.length === 0
+              ? "0"
+              : `${(currentPage - 1) * pageSize + 1}–${Math.min(currentPage * pageSize, filteredRows.length)}`}{" "}
+            of {filteredRows.length} filtered rows ({rows.length} total). Data is read directly
+            from the DB — no external API calls.
           </p>
         </div>
       </section>

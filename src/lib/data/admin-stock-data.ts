@@ -8,11 +8,13 @@ export type AdminStockDataInventoryRow = {
   marketCap: string | null;
 
   inNasdaq100: boolean;
+  inSp500: boolean;
   universeSource: string | null;
   membershipActive: boolean;
   membershipLastSeenAt: string | null;
 
   hasQuote: boolean;
+  quoteIsStale: boolean;
   price: string | null;
   changePercent: string | null;
   open: string | null;
@@ -125,6 +127,8 @@ function normalizeSource(source: string | null | undefined): string {
   }
 }
 
+const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
+
 export async function getAdminStockDataInventory(): Promise<AdminStockDataInventoryRow[]> {
   const stocks = await prisma.stock.findMany({
     include: {
@@ -146,8 +150,13 @@ export async function getAdminStockDataInventory(): Promise<AdminStockDataInvent
   return stocks.map((stock) => {
     const nasdaq100Membership =
       stock.universeMemberships.find((m) => m.universe.slug === "nasdaq-100") ?? null;
+    const sp500Membership =
+      stock.universeMemberships.find((m) => m.universe.slug === "sp-500") ?? null;
 
     const quote = stock.quote;
+    const quoteIsStale =
+      quote !== null &&
+      (!quote.lastSyncedAt || Date.now() - quote.lastSyncedAt.getTime() > STALE_THRESHOLD_MS);
     const score = stock.score;
     const metric = stock.metric;
 
@@ -184,11 +193,13 @@ export async function getAdminStockDataInventory(): Promise<AdminStockDataInvent
       marketCap: stock.marketCap ?? null,
 
       inNasdaq100: nasdaq100Membership !== null,
+      inSp500: sp500Membership !== null && (sp500Membership.isActive ?? false),
       universeSource: nasdaq100Membership?.source ?? null,
       membershipActive: nasdaq100Membership?.isActive ?? false,
       membershipLastSeenAt: formatShortDate(nasdaq100Membership?.lastSeenAt),
 
       hasQuote: quote !== null,
+      quoteIsStale,
       price: fmtDecimal(quote?.price),
       changePercent: quote !== null ? `${fmtDecimal(quote.changePercent)}%` : null,
       open: fmtDecimal(quote?.open),

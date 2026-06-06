@@ -566,3 +566,45 @@ duplicate Stock rows by symbol: 0
 **Files changed (application code):** `src/lib/market-data/sp500-fallback-symbols.ts` (new), `src/actions/market-data-actions.ts`, `src/lib/data/admin-universes.ts`, `src/lib/data/admin-sync.ts`, `src/lib/data/scanner.ts`, `src/lib/data/dashboard.ts`, `src/components/admin/SyncPageClient.tsx`, `src/components/scanner/ScannerPageClient.tsx`, `app/api/admin/sync-runs/start/route.ts`, `app/api/admin/sync-runs/process-next/route.ts`, `app/api/admin/sync-runs/latest/route.ts`, `app/api/admin/analyst-sync/start/route.ts`, `app/api/admin/analyst-sync/process-next/route.ts`, `app/api/admin/analyst-sync/latest/route.ts`, `app/scanner/page.tsx`, `prisma/seed.ts`
 
 **Files changed (documentation):** `Context/current-feature.md`, `Context/feature-history.md`, `Context/project-overview.md`, `Context/data-model.md`, `Context/sync-workflows.md`, `Context/Features/market-data-sync-strategy.md`, `Context/Features/admin-sync-feature-spec.md`, `Context/Features/scanner-feature-spec.md`, `Context/Features/dashboard-feature-spec.md`
+
+---
+
+### Phase 22C — Data Inventory Pagination + Sync Scale Hardening
+
+**Goal:** Make Admin Sync, Data Inventory, and Sync History usable at 500–1000 stock scale following the Phase 22B multi-universe expansion (~518 unique active stocks).
+
+**Branch:** `feature/data-inventory-scale-hardening`
+
+**Key deliverables:**
+
+- Extended `AdminStockDataInventoryRow` with `inSp500: boolean` (active S&P 500 membership) and `quoteIsStale: boolean` (lastSyncedAt > 24h threshold). Loader detects sp-500 slug membership directly.
+- Added **S&P 500 column** in the Data Inventory Universe section and **S&P 500 Active** summary card.
+- Added four new Data Inventory **filters**: S&P 500, Not Eligible (`!scannerEligible`), Problem Rows (`!hasQuote || !hasMetric || !hasScore || !scannerEligible`), Stale Quote (`quoteIsStale`). Filter order reordered: health filters before target discovery filters.
+- Added **client-side pagination** to Data Inventory: default 50 rows, page size selector 25/50/100, prev/next controls, page X/Y display, row range readout. Page resets to 1 on filter or search change. Pagination applies after all filter/search logic.
+- Capped expanded **Sync History items** at 100 per run via `take: SYNC_HISTORY_ITEM_LIMIT` in `getRecentSyncRuns()`. Constant exported from `admin-sync.ts`.
+- Added **failed/skipped-only toggle** in expanded `SyncRunRow`. Truncation note shown when `items.length >= 100 && requestedCount > 100`. Toggle click does not collapse the row.
+- Added **completed date/time** (`finishedAt`) to `ChunkedSyncResultPanel` for Daily Market Data and Company Data terminal results.
+- Added **partial_success guidance note** (blue) when `isPartial && skippedCount > 0`: explains that skipped symbols are expected for broader S&P 500 provider coverage.
+- Fixed **Universe Overview lastQuoteSync** query: changed from `type: { contains: "quote" }` to explicit type list including `market-data-active-symbols-sync`. Also removed `persisted: true` constraint — chunked market-data-active-symbols-sync runs have `persisted: false` on the SyncRun record; `successCount: { gt: 0 }` is the correct guard.
+
+**Data coverage verified at commit (live DB):**
+
+```txt
+Total stocks:       518
+inSp500:true:       499   active S&P 500 members
+inSp500:false:      19    Nasdaq 100-only stocks
+hasQuote:true:      516   (2 failed Daily Market Data Sync — provider no-data)
+hasMetric:true:     517   (1 missing — expected FMP coverage gap)
+hasScore:true:      517
+hasAnalystData:     518   100% coverage
+scannerEligible:    516
+quoteIsStale:       0     (all quotes fresh after recent sync)
+```
+
+**No schema changes. No migrations. No provider calls added. No scoring changes. No sync workflow behavior changes. Scanner, Dashboard, and Drawer behavior unchanged.**
+
+**Automated checks:** build ✅  tsc ✅  prisma validate ✅  migrate status ✅ (14 migrations, up to date)
+
+**Files changed (application code):** `src/lib/data/admin-stock-data.ts`, `src/lib/data/admin-sync.ts`, `src/lib/data/admin-universes.ts`, `src/components/admin/DataInventoryTab.tsx`, `src/components/admin/SyncPageClient.tsx`
+
+**Files changed (documentation):** `Context/current-feature.md`, `Context/feature-history.md`, `Context/project-overview.md`, `Context/Features/admin-sync-feature-spec.md`

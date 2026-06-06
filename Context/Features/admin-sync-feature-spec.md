@@ -301,7 +301,55 @@ Score version
 
 Do not turn it into a second stock discovery screen.
 
-Data Inventory pagination/virtualization is future work.
+### Data Inventory Pagination (Phase 22C)
+
+Data Inventory renders client-side paginated rows.
+
+```txt
+Default page size: 50 rows
+Page size options: 25 / 50 / 100
+Pagination controls: rows-per-page selector, prev/next, page X / Y
+Page resets to 1 on filter or search change
+Filter and search apply before pagination
+All rows are loaded server-side; pagination is purely a render concern
+```
+
+### Data Inventory Filters (Phase 22C)
+
+Current filter set:
+
+```txt
+All
+Scanner Eligible
+Not Eligible             — inverse of Scanner Eligible
+Problem Rows             — !hasQuote || !hasMetric || !hasScore || !scannerEligible
+Missing Quote
+Stale Quote              — has quote but lastSyncedAt > 24 hours ago
+Missing Metrics
+Missing Score
+Missing Analyst
+S&P 500                  — active S&P 500 members (sp-500 slug, isActive = true)
+Nasdaq 100               — active Nasdaq 100 members (nasdaq-100 slug, isActive = true)
+Missing Target
+Has Target
+No Target Available
+Plan Limited
+Eligible for Retry
+Provider Error
+```
+
+### Data Inventory Summary Cards (Phase 22C)
+
+First row: Total Stocks, With Quote, With Metrics, With Score, Scanner Eligible, Nasdaq 100 Active, S&P 500 Active.
+
+Second row: With Analyst Data, Missing Analyst, Has Target Price, Missing Target, Plan Limited.
+
+### Data Inventory Columns (Phase 22C)
+
+Universe section includes:
+- Nasdaq 100 (yes/no badge, Static Fallback source)
+- S&P 500 (yes/no badge, Static Fallback source) — added Phase 22C
+- Univ. Source, Mbr Active, Mbr Last Seen
 
 ---
 
@@ -370,6 +418,59 @@ Updated Score Methodology tab subtitle to "How scores are calculated"
 Labeled Twelve Data provider test and Sync Quotes Sample as legacy / not current production
 Added Duration column to Sync History using durationMs or computed from startedAt/finishedAt
 ```
+
+---
+
+## Sync History Rules (Phase 22C)
+
+SyncRunItems per expanded row are capped at 100 (loaded via `take: 100` in `getRecentSyncRuns`).
+
+Expanded row controls:
+
+```txt
+Toggle: "Show failed/skipped only" — filters the displayed items to non-success statuses
+Truncation note: shown when items.length >= 100 and requestedCount > 100
+  "Showing first 100 of N items — use failed/skipped filter to surface problems."
+```
+
+If "show failed/skipped only" is active and items are truncated, a note warns:
+"Note: items list is capped at 100 — failures beyond the first 100 items may not appear here."
+
+The Sync History label remains "Latest 10 runs".
+
+---
+
+## Admin Sync Status Panels (Phase 22C)
+
+`ChunkedSyncResultPanel` (shown after a terminal Daily Market Data or Company Data sync run):
+
+```txt
+Shows: requested, processed, succeeded, skipped, failed, duration, completed date/time
+Completed date: formatted as "Jun 5 at 14:32" from progress.finishedAt
+```
+
+`partial_success` guidance (shown when isPartial and skippedCount > 0):
+
+```txt
+"Skipped symbols are expected — typically S&P 500 stocks without full FMP coverage,
+or symbols the provider returned no data for. Check Sync History for symbol-level detail."
+```
+
+Universe Overview `lastQuoteSync` column now queries by explicit type list:
+
+```txt
+market-data-active-symbols-sync  (current production type, Phase 22B+)
+market-data-nasdaq100-chunked-sync
+market-data-nasdaq100-batch
+quotes-nasdaq100-batch
+```
+
+Previously used `type: { contains: "quote" }` which missed the new production type.
+
+The `persisted: true` condition was also removed from the query.
+`market-data-active-symbols-sync` chunked sync runs set `persisted: false` on the SyncRun record.
+`successCount: { gt: 0 }` is retained as the guard — only runs that actually updated stocks
+are considered for the lastQuoteSync display.
 
 ---
 
