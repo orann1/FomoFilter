@@ -69,6 +69,7 @@ Watchlist and alert rules
 | `/scanner` | Implemented | Main stock discovery workspace |
 | `/admin/sync` | Implemented | Manual data sync, provider tests, sync history, data inventory |
 | Drawer from Scanner | Implemented | Visual decision cockpit — rule-based narrative, signal cards, watchlist/alert actions |
+| `/opportunity-radar` | Planned (Phase 23A) | AI-style market discovery surface — mock-only in Phase 23A, not yet implemented |
 
 ---
 
@@ -185,13 +186,15 @@ Expanded row with:
 | Phase 21E | Completed | Data Inventory / Admin Data Health Cleanup |
 | Phase 22B | Completed | Multi-Universe Unique Sync Foundation + S&P 500 Expansion |
 | Phase 22C | Completed | Data Inventory pagination / sync hardening |
-| Phase 23 | Planned | Historical Daily + Momentum Foundation |
-| Phase 24 | Planned | Momentum Indicators |
-| Phase 25 | Planned | Hot Score v1 |
-| Phase 26 | Planned | Alert Evaluation Engine |
-| Phase 27 | Planned | Stock Details Page |
-| Phase 28 | Planned | News / Catalyst Data Foundation |
-| Phase 29 | Planned | AI Insight Generation |
+| Phase 23A | Active | Opportunity Radar Mock Experience — visual mock page at /opportunity-radar, no AI/DB/providers |
+| Phase 23B | Planned | Opportunity Radar AI Agent Design — prompt engineering, candidate generation logic, output schema |
+| Phase 23C | Planned | Opportunity Radar Persistence + Admin Scan Integration — AI agent runs through Admin, results stored in DB |
+| Phase 24 | Planned | Historical Daily + Momentum Foundation (after Opportunity Radar direction is validated) |
+| Phase 25 | Planned | Momentum Indicators |
+| Phase 26 | Planned | Hot Score v1 |
+| Phase 27 | Planned | Alert Evaluation Engine |
+| Phase 28 | Planned | Stock Details Page |
+| Phase 29 | Planned | News / Catalyst Data Foundation |
 
 ---
 

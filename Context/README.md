@@ -35,6 +35,7 @@ Read only:
 | Drawer / stock preview panel | `Context/Features/drawer-feature-spec.md` | same file |
 | Dashboard | `Context/Features/dashboard-feature-spec.md` | same file |
 | Admin Sync UI or admin workflows | `Context/Features/admin-sync-feature-spec.md` | same file |
+| Opportunity Radar / market discovery page | `Context/Features/opportunity-radar-feature-spec.md` | same file |
 | Market data providers or provider responsibilities | `Context/Features/market-data-sync-strategy.md` | same file |
 | Sync routes / sync cadence / SyncRun behavior | `Context/sync-workflows.md` | same file |
 | Prisma schema / DB ownership | `Context/data-model.md` | same file |
@@ -104,6 +105,7 @@ Reason:
 | `Context/Features/drawer-feature-spec.md` | Drawer decision workspace spec |
 | `Context/Features/dashboard-feature-spec.md` | Dashboard spec |
 | `Context/Features/admin-sync-feature-spec.md` | Admin Sync spec |
+| `Context/Features/opportunity-radar-feature-spec.md` | Opportunity Radar market discovery spec |
 | `Context/Features/market-data-sync-strategy.md` | Provider strategy |
 
 ### Algorithms
