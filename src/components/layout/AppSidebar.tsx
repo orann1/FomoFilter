@@ -5,6 +5,7 @@ import Link from "next/link";
 import {
   LayoutDashboard,
   Radar,
+  RadioTower,
   Star,
   Bell,
   LineChart,
@@ -18,6 +19,7 @@ import type { DashboardUser } from "@/src/lib/data/dashboard";
 const navItems = [
   { label: "Dashboard", icon: LayoutDashboard, href: "/" },
   { label: "Scanner", icon: Radar, href: "/scanner" },
+  { label: "Opportunity Radar", icon: RadioTower, href: "/opportunity-radar" },
   { label: "Watchlist", icon: Star, href: "/watchlist" },
   { label: "Alerts", icon: Bell, href: "/alerts", badge: 3 },
   { label: "Stocks", icon: LineChart, href: "/stocks" },

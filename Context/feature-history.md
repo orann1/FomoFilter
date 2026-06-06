@@ -608,3 +608,111 @@ quoteIsStale:       0     (all quotes fresh after recent sync)
 **Files changed (application code):** `src/lib/data/admin-stock-data.ts`, `src/lib/data/admin-sync.ts`, `src/lib/data/admin-universes.ts`, `src/components/admin/DataInventoryTab.tsx`, `src/components/admin/SyncPageClient.tsx`
 
 **Files changed (documentation):** `Context/current-feature.md`, `Context/feature-history.md`, `Context/project-overview.md`, `Context/Features/admin-sync-feature-spec.md`
+
+---
+
+## Phase 23A — Opportunity Radar Mock Experience
+
+**Goal:** Establish the visual product direction for a future AI-assisted market discovery surface separate from Scanner, using hardcoded mock data with no real AI, DB reads/writes, provider calls, or production scoring changes.
+
+**Branch:** `feature/opportunity-radar-mock`
+
+**Implementation Summary:**
+
+Built a mock-only Daily Opportunity Briefing page at `/opportunity-radar` with a Lens-based discovery system and focused 3-card Opportunity Deck:
+
+**Core UX:**
+- Hero section: "Daily Opportunity Briefing" with time controls (Today / Yesterday / Last 7 Days / Last 30 Days tabs)
+- 4 Radar Lenses for discovery and contextualization:
+  - Attention Spike (muted indigo): unusual attention or signal activity before story is obvious
+  - Overreaction (muted amber): sharp declines that may deserve a second look
+  - Value Gap (muted emerald): valuation signals disconnected from business quality
+  - Future Theme (muted purple): emerging sectors or speculative growth themes
+- Lens explanation banner below Lens bar with color-family-consistent styling
+- 3-card Opportunity Deck showing top candidates for selected Lens
+- Candidate cards displaying:
+  - Ticker, company name, category badge, headline
+  - 3 radar signal bullets
+  - Signal Snapshot: Analyst Rating (stars), mock 1W Move (color-coded), Analyst Upside
+  - Next Check section
+  - Click affordance to open Intel Brief
+- Intel Brief side panel with:
+  - Left: Radar Narrative (why on radar, what's interesting, key concerns, next steps)
+  - Right: FomoFilter Validation panel with Radar Conviction (mock-only UI) and 8 validation metrics
+- Research discipline footer with responsible language and mock-only disclaimer
+
+**Mock Data:**
+- 12 fully-formed candidates (NVDA, SMCI, META, PLTR, AAPL, TSLA, AMD, SNOW, MSFT, RIVN, SOFI, IONQ)
+- Complete field coverage: thesis, catalysts, bull/bear cases, scores, evidence counts, source types, tags
+- History-aware fields: trend status, appearance counts, first/last seen dates, previous categories
+- Signal Snapshot fields: radarConvictionScore, radarSignalStrength, opportunityScore, fundamentalScore, analystUpsidePercent, analystRating, valuationScore, stabilityScore, peRatio, 52W position, market cap, priceChange1WPercent
+- Time-window filtering for tabs
+- Lens-to-category mapping for discovery flow
+
+**Radar Conviction Clarification:**
+Radar Conviction is a mock-only UI concept in Phase 23A used in the Intel Brief FomoFilter Validation panel. It is NOT production scoring logic and does not replace Opportunity Score. In future phases (23C+), it will become a real DB-backed validation score computed by the AI agent. Current production scoring (Opportunity Score, Fundamental Score, etc.) remains unchanged.
+
+**Color System & Visual Coherence:**
+Each Lens has unified color identity across:
+- Active button background and border
+- Lens explanation banner
+- Candidate card accents and borders
+- Hover states with improved readability (no dark text on dark)
+
+**Navigation & Routing:**
+- New `/opportunity-radar` route (server page + client component)
+- Added "Opportunity Radar" nav item to sidebar after Scanner
+- Route marked as dynamic, rendered on demand
+- Status clearly marked as mock-only in UI
+
+**Files Added:**
+- `app/opportunity-radar/page.tsx` — Server page wrapper
+- `src/components/opportunity-radar/OpportunityRadarPageClient.tsx` — Main client component (959 lines)
+- `src/lib/mock-opportunity-radar.ts` — 12 mock candidates (425 lines)
+- `src/types/opportunity-radar.ts` — TypeScript types and enums
+
+**Files Modified:**
+- `app/globals.css` — Added `.radar-deck` responsive grid class
+- `src/components/layout/AppSidebar.tsx` — Added Opportunity Radar nav item
+
+**Constraints Maintained:**
+- ✅ Mock UI experience only — no real AI runs
+- ✅ No web or news calls
+- ✅ No DB reads/writes from render path
+- ✅ No schema changes or migrations
+- ✅ No provider calls
+- ✅ No Admin Sync execution logic
+- ✅ No production scoring logic changes
+- ✅ Responsible research framing throughout
+- ✅ No "buy/sell/guaranteed/safe" language
+- ✅ Radar Conviction clearly marked as mock-only
+
+**Automated Checks:**
+- `npm run build` — ✅ Pass (14 routes including dynamic /opportunity-radar)
+- `npx tsc --noEmit` — ✅ Pass (no TypeScript errors)
+- `npx prisma validate` — ✅ Pass (schema valid)
+- `npx prisma migrate status` — ✅ Pass (14 migrations, up to date)
+
+**Browser & Regression QA:**
+- ✅ /opportunity-radar loads correctly
+- ✅ All 4 Lenses functional with correct filtering
+- ✅ Time tabs filter candidates correctly
+- ✅ Card click opens Intel Brief
+- ✅ No dark-on-dark text readability issues
+- ✅ Responsive mobile layout
+- ✅ No regressions: /, /scanner, /admin/sync all still load correctly
+- ✅ Navigation active states work correctly
+
+**Design Direction Approved:**
+The final approved design uses Lens-based filtering with a focused 3-card Opportunity Deck and Intel Brief panel, distinct from the original category-lanes concept. This direction was chosen for its balance of visual focus and deep context.
+
+**Documentation Updates:**
+- `Context/Features/opportunity-radar-feature-spec.md` — Updated to reflect final Lens-based design and 3-card deck
+- `Context/current-feature.md` — Status updated to implementation complete, QA passed
+- `Context/project-overview.md` — Route status changed to "Implemented (Phase 23A)", phase status to "Implementation Complete"
+
+**Ready for Future Phases:**
+Phase 23A establishes the direction. Future phases:
+- **Phase 23B:** AI agent design — prompt engineering, candidate generation logic, output schema
+- **Phase 23C:** Persistence + Admin Scan Integration — AI agent runs through Admin Sync, results stored in DB, /opportunity-radar reads from DB
+- **Future:** Scheduled daily scans, evidence storage, integration with Scanner/Watchlist/Alerts

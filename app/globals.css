@@ -1,5 +1,32 @@
 @import "tailwindcss";
 
+/* Opportunity Radar cockpit — 3-column layout (legacy, unused) */
+.radar-cockpit {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (min-width: 1024px) {
+  .radar-cockpit {
+    grid-template-columns: 220px 1fr 252px;
+  }
+}
+
+/* Opportunity Deck — always 3 columns above a safe desktop breakpoint */
+.radar-deck {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+
+@media (min-width: 700px) {
+  .radar-deck {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @theme {
   --animate-drawer-slide-in: drawerSlideIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) both;
   --animate-drawer-slide-out: drawerSlideOut 0.22s cubic-bezier(0.4, 0, 1, 1) both;

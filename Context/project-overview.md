@@ -69,7 +69,7 @@ Watchlist and alert rules
 | `/scanner` | Implemented | Main stock discovery workspace |
 | `/admin/sync` | Implemented | Manual data sync, provider tests, sync history, data inventory |
 | Drawer from Scanner | Implemented | Visual decision cockpit — rule-based narrative, signal cards, watchlist/alert actions |
-| `/opportunity-radar` | Planned (Phase 23A) | AI-style market discovery surface — mock-only in Phase 23A, not yet implemented |
+| `/opportunity-radar` | Implemented (Phase 23A) | AI-style market discovery surface — Lens-based mock experience with Opportunity Deck and Intel Brief. No AI/DB/providers in Phase 23A. |
 
 ---
 
@@ -186,7 +186,7 @@ Expanded row with:
 | Phase 21E | Completed | Data Inventory / Admin Data Health Cleanup |
 | Phase 22B | Completed | Multi-Universe Unique Sync Foundation + S&P 500 Expansion |
 | Phase 22C | Completed | Data Inventory pagination / sync hardening |
-| Phase 23A | Active | Opportunity Radar Mock Experience — visual mock page at /opportunity-radar, no AI/DB/providers |
+| Phase 23A | Implementation Complete | Opportunity Radar Mock Experience — Lens-based discovery with 4 lenses, 3-card Opportunity Deck, Intel Brief. Visual direction validated. Awaiting commit approval. |
 | Phase 23B | Planned | Opportunity Radar AI Agent Design — prompt engineering, candidate generation logic, output schema |
 | Phase 23C | Planned | Opportunity Radar Persistence + Admin Scan Integration — AI agent runs through Admin, results stored in DB |
 | Phase 24 | Planned | Historical Daily + Momentum Foundation (after Opportunity Radar direction is validated) |

@@ -4,7 +4,7 @@
 
 ```txt
 Phase 23A — Opportunity Radar Mock Experience
-Status: In progress / awaiting implementation.
+Status: Implementation complete. QA passed. Documentation updated. Awaiting commit approval.
 Branch: feature/opportunity-radar-mock
 ```
 
@@ -39,18 +39,46 @@ Context/Features/dashboard-feature-spec.md
 
 ---
 
-## Goal
+## Goal (Achieved)
 
-Build a visually distinctive, mock-only Opportunity Radar page at `/opportunity-radar` that surfaces stocks worth further research based on simulated AI-style market discovery signals from the last 24 hours.
+✅ Built a visually distinctive, mock-only Opportunity Radar page at `/opportunity-radar` that surfaces stocks worth further research based on simulated AI-style market discovery signals from the last 24 hours.
 
-This phase is a mock UI experience only.
-No real AI runs.
-No web or news calls.
-No DB writes.
-No schema changes.
-No migrations.
-No provider calls.
-No Admin Sync execution logic.
+**Implementation Summary:**
+
+Core Structure:
+- Daily Opportunity Briefing hero with time controls (Today / Yesterday / Last 7 Days / Last 30 Days)
+- 4 Radar Lenses for discovery: Attention Spike, Overreaction, Value Gap, Future Theme
+- Lens explanation banner with color-coded identity
+- 3-card Opportunity Deck showing top candidates for selected Lens
+- Intel Brief side panel with deep narrative and validation context
+
+Candidate Cards:
+- Ticker, company name, category badge, headline
+- 3 radar signal bullets
+- Signal Snapshot: Analyst Rating (stars), mock 1W Move, Analyst Upside
+- Next Check with category-colored callout
+- Click to open Intel Brief
+
+Intel Brief:
+- Left: Radar Narrative (why on radar, what's interesting, concerns, next steps)
+- Right: FomoFilter Validation (Radar Conviction + 9 validation metrics)
+- All scores are mock-only UI concepts
+
+Mock Data:
+- 12 fully-formed candidates with comprehensive field coverage
+- History-aware fields (trend status, appearance counts, dates)
+- Time-window filtering for tabs
+- Lens-to-category mapping for discovery flow
+
+Constraints Maintained:
+- ✅ Mock UI experience only — no real AI runs
+- ✅ No web or news calls
+- ✅ No DB reads/writes from render path
+- ✅ No schema changes or migrations
+- ✅ No provider calls
+- ✅ No Admin Sync execution logic
+- ✅ No production scoring logic changes
+- ✅ Responsible research framing throughout
 
 ---
 
