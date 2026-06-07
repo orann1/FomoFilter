@@ -3,7 +3,9 @@ export const dynamic = "force-dynamic";
 import ClientAppShell from "@/src/components/layout/ClientAppShell";
 import OpportunityRadarPageClient from "@/src/components/opportunity-radar/OpportunityRadarPageClient";
 import { getCurrentUserForDemo } from "@/src/lib/data/current-user";
+import { getOpportunityRadarData } from "@/src/lib/data/opportunity-radar";
 import type { DashboardUser } from "@/src/lib/data/dashboard";
+import type { OpportunityRadarPageData } from "@/src/lib/data/opportunity-radar";
 
 async function getPageUser(): Promise<DashboardUser> {
   const user = await getCurrentUserForDemo();
@@ -22,10 +24,14 @@ async function getPageUser(): Promise<DashboardUser> {
 }
 
 export default async function OpportunityRadarPage() {
-  const user = await getPageUser();
+  const [user, radarData] = await Promise.all([
+    getPageUser(),
+    getOpportunityRadarData(),
+  ]);
+
   return (
     <ClientAppShell user={user} showSearch={false}>
-      <OpportunityRadarPageClient />
+      <OpportunityRadarPageClient initialData={radarData} />
     </ClientAppShell>
   );
 }

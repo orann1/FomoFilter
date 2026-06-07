@@ -1028,16 +1028,31 @@ Output:    Working manual scan button in Admin
 Timeline:  2–3 phases (implementation + QA)
 ```
 
-### Phase 23C-3 (Future)
+### Phase 23C-3 — Opportunity Radar DB Reader (Current)
+
+**Status: Implementation Complete - Awaiting QA and Review**
 
 ```txt
-Goal:      Opportunity Radar page reads DB scan results
-Scope:     Update /opportunity-radar to read from RadarScan / RadarCandidate tables
-           Filter by time window, lens, category
-           Link Intel Brief to DB data
-           Remove mock data
+Goal:      Opportunity Radar page reads DB scan results instead of mock
+Scope:     Server-side data loader (getOpportunityRadarData)
+           Query RadarScan records with status="success" from last 30 days
+           Include RadarCandidate and RadarEvidence records
+           Link Stock/StockScore/StockQuote/StockAnalystData where available
+           Normalize to plain objects for client (no Prisma exposure)
+           Page component loads data via server-side loader
+           Client component converts DB candidates to UI format
+           Time window filtering: Today, Yesterday, Last 7 Days, Last 30 Days
+           Lens filtering: Attention Spike, Overreaction, Value Gap, Future Theme
+           Source mode labeling: "Fixture scan · local test data" or "Claude DB-context scan · no public web search"
+           Empty state when no successful scans exist
+           No mock data displayed by default
+Completed: src/lib/data/opportunity-radar.ts (data loader)
+           Updated app/opportunity-radar/page.tsx (loads DB data)
+           Updated OpportunityRadarPageClient.tsx (consumes DB data)
+           Updated src/types/opportunity-radar.ts (added DB-backed fields)
+           Conversion function (DB RadarCandidateView → UI RadarCandidate)
 Output:    Working /opportunity-radar connected to DB
-Timeline:  1 phase (implementation + QA)
+Timeline:  1 phase (implementation complete)
 ```
 
 ### Phase 23D (Future)

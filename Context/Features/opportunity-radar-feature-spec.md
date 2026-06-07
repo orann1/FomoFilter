@@ -14,16 +14,18 @@ It surfaces research candidates worth further review, not buy/sell recommendatio
 
 ## Current Phase
 
-**Phase 23A — Mock-Only Visual Experience**
+**Phase 23C-3 — Opportunity Radar DB Reader**
 
-Phase 23A establishes the visual product direction using hardcoded mock data.
-No AI agent runs.
-No web search or scraping.
-No DB reads or writes.
-No schema changes or migrations.
-No provider calls.
+Phase 23C-3 transitions /opportunity-radar from mock-only visual demo to a real DB-backed briefing page.
+- Reads persisted RadarScan/RadarCandidate/RadarEvidence data from database
+- Displays results from Phase 23C-2B (fixture scans) and Phase 23C-2C (Claude db_context scans)
+- No AI runs from the page itself
+- Time window filtering by scanDate
+- Lens filtering by radarLens
+- Source mode labeling (fixture, db_context)
+- Empty state when no scans exist
 
-The goal of Phase 23A is to confirm the visual and product direction before any AI or data infrastructure is built.
+Phase 23A (completed) established the visual product direction using hardcoded mock data and confirmed the Radar / command-center / 3-card Opportunity Deck / Intel Brief direction.
 
 ---
 
@@ -36,8 +38,9 @@ The goal of Phase 23A is to confirm the visual and product direction before any 
 This is a top-level route.
 It is not nested under /scanner or /admin.
 
-Status in Phase 23A: implemented with mock data only.
-Status in future phases: reads from persisted DB results after AI agent runs.
+Status in Phase 23A (completed): implemented with mock data only.
+Status in Phase 23C-3 (current): reads persisted DB-backed scan results; no mock data by default.
+Status in future phases (23D+): scheduled daily scans, web/search modes, etc.
 
 ---
 
@@ -73,10 +76,16 @@ Contains:
 ```txt
 Page title: "Daily Opportunity Briefing"
 Subtitle copy: "Stocks worth a closer look — based on AI-style market discovery signals from the last 24 hours."
-Mock experience badge: "Mock experience · AI scan not connected yet"
-Last updated timestamp (mock)
+Source mode badge (DB-backed in Phase 23C-3):
+  - "Fixture scan · local test data" (if sourceMode = fixture)
+  - "Claude DB-context scan · no public web search" (if sourceMode = db_context)
+  - Other source modes display as "Source scan type · description" for future phases
+Last updated timestamp (from scanDate of latest successful scan)
 Time controls: Today / Yesterday / Last 7 Days / Last 30 Days tabs
 ```
+
+Phase 23C-3 note: The badge no longer shows "Mock experience · AI scan not connected yet" when DB scans exist.
+If no DB scans exist, an empty state appears instead of the hero and candidates.
 
 ---
 
@@ -93,7 +102,11 @@ Last 30 Days
 ```
 
 In Phase 23A: switching tabs shows a hardcoded subset of mock candidates for each time window.
-In future phases: tabs query persisted AI scan results for the selected time period.
+In Phase 23C-3 (current): tabs filter persisted RadarScan candidates by scanDate.
+  - Today: scanDate within current calendar day
+  - Yesterday: scanDate within previous calendar day
+  - Last 7 Days: scanDate >= now - 7 days
+  - Last 30 Days: scanDate >= now - 30 days
 
 ---
 

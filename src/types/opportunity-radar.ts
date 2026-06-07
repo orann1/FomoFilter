@@ -57,4 +57,8 @@ export type RadarCandidate = {
   previousCategories: string[];
   isFeatured?: boolean;
   snapshot: RadarCandidateSnapshot;
+  // DB-backed fields
+  radarLens?: string;
+  scanDate?: string;
+  evidence?: { id: string; snippet: string; sourceName: string; sourceType: string; url?: string | null }[];
 };

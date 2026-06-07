@@ -24,6 +24,7 @@ import {
   TrendingUp,
   Database,
   Calendar,
+  AlertCircle,
 } from "lucide-react";
 import type {
   RadarCandidate,
@@ -32,7 +33,7 @@ import type {
   RadarTimeWindow,
   RadarTrendStatus,
 } from "@/src/types/opportunity-radar";
-import { mockRadarCandidates } from "@/src/lib/mock-opportunity-radar";
+import type { OpportunityRadarPageData, RadarCandidateView } from "@/src/lib/data/opportunity-radar";
 
 // ─── Lens type (UI-only grouping) ────────────────────────────────────────────
 
@@ -184,16 +185,43 @@ const BULLET_ICONS = [Activity, Crosshair, Search] as const;
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
+function getDateRange(w: RadarTimeWindow): { start: Date; end: Date } {
+  const now = new Date();
+  const end = new Date();
+
+  switch (w) {
+    case "today":
+      // From start of today to end of today
+      const startToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      return { start: startToday, end };
+    case "yesterday":
+      // All of yesterday
+      const startYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
+      const endYesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      return { start: startYesterday, end: endYesterday };
+    case "last7days":
+      const start7 = new Date(now);
+      start7.setDate(start7.getDate() - 7);
+      return { start: start7, end };
+    case "last30days":
+      const start30 = new Date(now);
+      start30.setDate(start30.getDate() - 30);
+      return { start: start30, end };
+  }
+}
+
 function filterByWindow(list: RadarCandidate[], w: RadarTimeWindow) {
-  if (w === "today") return list;
-  if (w === "yesterday") return list.filter((c) => c.trendStatus !== "new_today");
-  if (w === "last7days") return list.filter((c) => c.appearancesLast7Days >= 1);
-  return list.filter((c) => c.appearancesLast30Days >= 1);
+  const { start, end } = getDateRange(w);
+  return list.filter((c) => {
+    if (!c.scanDate) return false;
+    const scanDate = new Date(c.scanDate);
+    return scanDate >= start && scanDate <= end;
+  });
 }
 
 function filterByLens(list: RadarCandidate[], l: RadarLens) {
   if (l === "all") return list;
-  return list.filter((c) => LENS[l].categories.includes(c.category));
+  return list.filter((c) => c.radarLens === l);
 }
 
 function maxBy<T>(arr: T[], fn: (t: T) => number): T | null {
@@ -727,17 +755,97 @@ function IntelPanel({
   );
 }
 
+// ─── DB to UI conversion ──────────────────────────────────────────────────────
+
+function convertDbCandidateToUi(dbCandidate: RadarCandidateView): RadarCandidate {
+  // Map radarLens to category for UI styling/filtering
+  const lensToCategory: Record<string, RadarCategory> = {
+    attention_spike: "unusual_attention",
+    overreaction: "beaten_down",
+    value_gap: "possibly_undervalued",
+    future_theme: "emerging_theme",
+  };
+
+  const category = (lensToCategory[dbCandidate.radarLens] ?? "unusual_attention") as RadarCategory;
+
+  // Extract first 3 bullets from radarBullets
+  const bullets: [string, string, string] = [
+    dbCandidate.radarBullets[0] ?? "",
+    dbCandidate.radarBullets[1] ?? "",
+    dbCandidate.radarBullets[2] ?? "",
+  ];
+
+  // Map evidence to simple format for sourceTypes
+  const sourceTypes = Array.from(new Set(dbCandidate.evidence.map((e) => e.sourceType))).slice(0, 3);
+
+  return {
+    id: dbCandidate.id,
+    ticker: dbCandidate.ticker,
+    companyName: dbCandidate.companyName,
+    category,
+    headline: dbCandidate.headline,
+    thesis: dbCandidate.thesis,
+    whyNow: dbCandidate.whyNow,
+    mainCatalyst: dbCandidate.mainCatalyst,
+    bullCase: dbCandidate.whatLooksInteresting.join(" "),
+    bearCase: dbCandidate.keyConcerns.join(" "),
+    nextCheck: dbCandidate.nextCheck,
+    attentionScore: dbCandidate.attentionScore,
+    confidenceScore: dbCandidate.confidenceScore,
+    hypeRiskScore: dbCandidate.hypeRiskScore,
+    bullets,
+    evidenceCount: dbCandidate.evidence.length,
+    sourceTypes,
+    tags: dbCandidate.tags,
+    trendStatus: dbCandidate.trendStatus as RadarTrendStatus,
+    appearancesLast7Days: dbCandidate.appearancesLast7Days,
+    appearancesLast30Days: dbCandidate.appearancesLast30Days,
+    firstSeenDate: dbCandidate.scanDate,
+    lastSeenDate: dbCandidate.scanDate,
+    previousCategories: [],
+    snapshot: {
+      radarConvictionScore: dbCandidate.radarConvictionScore,
+      radarSignalStrength: dbCandidate.radarSignalStrength,
+      opportunityScore: dbCandidate.snapshot.opportunityScore ?? 0,
+      fundamentalScore: dbCandidate.snapshot.fundamentalScore ?? 0,
+      analystUpsidePercent: dbCandidate.snapshot.analystUpsidePercent ?? 0,
+      analystRating: dbCandidate.snapshot.analystRating ?? "Neutral",
+      valuationScore: dbCandidate.snapshot.valuationScore ?? 0,
+      stabilityScore: dbCandidate.snapshot.stabilityScore ?? 0,
+      peRatio: dbCandidate.snapshot.peRatio ?? undefined,
+      week52PositionPercent: dbCandidate.snapshot.week52PositionPercent ?? undefined,
+      marketCapLabel: dbCandidate.snapshot.marketCapLabel ?? undefined,
+      priceChange1WPercent: dbCandidate.snapshot.priceChangePercent ?? undefined,
+    },
+    radarLens: dbCandidate.radarLens as RadarLens,
+    scanDate: dbCandidate.scanDate,
+    evidence: dbCandidate.evidence.map((e) => ({
+      id: e.id,
+      snippet: e.snippet,
+      sourceName: e.sourceName,
+      sourceType: e.sourceType,
+      url: e.url,
+    })),
+  };
+}
+
 // ─── Main Export ──────────────────────────────────────────────────────────────
 
-export default function OpportunityRadarPageClient() {
+export default function OpportunityRadarPageClient({ initialData }: { initialData: OpportunityRadarPageData }) {
   const [timeWindow, setTimeWindow] = useState<RadarTimeWindow>("today");
   const [lens, setLens] = useState<RadarLens>("attention_spike");
   const [intelId, setIntelId] = useState<string | null>(null);
   const intelRef = useRef<HTMLDivElement>(null);
 
+  // Convert DB candidates to UI format
+  const uiCandidates = useMemo(
+    () => initialData.candidates.map(convertDbCandidateToUi),
+    [initialData.candidates]
+  );
+
   const byWindow = useMemo(
-    () => filterByWindow(mockRadarCandidates, timeWindow),
-    [timeWindow]
+    () => filterByWindow(uiCandidates, timeWindow),
+    [uiCandidates, timeWindow]
   );
 
   const displayed = useMemo(
@@ -791,6 +899,44 @@ export default function OpportunityRadarPageClient() {
     setIntelId(null);
   };
 
+  // Format sourceMode for display
+  const getSourceModeLabel = (): string => {
+    const mode = initialData.sourceSummary?.sourceMode;
+    if (mode === "db_context") return "Claude DB-context scan · no public web search";
+    if (mode === "fixture") return "Fixture scan · local test data";
+    return mode ?? "Unknown source";
+  };
+
+  // Format scan date/time for display
+  const formatScanTime = (): string => {
+    if (!initialData.sourceSummary?.scanDate) return "No scans yet";
+    const d = new Date(initialData.sourceSummary.scanDate);
+    return d.toLocaleDateString("en-US", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  };
+
+  // Empty state
+  if (!initialData.hasDbData) {
+    return (
+      <div className="max-w-6xl mx-auto flex flex-col gap-5">
+        <div className="relative overflow-hidden rounded-2xl border border-slate-800 bg-gradient-to-br from-[#060d1b] via-[#0b0e1a] to-[#0a0b0f] px-6 py-12 flex flex-col items-center justify-center gap-4">
+          <AlertCircle size={40} className="text-amber-400" />
+          <div className="text-center max-w-md">
+            <h2 className="text-xl font-bold text-white mb-2">No Radar scans yet</h2>
+            <p className="text-sm text-slate-400 mb-4">
+              Run a Fixture or Claude Radar Scan from Admin Sync to populate this briefing.
+            </p>
+            <a
+              href="/admin/sync"
+              className="inline-block px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium transition-colors"
+            >
+              Go to Admin Sync
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-6xl mx-auto flex flex-col gap-5">
 
@@ -822,15 +968,15 @@ export default function OpportunityRadarPageClient() {
               Daily Opportunity Briefing
             </h1>
             <div className="flex flex-wrap items-center gap-3">
-              <div className="flex items-center gap-1.5 bg-amber-950/60 border border-amber-900/40 rounded-full px-3 py-1">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                <span className="text-[10px] text-amber-400 font-medium">
-                  Mock experience · AI scan not connected yet
+              <div className="flex items-center gap-1.5 bg-blue-950/60 border border-blue-900/40 rounded-full px-3 py-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                <span className="text-[10px] text-blue-400 font-medium">
+                  {getSourceModeLabel()}
                 </span>
               </div>
               <span className="text-[10px] text-slate-600 flex items-center gap-1.5">
                 <Clock size={10} />
-                Mock scan: Today, 06:00 AM
+                {formatScanTime()}
               </span>
             </div>
           </div>

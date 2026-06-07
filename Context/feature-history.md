@@ -1780,3 +1780,83 @@ Total: 2 files created, 5 files modified, 0 migrations added
 - Phase 23C-3: /opportunity-radar reads from DB instead of mock (time window filtering)
 - Phase 23D: Scheduled daily scan execution
 - Future: Multi-provider fallback, provider/prompt/source admin configuration
+
+---
+
+### Phase 23C-3 — Opportunity Radar DB Reader
+
+Transitioned `/opportunity-radar` from mock-only visual demo (Phase 23A) to a real database-backed briefing page reading persisted RadarScan/RadarCandidate/RadarEvidence records from Admin workflows (Phase 23C-2B fixture scans and Phase 23C-2C Claude db_context scans).
+
+**Key Deliverables:**
+
+New file:
+- `src/lib/data/opportunity-radar.ts` — Server-side data loader
+
+Modified files:
+- `app/opportunity-radar/page.tsx` — Loads DB data via server-side loader
+- `src/components/opportunity-radar/OpportunityRadarPageClient.tsx` — Accepts initialData prop, consumes DB data instead of mock, conversion function for DB→UI format
+- `src/types/opportunity-radar.ts` — Added scanDate, radarLens, evidence fields for DB-backed candidates
+- `Context/current-feature.md` — Updated to Phase 23C-3 spec
+- `Context/Features/opportunity-radar-feature-spec.md` — Updated to reflect DB-backed implementation
+- `Context/Features/opportunity-radar-ai-agent-spec.md` — Updated Phase 23C-3 from Future to Current
+- `Context/project-overview.md` — Roadmap updated (Phase 23C-2C completed, Phase 23C-3 active)
+
+Total: 1 file created, 6 files modified, 0 migrations added
+
+**Implementation Summary:**
+
+- **Data loader:** Queries successful RadarScan records from last 30 days, includes RadarCandidate/RadarEvidence/linked Stock/StockScore/StockQuote/StockAnalystData
+- **Normalization:** Transforms Prisma models to plain objects (OpportunityRadarPageData, RadarScanView, RadarCandidateView, RadarEvidenceView, RadarCandidateSnapshot)
+- **No Prisma in Client:** Server loader returns normalized data; Client Component has zero Prisma imports
+- **Source metadata:** Hero badge displays sourceMode (fixture, db_context) instead of "Mock experience"
+- **Time window filtering:** Today, Yesterday, Last 7 Days, Last 30 Days — filtered by scanDate
+- **Lens filtering:** Attention Spike, Overreaction, Value Gap, Future Theme — filtered by radarLens
+- **Candidate cards:** Use DB RadarCandidate data (ticker, headline, bullets, thesis, etc.)
+- **Intel Brief:** DB-backed narrative (thesis, whyNow, mainCatalyst, bullCase/bearCase, nextCheck) + RadarEvidence records + validation snapshot
+- **Snapshot metrics:** Opportunity Score, Fundamental Score, Analyst Upside, Rating, Valuation, Stability, P/E, 52W Position from linked Stock/StockScore/StockQuote/StockMetric/StockAnalystData; missing values show as N/A
+- **Empty state:** "No Radar scans yet" with CTA link to /admin/sync when no successful RadarScan records exist
+- **Page render path:** No AI/provider/web/search/news calls; reads DB only
+
+**Constraints Maintained:**
+
+- ✅ /opportunity-radar UI changed (data source: mock → DB)
+- ✅ Admin UI unchanged (no Admin buttons added, Phase 23C-2B/2C buttons exist)
+- ✅ No Prisma schema changes (reuses Phase 23C-1B models)
+- ✅ No migrations added
+- ✅ No provider/AI/API calls from /opportunity-radar render path
+- ✅ No external web/search/news/API calls
+- ✅ No public web scan claims (sourceMode correctly labeled)
+- ✅ No production scoring changes (Fundamental v1, Opportunity v2 untouched)
+- ✅ No scheduled jobs (read-only, deferred to Phase 23D)
+- ✅ No provider/source/prompt config models (deferred to future phase)
+
+**Browser QA Results:**
+
+- ✅ DB-backed data scenario: Page loads with "Daily Opportunity Briefing", hero shows "Fixture scan · local test data" badge
+- ✅ Time tabs: Today, Yesterday, Last 7 Days, Last 30 Days all filter correctly by scanDate
+- ✅ Lens filtering: Attention Spike, Overreaction, Value Gap, Future Theme filter by radarLens
+- ✅ Candidate cards: Ticker, company, headline, bullets, Signal Snapshot from DB fields
+- ✅ Intel Brief: Thesis, whyNow, mainCatalyst, bullCase/bearCase, nextCheck + evidence + validation snapshot
+- ✅ Empty state: Verified via code inspection (live DB has scans; empty state works when no successful RadarScan records)
+- ✅ Regression routes: / (Dashboard), /scanner (Scanner), /admin/sync (Admin Sync) all load without errors
+
+**Automated Checks:**
+
+- `npm run build` — ✅ Pass (Compiled successfully, all 12 routes generated)
+- `npx tsc --noEmit` — ✅ Pass (No TypeScript errors)
+- `npx prisma validate` — ✅ Pass (Schema valid, 15 migrations)
+- `npx prisma migrate status` — ✅ Pass (Database schema up to date)
+
+**Design Highlights:**
+
+- Time window filtering: Today (current calendar day), Yesterday (previous calendar day), Last 7/30 Days (rolling windows) — simple logic, matches user expectations
+- Candidate conversion: DB RadarCandidateView (11 fields) → UI RadarCandidate (for existing UI logic) via mapping function
+- radarLens preserved in UI type for filtering; detailedCategory mapped to category enum for card styling
+- Missing snapshot metrics (null values): Displayed as N/A in UI, not 0
+- 52-week position: Calculated from (price - week52Low) / (week52High - week52Low) * 100
+- Evidence: Only rendered if URL present; null URLs don't break links
+
+**Ready for Future Phases:**
+
+- Phase 23D: Scheduled daily scan execution (automation, monitoring)
+- Future: Web/search source modes, multi-provider fallback, provider/source/prompt admin configuration

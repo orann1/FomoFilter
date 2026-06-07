@@ -1,28 +1,47 @@
-# Current Feature — Phase 23C-2C: Claude Provider Adapter + Controlled Admin Execution
+# Current Feature — Phase 23C-3: Opportunity Radar DB Reader
 
-## Active Phase
+## Completed Phase
 
 ```txt
-Phase 23C-2C — Claude Provider Adapter + Controlled Admin Execution
-Status: Completed - QA Passed - Ready for Merge
-Focus: Real Claude Sonnet 4.6 API execution from Admin Sync page with DB-backed context (controlled source pack mode)
+Phase 23C-3 — Opportunity Radar DB Reader
+Status: Completed - QA Passed - Approved for Commit
+Focus: /opportunity-radar page now reads persisted RadarScan/RadarCandidate/RadarEvidence data from database
 ```
 
 ## What This Phase Implements
 
-**Server-side Claude integration:**
-- Claude provider adapter using fetch to Anthropic Messages API
-- Prompt builder that loads active stocks from database as context
-- New Server Action to call Claude and validate/persist results
-- Admin UI button to trigger real Claude scans
-- Clear error handling for missing API key and provider failures
+**DB-backed page rendering:**
+- Server-side data loader reads successful RadarScan records from the last 30 days
+- Includes RadarCandidate and RadarEvidence records with linked Stock/StockScore/StockQuote/StockAnalystData
+- Normalized plain objects passed to client component (no Prisma exposure)
+- Empty state when no successful scans exist
 
-**Key constraints:**
-- Server-side only — no client exposure of API key
-- DB context mode — Claude analyzes provided stocks, no public web search claims
-- Validation gatekeeper — invalid Claude output is not persisted
-- Clear labeling — Admin UI distinguishes fixture from real AI execution
-- Error transparency — missing keys, provider errors, validation failures all show clear messages
+**Time window filtering:**
+- Today: candidates from current calendar day
+- Yesterday: candidates from previous calendar day
+- Last 7 Days: candidates from the last 7 days
+- Last 30 Days: candidates from the last 30 days
+
+**Source mode labeling:**
+- `fixture` → "Fixture scan · local test data"
+- `db_context` → "Claude DB-context scan · no public web search"
+- No false claims about public web discovery
+
+**Candidate display:**
+- Ticker, company name, headline, bullets from DB
+- Signal Snapshot uses DB-backed validation metrics (Opportunity Score, Fundamental Score, Analyst Upside, etc.)
+- Intel Brief shows thesis, narrative fields, evidence/citations
+- Missing values show as N/A, not 0
+
+**Scope confirmation:**
+- /opportunity-radar no longer displays mock data by default
+- Admin UI unchanged
+- No Prisma schema changes
+- No new migrations
+- No provider/AI calls from page render
+- No external web/search API calls
+- Time tab counts calculated from DB data per selected window
+- Lens counts calculated from DB data per selected window
 
 ---
 
@@ -38,74 +57,67 @@ Context/coding-standards.md
 Context/ai-interaction.md
 Context/architecture.md
 Context/data-model.md
-Context/sync-workflows.md
 ```
 
 For this phase, also read:
 
 ```txt
-Context/Features/opportunity-radar-ai-agent-spec.md
 Context/Features/opportunity-radar-feature-spec.md
+Context/Features/opportunity-radar-ai-agent-spec.md
 Context/Features/admin-sync-feature-spec.md
-Context/scoring-system.md
-Context/Algorithms/opportunity-score-v2.md
-Context/Algorithms/fundamental-score-v1.md
 ```
 
 ---
 
-## Scope — Claude Integration Only
+## Scope — DB Reader Only
 
 ### In Scope
 
 ```txt
-- Claude provider adapter (fetch-based, server-side only)
-- Prompt builder using DB context (controlled source pack mode)
-- Server Action (runOpportunityRadarClaudeScanAction) for real Claude calls
-- Admin UI button to trigger Claude scans
-- Result display (success: scanId, candidateCount, evidenceCount, provider, model, sourceMode, executionTimeMs)
-- Error display (missing key, provider error, validation errors, raw output preview)
-- Environment variable: ANTHROPIC_API_KEY (required)
-- Optional env override: ANTHROPIC_RADAR_MODEL (default: claude-sonnet-4.6)
-- Documentation updates (current-feature, admin-sync-feature-spec, opportunity-radar-ai-agent-spec, project-overview)
+- Server-side data loader (src/lib/data/opportunity-radar.ts)
+- Normalized UI data types (OpportunityRadarPageData, RadarCandidateView, RadarScanView, etc.)
+- Page component update (app/opportunity-radar/page.tsx)
+- Client component update (OpportunityRadarPageClient) to use DB data instead of mock
+- Time window filtering by scanDate
+- Lens filtering by radarLens
+- Empty state when no scans exist
+- Source mode labeling (fixture, db_context)
+- Evidence/citation display from RadarEvidence records
+- Snapshot metrics from linked Stock/StockScore/StockQuote/StockAnalystData
+- Type updates (opportunity-radar.ts) to support new fields
+- Documentation updates (current-feature, opportunity-radar-feature-spec, opportunity-radar-ai-agent-spec, project-overview)
 ```
 
 ### Out of Scope
 
 ```txt
-- OpenAI integration
-- Gemini integration
-- Grok integration
-- Multi-provider routing or fallback
-- Provider configuration database models
-- Prompt version management database models
-- Source registry database models
+- Claude/OpenAI/Gemini/Grok calls from /opportunity-radar
+- Web/search/news API calls
 - Scheduled daily scans
-- /opportunity-radar page DB reader (Phase 23C-3)
-- SyncRun integration for Radar scans
-- Production scoring changes
+- Admin UI changes (buttons already added in Phase 23C-2B)
 - Prisma schema changes or migrations
-- Real public web search (uses DB context only)
-- Cost estimation features
-- Provider secret encryption/storage
-- Public web search claims
+- Production scoring changes
+- Scanner/Dashboard/Drawer changes
+- Provider/source config models
+- Mock data removal from repo (kept for reference/dev)
+- /opportunity-radar now uses DB by default but mock fallback not shown as real data
 ```
 
 ---
 
-## Phase 23C-2C Deliverables
+## Phase 23C-3 Deliverables
 
 This phase produces:
 
 ```txt
-1. src/lib/opportunity-radar/claude-radar-provider.ts — fetch-based Anthropic API client
-2. src/lib/opportunity-radar/build-radar-prompt.ts — Prompt builder with DB context loading
-3. Updated src/actions/opportunity-radar-actions.ts — New runOpportunityRadarClaudeScanAction()
-4. Updated src/components/admin/SyncPageClient.tsx — Claude Radar Scan button and result viewer
-5. Context/current-feature.md — updated to Phase 23C-2C spec
-6. Context/project-overview.md — roadmap updated (Phase 23C-2B → 23C-2C active)
-7. Context/Features/admin-sync-feature-spec.md — added Claude Radar Scan section
-8. Context/Features/opportunity-radar-ai-agent-spec.md — added implementation notes
+1. src/lib/data/opportunity-radar.ts — Server-side data loader
+2. Updated app/opportunity-radar/page.tsx — Loads DB data via server loader
+3. Updated src/components/opportunity-radar/OpportunityRadarPageClient.tsx — Consumes DB data, not mock
+4. Updated src/types/opportunity-radar.ts — Added scanDate, radarLens, evidence fields
+5. Context/current-feature.md — Updated to Phase 23C-3
+6. Context/Features/opportunity-radar-feature-spec.md — Updated to reflect DB reader implementation
+7. Context/Features/opportunity-radar-ai-agent-spec.md — Added Phase 23C-3 implementation notes
+8. Context/project-overview.md — Roadmap updated
 9. All automated checks passing: build, TypeScript, prisma validate, prisma migrate status
 ```
 
@@ -113,174 +125,175 @@ This phase produces:
 
 ## Acceptance Criteria
 
-**Server-side provider adapter:**
+**Server-side data loader:**
 ```txt
-✓ Claude provider uses fetch to Anthropic Messages API
-✓ API key read from ANTHROPIC_API_KEY environment variable
-✓ Model read from ANTHROPIC_RADAR_MODEL (default: claude-sonnet-4.6)
-✓ Returns clear error if API key missing
-✓ Returns clear error if model not available
-✓ Captures execution time
-✓ Parses JSON from response (handles markdown code blocks)
-✓ Returns both raw text and parsed object
-✓ Records provider metadata: provider, model, executionTimeMs, token usage
+✓ getOpportunityRadarData() queries RadarScan with status="success"
+✓ Loads from last 30 days of scans
+✓ Includes RadarCandidate records
+✓ Includes RadarEvidence records
+✓ Links Stock/StockScore/StockQuote/StockAnalystData where available
+✓ Orders scans by scanDate descending
+✓ Returns normalized plain objects (no Prisma)
+✓ Handles empty state when no scans exist
 ```
 
-**Prompt builder:**
+**Page component:**
 ```txt
-✓ Loads active stocks from database (top ~20 by opportunity score)
-✓ Builds prompt that enforces: research-only, no buy/sell, valid JSON, no web search claims
-✓ Prompt includes explicit instruction to use DB context only
-✓ Prompt includes all validation rules (prohibited language, score ranges, enum values)
-✓ Returns full prompt text ready for API call
+✓ Loads data via getOpportunityRadarData()
+✓ Passes normalized data to OpportunityRadarPageClient
+✓ Keeps page server-rendered/dynamic as appropriate
+✓ No provider calls
+✓ No mock data imports
 ```
 
-**Server Action (runOpportunityRadarClaudeScanAction):**
+**Client component:**
 ```txt
-✓ Builds prompt with DB context
-✓ Calls Claude via provider adapter
-✓ Validates output with validateRadarScanOutput()
-✓ Returns error if API key missing without calling Claude
-✓ Returns error if provider call fails (API error, rate limit, etc)
-✓ Returns error with validationErrors if output invalid
-✓ Persists to DB if validation passes
-✓ Returns success: true, scanId, candidateCount, evidenceCount on success
-✓ Returns provider, model, sourceMode, executionTimeMs metadata
-✓ Does not persist invalid Claude output
+✓ Accepts initialData prop (OpportunityRadarPageData)
+✓ Converts DB candidates to UI format
+✓ Time tabs filter by scanDate
+✓ Lens buttons filter by radarLens
+✓ Opportunity Deck shows top 3 candidates per time + lens
+✓ Candidate cards use DB fields
+✓ Intel Brief uses DB narrative and evidence fields
+✓ Snapshot shows DB validation metrics or N/A
+✓ Source mode badge shows fixture/db_context/etc (not "Mock experience")
+✓ Empty state when no DB data
+✓ No console errors
 ```
 
-**Admin UI:**
+**Time window filtering:**
 ```txt
-✓ New "Run Claude Radar Scan" button in Opportunity Radar section
-✓ Button clearly labeled and distinguished from Fixture button
-✓ Copy explains: Claude server-side, DB context mode, no public web scan claim
-✓ Button disabled while Claude scan running
-✓ Loading state shows spinner icon
-✓ Success state displays scanId, candidateCount, evidenceCount, provider, model, sourceMode, executionTimeMs
-✓ Error state displays error message
-✓ Error state shows validation errors if present
-✓ Error state shows rawOutputPreview (first 500 chars) if validation failed
-✓ Result viewer shows no API key or sensitive data
+✓ Today: scanDate within current calendar day
+✓ Yesterday: scanDate within previous calendar day
+✓ Last 7 Days: scanDate >= now - 7 days
+✓ Last 30 Days: scanDate >= now - 30 days
+```
+
+**Lens filtering:**
+```txt
+✓ Attention Spike: radarLens = "attention_spike"
+✓ Overreaction: radarLens = "overreaction"
+✓ Value Gap: radarLens = "value_gap"
+✓ Future Theme: radarLens = "future_theme"
+✓ Lens counts based on selected time window
+```
+
+**Empty state:**
+```txt
+✓ Shown when no successful RadarScan records
+✓ Clear message: "No Radar scans yet"
+✓ Copy: "Run a Fixture or Claude Radar Scan from Admin Sync to populate this briefing."
+✓ Link to /admin/sync
+✓ No mock data shown as real
+```
+
+**Source mode labeling:**
+```txt
+✓ fixture → "Fixture scan · local test data"
+✓ db_context → "Claude DB-context scan · no public web search"
+✓ Metadata shows provider, model, sourceMode, scanDate
+✓ No "public web scan" claims
+✓ No "Mock experience" badge when DB data exists
 ```
 
 **Scope confirmation:**
 ```txt
-✓ Admin UI changed (SyncPageClient.tsx only)
-✓ /opportunity-radar unchanged (still mock-only)
-✓ /scanner unchanged
-✓ / (dashboard) unchanged
+✓ /opportunity-radar changed (now DB-backed)
+✓ Admin UI unchanged
+✓ /scanner, /, /admin/sync unchanged
 ✓ No Prisma schema changes
 ✓ No new migrations
-✓ No OpenAI/Gemini/Grok calls
-✓ No real public web/search API calls
+✓ No provider calls from page
+✓ No external API calls from page
 ✓ No production scoring changes
-✓ No scheduled jobs added
-✓ No provider config models added
-✓ No prompt/source registry models added
+✓ No scheduled jobs
 ```
 
 ---
 
-## Implementation Notes
+## QA Requirements
 
-**Why fetch instead of @anthropic-ai/sdk:**
-- Reduces dependencies (project avoids adding new major packages without approval)
-- Follows existing project pattern (market data providers use fetch)
-- Simple Messages API request format is straightforward to implement
-- Maintains fine control over request/response handling
+Browser QA is required because /opportunity-radar UI changes to read from DB.
 
-**Why DB context instead of real web search:**
-- No real web search infrastructure exists yet (spec from Phase 23B/23C)
-- DB context is a controlled, auditable source (real market stocks in the system)
-- Matches "controlled source pack" mode from opportunity-radar-ai-agent-spec
-- Prevents false claims of public web discovery
-- Admin UI clearly labels this as DB-context scan, not web scan
+### A. DB-backed data scenario
+- Ensure at least one successful RadarScan exists (from Phase 23C-2B or 23C-2C)
+- Load /opportunity-radar
+- Confirm candidates display with DB values (not mock)
+- Confirm source mode badge shows correct label (fixture or db_context)
+- Confirm no "Mock experience" badge appears
+- Confirm metadata shows provider/model/scanDate
 
-**Why validation before persistence:**
-- Invalid Claude output (hallucinations, wrong format, prohibited language) should not pollute the database
-- validateRadarScanOutput() is the gatekeeper — enforces same rules as fixture
-- Admin sees clear error messages instead of silent failures
-- Preserves data integrity from the start
+### B. Time tabs
+- Test Today tab: candidates from current date only
+- Test Yesterday tab: candidates from previous date
+- Test Last 7 Days tab: candidates from last 7 days
+- Test Last 30 Days tab: candidates from last 30 days
+- Confirm candidate counts update per tab
+- Confirm empty state appears if time window has no candidates
+
+### C. Lens filtering
+- Test each lens button (Attention Spike, Overreaction, Value Gap, Future Theme)
+- Confirm deck shows top 3 candidates for selected lens + time window
+- Confirm counts are accurate for selected time window
+- Confirm empty state appears if lens has no candidates
+
+### D. Candidate cards
+- Click a candidate card
+- Confirm ticker/company/headline/bullets show DB values
+- Confirm Signal Snapshot uses DB snapshot values or N/A (not 0)
+- Confirm evidence count matches
+
+### E. Intel Brief
+- Click a candidate to open Intel Brief
+- Confirm narrative fields (thesis, whyNow, mainCatalyst, etc.) are DB-backed
+- Confirm evidence records display
+- Confirm URL null does not render broken links
+- Confirm validation metrics display correctly
+- Confirm sourceMode/evidence wording does not claim public web discovery
+
+### F. Empty state
+- If practical, temporarily query a time window/lens with no candidates
+- Confirm empty deck state appears
+- Do not delete production data just to test this
+
+### G. Regression routes
+- / loads
+- /scanner loads  
+- /admin/sync loads
+- Admin Fixture and Claude buttons still render
+- No console errors
 
 ---
 
-## QA & Testing Plan
-
-### Manual Browser QA Required
-
-**A. Missing API key scenario**
-- Ensure ANTHROPIC_API_KEY is not set or empty
-- Click "Run Claude Radar Scan"
-- Confirm error message about missing key is displayed
-- Confirm no RadarScan records are created
-
-**B. Successful provider scenario (if API key available)**
-- Set ANTHROPIC_API_KEY
-- Click "Run Claude Radar Scan"
-- Confirm loading state shows spinner
-- Confirm scan completes and displays success panel
-- Confirm scanId, candidateCount, evidenceCount are shown
-- Confirm provider="Anthropic", model shows correct name
-- Confirm sourceMode="db_context"
-- Confirm RadarScan exists in database
-- Confirm RadarCandidate records created with stock links
-- Confirm RadarEvidence records created
-
-**C. Validation failure handling (if applicable)**
-- If Claude returns invalid JSON or violates rules
-- Confirm error message is shown
-- Confirm validation errors are listed
-- Confirm rawOutputPreview shows first 500 chars safely
-- Confirm no RadarScan/candidates are persisted
-
-**D. Fixture button regression**
-- Confirm "Run Fixture Radar Scan" still works
-- Confirm scanId/candidate/evidence counts display
-- Confirm fixture and Claude buttons can both be used
-
-**E. Admin regression**
-- Confirm all other Admin sections render (Sync Actions, Provider Tests, Sync History, Data Inventory, Score Methodology)
-- Confirm no layout breakage
-- Confirm existing sync buttons still work
-
-**F. Route regression**
-- Confirm / (dashboard) loads
-- Confirm /scanner loads
-- Confirm /opportunity-radar loads and still uses mock data
-
-### Automated Checks
+## Automated Checks Required Before Commit
 
 ```bash
-npm run build               # Must succeed, no TypeScript errors
-npx tsc --noEmit          # Must pass
-npx prisma validate       # Must pass
-npx prisma migrate status # Must show "Database schema is up to date!"
+npm run build             # Must pass, no TypeScript errors
+npx tsc --noEmit        # Must pass
+npx prisma validate     # Must pass
+npx prisma migrate status  # Must show "Database schema is up to date!"
 ```
 
 ---
 
-## Known Issues & Constraints
+## Documentation Updates
 
-**1. Database context may be empty**
-- If database has no active stocks, Claude receives empty context
-- Prompt handles this gracefully but may return no candidates
-- Admin sees success with candidateCount=0 (correct behavior)
+Required updates after QA and before commit:
 
-**2. Model availability**
-- ANTHROPIC_RADAR_MODEL default is claude-sonnet-4.6
-- If this model becomes unavailable, Admin sees clear error: "Claude model not available..."
-- User can override with ANTHROPIC_RADAR_MODEL environment variable
+```txt
+✓ Context/current-feature.md — This file, now describes Phase 23C-3
+✓ Context/Features/opportunity-radar-feature-spec.md — Updated to reflect DB-backed reader
+✓ Context/Features/opportunity-radar-ai-agent-spec.md — Added Phase 23C-3 implementation notes
+✓ Context/project-overview.md — Roadmap updated to active Phase 23C-3
+```
 
-**3. No real web search**
-- Admin UI clearly states "Does not claim public web discovery"
-- Prompt instructions forbid public web search claims
-- This is intentional — real web search comes in future phases
-
-**4. Token usage not persisted yet**
-- Claude response includes input/output tokens
-- Provider adapter captures them in metadata
-- RadarScan model has token fields but we don't store them yet
-- This is acceptable for Phase 23C-2C; cost tracking is future work
+Check but likely no update:
+```txt
+- Context/data-model.md (RadarScan/Candidate/Evidence models unchanged)
+- Context/sync-workflows.md (No sync changes)
+- Context/Features/admin-sync-feature-spec.md (Admin UI already documented)
+- Context/scoring-system.md (No scoring changes)
+```
 
 ---
 
@@ -288,9 +301,12 @@ npx prisma migrate status # Must show "Database schema is up to date!"
 
 This phase is ready for browser QA and final review once:
 - All automated checks pass ✓
-- Admin UI renders without errors ✓
-- Both Fixture and Claude buttons are clickable ✓
-- Documentation is complete ✓
-- Error scenarios are tested ✓
+- Page loads without errors ✓
+- DB-backed candidates display correctly ✓
+- Time tabs work ✓
+- Lens filters work ✓
+- Empty state works ✓
+- Source mode labeling is accurate ✓
+- Documentation updated ✓
 
 Do not commit until explicit approval is given.
