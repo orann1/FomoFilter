@@ -645,7 +645,7 @@ They are presented to the user for further manual review, not as automatic buy s
 
 ---
 
-## Radar Schema — Phase 23C-1B Status
+## Radar Schema — Phase 23C-1B/2A Status
 
 **Phase 23C-1B (completed):**
 - RadarScan, RadarCandidate, RadarEvidence models added
@@ -653,9 +653,15 @@ They are presented to the user for further manual review, not as automatic buy s
 - Cascade deletes implemented correctly
 - String types used (no Prisma enums) for flexibility during prompt/schema iterations
 
-**Phase 23C-2 (future):**
-- Admin AI Scan button implementation
-- Validation layer for AI output
+**Phase 23C-2A (in progress):**
+- Validation function for RadarScanOutput with strict rules (enums, scores 0-100, prohibited language, evidence requirements)
+- Persistence function using Prisma transactions
+- Sample fixture with 3 test candidates
+- QA script for validation and persistence testing
+- No external AI/provider calls; fixture data only
+
+**Phase 23C-2B/2C (future):**
+- Admin AI Scan button implementation with real AI execution
 - Provider/prompt/source configuration models (RadarPromptVersion, RadarProviderConfig, etc.)
 
 **Phase 23C-3+ (future):**

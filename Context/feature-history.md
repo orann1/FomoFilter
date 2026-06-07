@@ -1265,3 +1265,147 @@ RadarCandidate.stockId becomes null (preserves candidate history)
 - Phase 23C-2: Admin Scan button, output validation layer, provider/prompt/source config models
 - Phase 23C-3: /opportunity-radar reads from DB instead of mock
 - Phase 23D: Scheduled daily scan execution
+
+---
+
+## Phase 23C-2A — Opportunity Radar Output Validation + DB Persistence From Fixture
+
+**Goal:** Implement strict TypeScript contracts, validation rules, and reusable persistence for Opportunity Radar agent output using local fixture data. No external AI/provider calls.
+
+**Status:** Completed. Validation, persistence, and fixture QA all passing. Automated checks passing.
+
+**Branch:** `feature/radar-fixture-persistence`
+
+**Deliverables:**
+
+**A. TypeScript Contracts**
+
+New file `src/types/opportunity-radar-agent.ts`:
+- `RadarScanOutput` — AI agent response structure with schemaVersion, scanDate, timeWindow, providerMetadata, summary, candidates, rejectedCandidates, agentSelfCheck
+- `RadarCandidateOutput` — 30+ field candidate structure with ticker, companyName, radarLens, narrative fields (headline, thesis, whyNow, mainCatalyst, etc.), radar scores (0–100 integer), evidence, trend status, tags
+- `RejectedCandidateOutput` — rejection records with ticker, reason, evidenceSummary
+- `ValidatedRadarScanOutput` — type-safe validated output after passing all validation rules
+
+**B. Validation Layer**
+
+New file `src/lib/opportunity-radar/validate-radar-output.ts`:
+
+`validateRadarScanOutput()` function enforcing 9+ validation rules:
+1. schemaVersion must equal "1.0"
+2. Candidate count max 10 items
+3. All scores must be 0–100 integers (rejects 0–10 scale with specific error message)
+4. All radarLens values must be one of: attention_spike, overreaction, value_gap, future_theme
+5. All trendStatus values must be one of: new_today, repeated, back_on_radar, cooling_down
+6. All credibilityTier values in evidence must be one of: primary, secondary, tertiary, experimental
+7. Prohibited language detection (rejects "buy", "sell", "strong buy", "guaranteed", "safe", "will go up", etc.)
+8. Every candidate must have ≥1 sourceEvidence item
+9. Evidence relevanceScore must be 0–100 integer
+10. Ticker and companyName must be non-empty
+
+Returns: `{success: boolean, data?: ValidatedRadarScanOutput, errors: string[], warnings: string[]}`
+
+**C. Reusable Persistence Function**
+
+Refactored file `src/lib/opportunity-radar/persist-radar-output.ts`:
+
+`persistRadarScanOutput(input: ValidatedRadarScanOutput, prismaClient?: PrismaClient)` function:
+- Accepts optional PrismaClient parameter for script/testing flexibility (uses server singleton by default)
+- Uses Prisma transaction for atomicity
+- Creates RadarScan record with metadata (provider, model, schema version, status, summary fields)
+- Creates RadarCandidate records with all narrative and score fields
+- Attempts Stock linking by ticker symbol (stockId set to null if not found)
+- Sets candidateSort rank based on array position
+- Creates RadarEvidence records for each source citation
+- Returns: `{success: boolean, scanId?: string, candidateCount?: number, evidenceCount?: number, error?: string}`
+
+**D. Local Fixture**
+
+New file `src/lib/opportunity-radar/sample-radar-output.ts`:
+
+3 complete research candidates with full field coverage:
+- **NVDA** (attention_spike lens): Institutional research volume signal, 2 evidence items
+- **SMCI** (overreaction lens): Sharp decline recovery opportunity, 3 evidence items
+- **META** (value_gap lens): Valuation disconnect signal, 2 evidence items
+
+1 rejected candidate (UNKN) showing rejection logic:
+- Ticker symbol could not be verified
+
+Fixture characteristics:
+- All scores use 0–100 scale explicitly
+- All text uses research-focused language (no buy/sell/recommendation language)
+- All candidates have evidence
+- Marked sourceMode: "fixture" for identification
+- Realistic headlines, theses, catalysts, concerns
+
+**E. QA Scripts**
+
+New file `scripts/run-radar-fixture-persistence.ts`:
+- Loads dotenv at entry BEFORE any imports (fixes DB connectivity)
+- Creates local Prisma client after dotenv loaded
+- Validates fixture with validateRadarScanOutput()
+- Calls real reusable persistRadarScanOutput(validatedData, scriptPrisma)
+- Confirms persistence by querying RadarScan with included candidates and evidence
+- Reports scanId, candidateCount, evidenceCount, stock linking status per ticker
+- Validates all scores are 0–100 integers
+- Confirms all candidates have evidence
+
+New file `scripts/test-radar-validation.ts`:
+- 8 validation test cases: valid fixture, 0–10 scale detection, prohibited language, missing evidence, invalid radarLens, invalid trendStatus, invalid credibilityTier, score >100
+- All tests passed with ✓
+
+**Test Results:**
+
+Fixture persistence QA:
+```
+✓ Valid fixture passed validation
+✓ Fixture persisted successfully (using real persistRadarScanOutput function)
+✓ Created 1 RadarScan + 3 RadarCandidates + 7 RadarEvidence records
+✓ Stock linking works (NVDA, SMCI, META all found in database)
+✓ All scores are 0-100 integers
+✓ All candidates have evidence
+```
+
+Validation tests: 8/8 passed
+
+**Files Added:**
+- `src/types/opportunity-radar-agent.ts`
+- `src/lib/opportunity-radar/validate-radar-output.ts`
+- `src/lib/opportunity-radar/persist-radar-output.ts` (refactored from inline)
+- `src/lib/opportunity-radar/sample-radar-output.ts`
+- `scripts/run-radar-fixture-persistence.ts`
+- `scripts/test-radar-validation.ts`
+
+**Files Modified:**
+- `Context/current-feature.md` — Updated to Phase 23C-2A active status with scope and acceptance criteria
+- `Context/data-model.md` — Updated Radar Schema section documenting Phase 23C-2A introduces fixture-based persistence
+- `Context/project-overview.md` — Updated roadmap: Phase 23C-1B→Completed, Phase 23C-2A→Active
+
+**Constraints Maintained:**
+- ✅ No external AI/provider calls (fixture only)
+- ✅ No Admin Scan button implementation
+- ✅ No /opportunity-radar UI changes (still uses mock data)
+- ✅ No database schema changes (uses existing Phase 23C-1B schema)
+- ✅ No Prisma migrations added
+- ✅ No Admin UI changes
+- ✅ No production scoring changes
+- ✅ No scheduled jobs
+- ✅ No web/search calls
+
+**Automated Checks:**
+- `npm run build` — ✅ Pass (Compiled successfully, TypeScript passed)
+- `npx tsc --noEmit` — ✅ Pass (No TypeScript errors)
+- `npx prisma validate` — ✅ Pass (Schema valid)
+- `npx prisma migrate status` — ✅ Pass (15 migrations, up to date)
+
+**Design Highlights:**
+- Strict TypeScript contracts prevent schema/output mismatches at compile time
+- Comprehensive validation enforces all safety rules before persistence
+- Fixture reuse via persistence function allows testing both validation and DB writes without external dependencies
+- Stock linking by ticker enables future enrichment with existing FomoFilter stock data
+- Reusable persistence function (with optional Prisma client) establishes foundation for Phase 23C-2B Admin Scan Button work
+- env loading pattern matches existing project conventions (prisma/seed.ts)
+
+**Ready for Future Phases:**
+- Phase 23C-2B: Admin Scan button with real Claude Sonnet 4.6 execution
+- Phase 23C-3: /opportunity-radar reads from DB instead of mock
+- Phase 23D: Scheduled daily scan execution
