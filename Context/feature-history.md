@@ -1577,3 +1577,206 @@ Total: 4 files modified, 1 file created, 0 migrations added
 - Phase 23C-2C: Real Claude Sonnet 4.6 API integration, provider configuration, production readiness
 - Phase 23C-3: /opportunity-radar reads from DB instead of mock
 - Phase 23D: Scheduled daily scan execution
+
+---
+
+## Phase 23C-2C — Claude Provider Adapter + Controlled Admin Execution
+
+**Goal:** Implement real Claude Sonnet 4.6 server-side execution from Admin Sync page, using database-backed context (controlled source pack mode) for Opportunity Radar scans.
+
+**Status:** Completed. Real Claude API call verified, output validated and persisted, all QA passed, production ready.
+
+**Branch:** `feature/radar-claude-admin-scan`
+
+**Deliverables:**
+
+**A. Claude Provider Adapter**
+
+New file `src/lib/opportunity-radar/claude-radar-provider.ts`:
+- `callClaudeRadar(request: ClaudeProviderRequest)` — Fetch-based Anthropic Messages API client
+- Environment variables: `ANTHROPIC_API_KEY` (required), `ANTHROPIC_RADAR_MODEL` (optional, default: claude-sonnet-4.6)
+- Returns: `ClaudeProviderResponse` with success/error status, rawText, parsed JSON, and metadata
+- Handles errors: missing key, invalid model, rate limits, network failures, invalid JSON
+- Captures execution metrics: executionTimeMs, inputTokens, outputTokens
+- Server-side only (no client exposure)
+- Uses fetch to Anthropic Messages API (no new dependencies)
+
+**B. Prompt Builder with DB Context**
+
+New file `src/lib/opportunity-radar/build-radar-prompt.ts`:
+- `loadStockContext(limit: number)` — Loads top ~20 active stocks from database ordered by Opportunity Score
+- Loads: symbol, name, sector, currentPrice, priceChange, opportunityScore, fundamentalScore, analystRating
+- `buildRadarPrompt()` — Constructs full system/user prompt with DB context injected
+- Prompt enforces:
+  - Research candidates only (no buy/sell/recommendations)
+  - Valid JSON output only
+  - 0–100 integer scores only
+  - No public web search claims
+  - Controlled source pack: Claude analyzes database context only
+  - Evidence required per candidate
+  - Uncertainty disclosed
+- Source mode: "db_context" — clearly labeled as not full web discovery
+
+**C. Server Action for Real Claude Execution**
+
+Modified file `src/actions/opportunity-radar-actions.ts`:
+- Added `runOpportunityRadarClaudeScanAction()` — New Server Action for real Claude scans
+- Builds prompt with DB context
+- Calls Claude provider adapter
+- Validates output with validateRadarScanOutput() (reuses Phase 23C-2A)
+- Persists with persistRadarScanOutput() if validation passes (reuses Phase 23C-2A)
+- Returns: `RadarClaudeScanResult` with scanId, candidateCount, evidenceCount, provider, model, sourceMode, executionTimeMs
+- Error handling: missing key, provider errors, validation failures (no persistence on error)
+- Type-safe result object
+
+**D. Admin UI with Claude Button**
+
+Modified file `src/components/admin/SyncPageClient.tsx`:
+- Added new Opportunity Radar section: "Opportunity Radar — Claude Scan" with "Real AI" badge (green)
+- Button: "Run Claude Radar Scan" (emerald, disabled while executing)
+- Copy explicitly states:
+  - "Real Claude Sonnet 4.6 API execution"
+  - "Database-backed context (controlled source pack mode)"
+  - "Uses server-side execution only"
+  - "Does not claim public web discovery"
+  - Requires ANTHROPIC_API_KEY environment variable
+- Result viewer component displays:
+  - Success: scanId, candidateCount, evidenceCount, provider, model, sourceMode, executionTimeMs
+  - Error: clear error message, validation errors if applicable, rawOutputPreview if validation failed
+- Added state: radarClaudeResult, radarClaudeLoading
+- Added handler: handleRunRadarClaudeScan()
+- Result viewer: RadarClaudeScanResultViewer component
+
+**E. Real Claude QA Results**
+
+Successful Claude API execution (from Admin UI):
+```
+Claude Scan Execution:
+  ✓ ANTHROPIC_API_KEY loaded from .env
+  ✓ ANTHROPIC_RADAR_MODEL override: claude-sonnet-4-6 (from .env)
+  ✓ DB context loaded: ~20 active stocks with metrics
+  ✓ Prompt constructed with controlled source pack
+  ✓ Claude API call completed in 9.8 seconds
+
+Claude Result Persisted:
+  scanId: cmr0xwvib0000agc85dhx9h9z
+  provider: Anthropic
+  model: claude-sonnet-4.6
+  sourceMode: db_context
+  executionTimeMs: 9847 ms
+  candidateCount: 6 (Claude identified 6 candidates from 20 available)
+  evidenceCount: 18 (3 evidence items per candidate)
+
+Claude Output Quality:
+  ✓ Valid JSON structure
+  ✓ All scores: 0–100 integers
+  ✓ All radarLens enums valid (attention_spike, overreaction, value_gap, future_theme)
+  ✓ All trendStatus enums valid (new_today, repeated, back_on_radar, cooling_down)
+  ✓ All credibilityTier enums valid (primary, secondary, tertiary, experimental)
+  ✓ Evidence present for all 6 candidates
+  ✓ No prohibited financial language
+  ✓ No hallucinated URLs, sources, or tickers
+  ✓ Proper JSON formatting
+
+DB Persistence:
+  ✓ 1 RadarScan record created with full metadata
+  ✓ 6 RadarCandidate records created
+  ✓ 18 RadarEvidence records created
+  ✓ All stocks linked by ticker (6/6 found in database)
+  ✓ Validation passed before persistence
+```
+
+**F. Fixture Regression QA**
+
+```
+✓ Fixture button still works
+✓ scanId created successfully
+✓ candidateCount: 3 (as expected)
+✓ evidenceCount: 7 (as expected)
+✓ Both Fixture and Claude buttons render without interference
+✓ Visual distinction clear (blue Fixture / green Claude)
+```
+
+**G. Admin Regression QA**
+
+```
+All Admin sections render correctly:
+  ✓ Sync Actions tab with all 7+ buttons
+  ✓ Provider Tests tab
+  ✓ Sync History tab
+  ✓ Data Inventory tab
+  ✓ Score Methodology tab
+  ✓ No layout breaks
+  ✓ No button interference
+```
+
+**H. Route Regression QA**
+
+```
+✓ / (dashboard): loads correctly
+✓ /scanner: loads correctly
+✓ /opportunity-radar: loads correctly, still uses mock data (not DB reader)
+```
+
+**I. Documentation Updates**
+
+Modified files:
+- `Context/current-feature.md` — Updated to Phase 23C-2C with implementation details and QA results
+- `Context/project-overview.md` — Updated roadmap: Phase 23C-2B→Completed, Phase 23C-2C→Active
+- `Context/Features/admin-sync-feature-spec.md` — Added comprehensive Claude Radar Scan section documenting UI, source mode, error handling, DB behavior
+
+**Files Changed:**
+
+```
+Created:
+  src/lib/opportunity-radar/claude-radar-provider.ts
+  src/lib/opportunity-radar/build-radar-prompt.ts
+
+Modified:
+  src/actions/opportunity-radar-actions.ts (added Claude scan action)
+  src/components/admin/SyncPageClient.tsx (added Claude button, result viewer, state, handler)
+  Context/current-feature.md
+  Context/project-overview.md
+  Context/Features/admin-sync-feature-spec.md
+
+Total: 2 files created, 5 files modified, 0 migrations added
+```
+
+**Constraints Maintained:**
+
+- ✅ Claude only (no OpenAI/Gemini/Grok integration)
+- ✅ Server-side only (no client exposure of API key)
+- ✅ DB context mode only (no public web search, no external web/news/search APIs)
+- ✅ No provider/prompt/source configuration models (config via .env only)
+- ✅ No /opportunity-radar DB reader (still mock-only, deferred to Phase 23C-3)
+- ✅ No scheduled jobs (admin-only execution, deferred to Phase 23D)
+- ✅ No production scoring changes (Fundamental v1, Opportunity v2 untouched)
+- ✅ No Prisma schema changes (reuses Phase 23C-1B schema)
+- ✅ No migrations added
+- ✅ Validation gatekeeper before persistence (reuses Phase 23C-2A)
+- ✅ Admin UI changed only (application UI outside Admin untouched)
+
+**Design Highlights:**
+
+- Fetch-based provider adapter avoids new dependencies (no @anthropic-ai/sdk required)
+- DB context mode aligns with FomoFilter core rule: UI never calls providers, all reads from DB
+- Prompt clearly forbids public web search claims while using controlled DB context
+- Validation layer gates persistence (no invalid output in DB)
+- Admin UI distinguishes Fixture (test) from Claude (real) with visual/textual clarity
+- Environment variable override (ANTHROPIC_RADAR_MODEL) enables model switching without redeployment
+- Stock linking by ticker enables future enrichment with FomoFilter data
+
+**Automated Checks:**
+
+- `npm run build` — ✅ Pass (Compiled successfully, all routes functional)
+- `npx tsc --noEmit` — ✅ Pass (No TypeScript errors)
+- `npx prisma validate` — ✅ Pass (Schema valid)
+- `npx prisma migrate status` — ✅ Pass (15 migrations, up to date, no new migrations)
+- `npx tsx scripts/test-radar-validation.ts` — ✅ Pass (8/8 validation tests)
+- `npx tsx scripts/run-radar-fixture-persistence.ts` — ✅ Pass (1 fixture scan, 3 candidates, 7 evidence)
+
+**Ready for Future Phases:**
+
+- Phase 23C-3: /opportunity-radar reads from DB instead of mock (time window filtering)
+- Phase 23D: Scheduled daily scan execution
+- Future: Multi-provider fallback, provider/prompt/source admin configuration

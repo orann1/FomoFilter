@@ -84,6 +84,55 @@ Test admin workflow for validating and persisting Opportunity Radar fixture data
 - Uses Prisma transaction for atomicity
 - Multiple clicks create separate scans (no destructive deletes of prior fixtures)
 
+### Opportunity Radar Claude Scan (Phase 23C-2C)
+
+**Role:**
+Real Claude Sonnet 4.6 API execution with database-backed context (controlled source pack mode). Distinguishes from fixture testing with clear labeling and server-side provider integration.
+
+**Scope:**
+- Button: "Run Claude Radar Scan"
+- Triggers Server Action: runOpportunityRadarClaudeScanAction()
+- Requires ANTHROPIC_API_KEY environment variable
+- Optional ANTHROPIC_RADAR_MODEL override (default: claude-sonnet-4.6)
+- Builds prompt with active stocks from database as context
+- Calls Claude via fetch-based Anthropic Messages API
+- Validates output with strict validation rules
+- Persists to RadarScan + RadarCandidate + RadarEvidence if validation passes
+- Success display: scanId, candidateCount, evidenceCount, provider, model, sourceMode, executionTimeMs
+- Error display: error message + validation errors if validation failed
+- Error display: rawOutputPreview (first 500 chars) if Claude output invalid
+
+**Copy Rules:**
+- Clearly label as "Real AI" and "Claude Scan"
+- Explicitly state: "Uses Claude server-side"
+- Mention: "No normal UI path calls AI"
+- State: "Does not claim public web discovery — uses database context only"
+- Distinguish from fixture: "Real Claude Sonnet 4.6 integration"
+- Document requirement: "Requires ANTHROPIC_API_KEY environment variable"
+
+**DB Behavior:**
+- Creates 1 RadarScan record (status: "success", provider: "Anthropic", model: from env/default, sourceMode: "db_context")
+- Loads ~20 active stocks from database ordered by Opportunity Score
+- Creates RadarCandidate records for each candidate returned by Claude
+- Attempts Stock linking by ticker symbol (stockId null if not found in database)
+- Creates RadarEvidence records for each evidence item
+- Uses Prisma transaction for atomicity
+- Multiple clicks create separate scans (no destructive deletes)
+- Does not persist invalid Claude output (validation failure prevents DB write)
+
+**Error Handling:**
+- Missing ANTHROPIC_API_KEY: Shows clear error "Missing ANTHROPIC_API_KEY environment variable..."
+- Model not available: Shows clear error "Claude model not available or rejected by provider..."
+- Provider error (rate limit, auth, network): Shows clear error with status
+- Validation failure: Shows error list + rawOutputPreview for debugging
+- No DB persistence on any error
+
+**Source Mode:**
+- Declared as "db_context" in providerMetadata
+- Claude receives ordered list of active stocks with key metrics
+- Prompt explicitly forbids claiming public web search
+- Prompt enforces: research candidates only, no buy/sell language, valid JSON, evidence required
+
 ### Provider Tests
 
 Purpose:
