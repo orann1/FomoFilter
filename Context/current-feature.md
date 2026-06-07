@@ -1,12 +1,27 @@
-# Current Feature — Phase 23C-2A: Opportunity Radar Output Validation + DB Persistence From Fixture
+# Current Feature — Phase 23C-2B: Opportunity Radar Admin Scan Button + Fixture Execution
 
 ## Active Phase
 
 ```txt
-Phase 23C-2A — Opportunity Radar Output Validation + DB Persistence From Fixture
-Status: Implementation in progress
-Focus: Validate AI agent output and persist fixture data to RadarScan, RadarCandidate, RadarEvidence tables
+Phase 23C-2B — Opportunity Radar Admin Scan Button + Fixture Execution
+Status: Completed - QA Passed - Ready for Merge
+Focus: Add Admin UI button to trigger fixture validation and persistence from /admin/sync page
 ```
+
+**✓ Completion Checklist:**
+- ✓ Server Action implemented (runOpportunityRadarFixtureScanAction)
+- ✓ Admin UI section added to /admin/sync Sync Actions tab
+- ✓ Result viewer components (success/error states)
+- ✓ Admin button QA passed (fixture scan executed successfully)
+- ✓ DB persistence verified (scanId cmq471fq600000sc86guhom4e with 3 candidates, 7 evidence)
+- ✓ Stock linking verified (NVDA, SMCI, META)
+- ✓ Re-click behavior verified (separate scans created, no data loss)
+- ✓ Admin regression verified (all sections still render)
+- ✓ Route regression verified (/, /scanner, /opportunity-radar)
+- ✓ Validation tests passed (8/8)
+- ✓ Automated checks passed (build, tsc, prisma validate, migrate status)
+- ✓ Documentation updated (feature-history, current-feature, admin-sync-feature-spec, project-overview)
+- ✓ Code ready for commit and merge
 
 ---
 
@@ -40,152 +55,154 @@ Context/Algorithms/fundamental-score-v1.md
 
 ## Goal
 
-Implement Phase 23C-2A — Opportunity Radar Output Validation + DB Persistence From Fixture.
+Implement Phase 23C-2B — Opportunity Radar Admin Scan Button + Fixture Execution.
 
-Create server-side validation and persistence functions for Radar AI output, using a local fixture to test that:
-1. Radar scan output JSON can be validated for schema compliance
-2. Valid output can be persisted to the database
-3. Fixture data does not require external AI/provider calls
+Add a manual Admin control to the /admin/sync Sync Actions tab that allows users to trigger the Opportunity Radar fixture validation and persistence flow with a single click.
+
+Uses the existing Phase 23C-2A infrastructure:
+- validateRadarScanOutput(...) validation function
+- persistRadarScanOutput(...) persistence function
+- sampleRadarOutput fixture data
 
 **This phase does NOT:**
 - Call Claude, OpenAI, Gemini, Grok, or any AI provider
 - Call external search/web/news APIs
-- Add Admin Scan button UI
-- Add scheduled jobs
-- Update /opportunity-radar to read from DB
-- Change production scoring logic
+- Add real provider integration
 - Add provider/prompt/source configuration models
+- Update /opportunity-radar to read from DB
+- Add scheduled jobs
+- Change production scoring logic
+- Change Prisma schema or add migrations
 
 **This phase DOES:**
-- Define TypeScript types for Radar agent output (RadarScanOutput, RadarCandidateOutput, etc.)
-- Implement validation function with strict rules (0-100 scores, enum checking, prohibited language, evidence requirements)
-- Implement persistence function using Prisma transactions
-- Create sample fixture with 3 candidates covering different radar lenses
-- Create QA script to test validation and persistence
-- Update documentation
+- Create a Server Action to validate fixture and persist to DB
+- Add Admin UI section to Sync Actions tab with button and result display
+- Show success state with scanId, candidateCount, evidenceCount
+- Show error state with validation errors if any
+- Update documentation (current-feature, admin-sync-feature-spec, project-overview)
 
 ---
 
-## Scope — Validation + Fixture Persistence Only
+## Scope — Admin Button + Fixture Execution Only
 
 ### In Scope
 
 ```txt
-- TypeScript types for Radar agent output (opportunity-radar-agent.ts)
-- Validation function with strict rule enforcement
-- Persistence function using Prisma with transaction support
-- Sample fixture with 3 realistic candidates (attention_spike, overreaction, value_gap)
-- QA script for testing validation and persistence
-- Documentation updates (current-feature.md, data-model.md)
+- Server Action (runOpportunityRadarFixtureScanAction) that validates and persists fixture
+- Admin UI section in /admin/sync Sync Actions tab
+- Button to trigger the action
+- Success state display (scanId, candidateCount, evidenceCount)
+- Error state display (error message + validation errors if any)
+- Documentation updates (current-feature.md, admin-sync-feature-spec.md, project-overview.md)
 ```
 
 ### Out of Scope
 
 ```txt
-- Admin Scan button UI or Server Action
-- /opportunity-radar route changes or UI updates
-- AI provider API calls (Claude, OpenAI, Gemini, Grok, Anthropic SDK)
+- Real Claude/OpenAI/Gemini/Grok API calls
 - External search/web/news API calls
-- Web scraping implementation
+- Provider configuration models
+- Prompt version management
+- Source registry management
+- /opportunity-radar UI changes (still mock-only)
 - Scheduled job implementation
-- RadarPromptVersion, RadarProviderConfig, RadarSource models
+- Real AI agent execution (comes in Phase 23C-2C)
+- SyncRun integration for Radar scans (use RadarScan directly)
+- Prisma schema changes or migrations
 - Production scoring changes
-- Seed data
-- Admin UI
-- API routes
-- SyncRun records (unless unavoidable)
-- Provider/prompt/source configuration screens
 ```
 
 ---
 
-## Phase 23C-2A Deliverables
+## Phase 23C-2B Deliverables
 
 This phase produces:
 
 ```txt
-1. src/types/opportunity-radar-agent.ts — TypeScript types for RadarScanOutput, RadarCandidateOutput, ValidatedRadarScanOutput
-2. src/lib/opportunity-radar/validate-radar-output.ts — Validation function with strict rules
-3. src/lib/opportunity-radar/persist-radar-output.ts — Persistence function using Prisma transactions
-4. src/lib/opportunity-radar/sample-radar-output.ts — Fixture with 3 candidates
-5. scripts/run-radar-fixture-persistence.ts — QA script for manual testing
-6. Context/current-feature.md updated with Phase 23C-2A spec
-7. Context/data-model.md reviewed and updated if needed
-8. All automated checks passing: build, TypeScript, prisma validate, prisma migrate status
+1. src/actions/opportunity-radar-actions.ts — Server Action for fixture scan
+2. Updated src/components/admin/SyncPageClient.tsx — New Opportunity Radar section in Sync Actions tab
+3. RadarFixtureScanResultViewer component — Display success/error states
+4. Context/current-feature.md updated to Phase 23C-2B spec
+5. Context/Features/admin-sync-feature-spec.md — Add Opportunity Radar section
+6. Context/project-overview.md — Update roadmap to Phase 23C-2B active
+7. All automated checks passing: build, TypeScript, prisma validate, prisma migrate status
 ```
 
 ---
 
 ## Acceptance Criteria
 
-**Type Definition:**
+**Admin UI:**
 ```txt
-✓ RadarScanOutput type covers full output schema
-✓ RadarCandidateOutput type matches candidate fields
-✓ RejectedCandidateOutput type defined
-✓ All score fields are strictly typed as number
-✓ Enums properly constrained (radarLens, trendStatus, credibilityTier, etc.)
+✓ /admin/sync Sync Actions tab has new Opportunity Radar section
+✓ Section title, icon, and badges clearly visible
+✓ Copy explains "fixture-only" and "no AI/provider/search calls"
+✓ Button labeled "Run Fixture Radar Scan"
+✓ Button disabled while loading, enabled otherwise
+✓ Loading state shows spinner icon
+✓ Button does not trigger on double-click
 ```
 
-**Validation Function:**
+**Server Action:**
 ```txt
-✓ Validates schemaVersion = "1.0"
-✓ Rejects if candidates array > 10 items
-✓ Checks all scores are 0-100 integers
-✓ Detects 0-10 scale scores and rejects with clear error
-✓ Validates radarLens enum values
-✓ Validates trendStatus enum values
-✓ Validates credibilityTier enum values
-✓ Requires at least 1 evidence per candidate
-✓ Scans for prohibited financial language (buy, sell, guaranteed, etc.)
-✓ Checks URL validity when provided
-✓ Returns clear errors and warnings
+✓ runOpportunityRadarFixtureScanAction exists in src/actions/opportunity-radar-actions.ts
+✓ Returns RadarFixtureScanResult type
+✓ Validates sampleRadarOutput with validateRadarScanOutput()
+✓ Persists with persistRadarScanOutput() if validation passes
+✓ Returns success: true, scanId, candidateCount, evidenceCount on success
+✓ Returns success: false, error, validationErrors on failure
+✓ No external AI/provider/search calls made
 ```
 
-**Persistence Function:**
+**Success State Display:**
 ```txt
-✓ Creates RadarScan record with correct metadata
-✓ Creates RadarCandidate records with sortRank
-✓ Links to Stock by ticker (stockId null if not found)
-✓ Creates RadarEvidence records for each evidence item
-✓ Uses Prisma transaction for atomicity
-✓ Returns scanId, candidateCount, evidenceCount
-✓ Handles errors gracefully with descriptive messages
+✓ Shows green success badge with checkmark
+✓ Displays scanId (monospace font)
+✓ Displays candidateCount (emerald color)
+✓ Displays evidenceCount (emerald color)
+✓ All three values in clear labeled grid
 ```
 
-**Fixture Data:**
+**Error State Display:**
 ```txt
-✓ Fixture has 3 candidates with different lenses (attention_spike, overreaction, value_gap)
-✓ All candidates have at least 2 sources
-✓ No prohibited language in any text field
-✓ All scores are 0-100 integers
-✓ Provider metadata correctly set (Anthropic, claude-sonnet-4.6, sourceMode: fixture)
-✓ agentSelfCheck accurately describes fixture
-✓ Real stock tickers (NVDA, SMCI, META) for stockId linking
-✓ Evidence includes mix of URL and non-URL sources
+✓ Shows red error badge with X icon
+✓ Displays error message
+✓ Shows list of validation errors if present
+✓ Error text is readable and actionable
+```
+
+**Fixture Execution:**
+```txt
+✓ Clicking button creates real RadarScan record in DB
+✓ RadarScan has correct metadata (provider, model, status, summary)
+✓ 3 RadarCandidate records created (NVDA, SMCI, META)
+✓ Stock linking works (NVDA, SMCI, META symbols found)
+✓ 7 RadarEvidence records created (2, 3, 2 per candidate)
+✓ Multiple clicks create separate scans (no duplicates deleted)
 ```
 
 **Automated Checks:**
 ```txt
 ✓ npm run build succeeds
 ✓ npx tsc --noEmit succeeds (no TypeScript errors)
-✓ npx prisma validate passes (schema unchanged from 23C-1B)
+✓ npx prisma validate passes (schema unchanged)
 ✓ npx prisma migrate status shows clean state (no new migrations)
+✓ Existing validation tests (test-radar-validation.ts) still pass
+✓ Existing persistence QA script (run-radar-fixture-persistence.ts) still works
 ```
 
 **Scope Confirmation:**
 ```txt
-✓ No application UI changed
-✓ No /opportunity-radar route changes
-✓ No Admin UI added
-✓ No API routes added
-✓ No Server Actions added
+✓ Admin UI changed (SyncPageClient.tsx only)
+✓ /opportunity-radar unchanged (still mock-only)
+✓ /scanner unchanged
+✓ / (dashboard) unchanged
+✓ No Prisma schema changes
+✓ No new migrations
 ✓ No AI/provider calls
 ✓ No external web/search calls
-✓ No scheduled jobs
 ✓ No production scoring changes
-✓ No Prisma schema changes (uses existing tables)
-✓ No new migrations (schema from 23C-1B sufficient)
+✓ No scheduled jobs added
 ```
 
 ---
@@ -199,42 +216,55 @@ Before commit approval, return in English:
 2. Files inspected
 3. Files changed
 4. Implementation summary:
-   - Types: RadarScanOutput, RadarCandidateOutput, etc.
-   - Validation: strict rule enforcement
-   - Persistence: Prisma transaction-based
-   - Fixture: 3 candidates with evidence
-5. Validation behavior tested:
-   - Valid fixture passes
-   - Invalid score scale rejected
-   - Prohibited language rejected
-   - Missing evidence rejected
-   - Invalid enum rejected
-6. Persistence behavior tested:
-   - Scan record created with metadata
-   - Candidates persisted with sortRank
-   - Evidence linked correctly
-   - Stock linking (null if not found)
-7. Automated check results:
+   - Server Action: runOpportunityRadarFixtureScanAction()
+   - Admin UI: New Opportunity Radar section in Sync Actions tab
+   - Result display: Success and error states
+5. Server Action behavior:
+   - Accepts no parameters
+   - Validates sampleRadarOutput
+   - Persists if validation passes
+   - Returns scanId, candidateCount, evidenceCount on success
+6. Admin UI behavior:
+   - Button triggers action
+   - Loading state while running
+   - Success display with metrics
+   - Error display with messages
+7. Browser QA results:
+   - /admin/sync loads
+   - Opportunity Radar section visible
+   - Button clickable and triggers action
+   - Success/error states display correctly
+   - Real DB write confirmed (scanId, candidates, evidence)
+   - /opportunity-radar still mock-only
+   - /scanner unaffected
+   - / (dashboard) unaffected
+8. DB persistence from Admin button:
+   - scanId: [actual ID from QA]
+   - candidateCount: 3
+   - evidenceCount: 7
+9. Automated check results:
    - npm run build
    - npx tsc --noEmit
    - npx prisma validate
    - npx prisma migrate status
-8. Documentation Updates:
-   - Updated: Context/current-feature.md
-   - Checked: Context/data-model.md, Context/project-overview.md
-   - Reason: Schema unchanged; metadata already documented in 23C-1B
-   - MD files changed: current-feature.md only
-9. Scope confirmation:
-   - application UI changed: NO
-   - DB/schema changed: NO (uses existing models)
+   - validation test script still passes
+   - persistence QA script still works
+10. Documentation Updates:
+   - Updated: Context/current-feature.md, Context/Features/admin-sync-feature-spec.md, Context/project-overview.md
+   - Checked: Context/data-model.md (no schema changes, not updated)
+   - Reason: Phase 23C-2B specifies Admin UI only, no schema changes needed
+   - MD files changed: 3 files
+11. Scope confirmation:
+   - Admin UI changed: YES (SyncPageClient.tsx)
+   - Application UI outside Admin changed: NO
+   - DB/schema changed: NO
    - migrations added: NO
    - provider/AI/API calls: NO
    - external search/web calls: NO
    - production scoring changed: NO
-   - Admin UI changed: NO
    - /opportunity-radar UI changed: NO
-10. Known issues or risks
-11. Ready for review or not
+12. Known issues or risks
+13. Ready for review or not
 ```
 
 Do not commit without explicit approval.

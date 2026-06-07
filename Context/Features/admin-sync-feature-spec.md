@@ -52,9 +52,37 @@ Universe Sync (Nasdaq 100 + S&P 500)
 Daily Market Data Sync
 Company Data Sync
 Score Calculation
+Opportunity Radar Fixture Scan (Phase 23C-2B, fixture-only test phase)
 ```
 
 Legacy/developer tools should be separated from production workflows.
+
+### Opportunity Radar Fixture Scan (Phase 23C-2B)
+
+**Role:**
+Test admin workflow for validating and persisting Opportunity Radar fixture data. Fixture-only implementation — no AI provider or external API calls.
+
+**Scope:**
+- Button: "Run Fixture Radar Scan"
+- Triggers Server Action: runOpportunityRadarFixtureScanAction()
+- Validates sampleRadarOutput fixture (3 NVDA/SMCI/META candidates)
+- Persists to RadarScan + RadarCandidate + RadarEvidence if validation passes
+- Success display: scanId, candidateCount, evidenceCount
+- Error display: error message + validation errors list
+
+**Copy Rules:**
+- Clearly label as "Fixture Phase" and "fixture-only"
+- Explicitly state: "No AI provider or external search is called in this phase"
+- Mention Phase 23C-2B context: test workflow before real AI integration
+- Real AI integration deferred to Phase 23C-2C
+
+**DB Behavior:**
+- Creates 1 RadarScan record (status: "success", provider: "Anthropic", model: "claude-sonnet-4.6", sourceMode: "fixture")
+- Creates 3 RadarCandidate records with sortRank 0-2 (NVDA, SMCI, META)
+- Attempts Stock linking by ticker symbol (stockId null if not found)
+- Creates 7 RadarEvidence records (2 for NVDA, 3 for SMCI, 2 for META)
+- Uses Prisma transaction for atomicity
+- Multiple clicks create separate scans (no destructive deletes of prior fixtures)
 
 ### Provider Tests
 

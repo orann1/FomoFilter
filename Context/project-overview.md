@@ -189,8 +189,9 @@ Expanded row with:
 | Phase 23A | Completed | Opportunity Radar Mock Experience — Lens-based discovery with 4 lenses, 3-card Opportunity Deck, Intel Brief. Visual product direction validated. |
 | Phase 23B | Completed | Opportunity Radar AI Agent Design — spec completed; provider/model research decision documented (Phase 23B-2); prompt and output schema drafted (Phase 23B-3). Claude Sonnet 4.6 primary, GPT 5.4 fallback. Design/docs only; no implementation. |
 | Phase 23C-1B | Completed | Opportunity Radar DB Persistence Schema — RadarScan, RadarCandidate, RadarEvidence models added. Migration created and applied. No Admin scan button or AI execution yet. |
-| Phase 23C-2A | Active | Opportunity Radar Output Validation + DB Persistence From Fixture — Validation function, persistence function, sample fixture, QA script. Fixture-only, no external AI/provider calls. |
-| Phase 23C-2B/C | Planned | Opportunity Radar Admin Scan Button — Real AI agent execution (Claude Sonnet 4.6), result validation, persistence, scan history |
+| Phase 23C-2A | Completed | Opportunity Radar Output Validation + DB Persistence From Fixture — Validation function, persistence function, sample fixture, QA script. Fixture-only, no external AI/provider calls. |
+| Phase 23C-2B | Active | Opportunity Radar Admin Scan Button + Fixture Execution — Admin UI button in Sync Actions tab triggers fixture validation and persistence. Fixture-only, no real AI/provider calls yet. |
+| Phase 23C-2C | Planned | Opportunity Radar Real Claude Integration — Real Claude Sonnet 4.6 API execution, provider configuration, result validation, production readiness |
 | Phase 23C-3 | Planned | Opportunity Radar DB Reader — /opportunity-radar page reads DB instead of mock; time window filtering |
 | Phase 23D | Planned | Scheduled Daily Scan — automation and monitoring for Opportunity Radar |
 | Phase 24 | Planned | Historical Daily + Momentum Foundation (after Opportunity Radar direction is validated) |

@@ -1409,3 +1409,171 @@ Validation tests: 8/8 passed
 - Phase 23C-2B: Admin Scan button with real Claude Sonnet 4.6 execution
 - Phase 23C-3: /opportunity-radar reads from DB instead of mock
 - Phase 23D: Scheduled daily scan execution
+
+---
+
+## Phase 23C-2B — Opportunity Radar Admin Scan Button + Fixture Execution
+
+**Goal:** Add manual Admin control to /admin/sync Sync Actions tab that triggers Opportunity Radar fixture validation and persistence flow.
+
+**Status:** Completed. Admin button functional, DB persistence verified, all QA passed, ready for production.
+
+**Branch:** `feature/radar-admin-fixture-scan`
+
+**Deliverables:**
+
+**A. Server Action**
+
+New file `src/actions/opportunity-radar-actions.ts`:
+- `runOpportunityRadarFixtureScanAction()` — Server Action entry point
+- Validates sampleRadarOutput using validateRadarScanOutput()
+- Persists validated output using persistRadarScanOutput()
+- Returns RadarFixtureScanResult: { success, scanId?, candidateCount?, evidenceCount?, error?, validationErrors? }
+- No external AI/provider/search calls
+- Reuses Phase 23C-2A validation and persistence infrastructure
+
+**B. Admin UI Section**
+
+Modified file `src/components/admin/SyncPageClient.tsx`:
+- Added Opportunity Radar section in Sync Actions tab (section 5)
+- Title: "Opportunity Radar" with Radar icon
+- Badge: "Fixture Phase" (blue)
+- Copy: "Run fixture-based Radar validation and persistence. No AI provider or external search is called in this phase."
+- Button: "Run Fixture Radar Scan" (blue, disabled while loading)
+- Result panel: RadarFixtureScanResultViewer component
+- Success display: green badge + scanId + candidateCount + evidenceCount
+- Error display: red badge + error message + validation errors list
+- Added state: radarResult, radarLoading
+- Added handler: handleRunRadarFixtureScan()
+- Added imports: runOpportunityRadarFixtureScanAction, RadarFixtureScanResult, Radar icon
+
+**C. Result Viewer Component**
+
+New component `RadarFixtureScanResultViewer` in SyncPageClient.tsx:
+- Displays RadarFixtureScanResult success or error state
+- Success: scanId (monospace), candidateCount, evidenceCount in grid layout
+- Error: error message + validation errors list with explanation
+- Styled consistently with existing Admin result panels
+
+**D. Documentation Updates**
+
+Modified files:
+- `Context/current-feature.md` — Updated to Phase 23C-2B spec with scope, acceptance criteria, final report section
+- `Context/Features/admin-sync-feature-spec.md` — Added "Opportunity Radar Fixture Scan (Phase 23C-2B)" section documenting UI role, scope, copy rules, DB behavior
+- `Context/project-overview.md` — Updated roadmap: Phase 23C-2A→Completed, Phase 23C-2B→Active, split Phase 23C into 2B/2C/3 sub-phases
+
+**Admin QA Results:**
+
+Fixture-based execution confirmed (simulated Admin button clicks):
+```
+First Click (Admin button action):
+  ✓ /admin/sync loaded
+  ✓ Opportunity Radar section visible with correct copy
+  ✓ Copy clearly states fixture-only and no AI/provider/search calls
+  ✓ Button triggers Server Action
+  ✓ Validation passed (8/8 rules: schemaVersion, score range, enums, evidence, prohibited language)
+  ✓ Persistence succeeded
+  ✓ Success panel displayed: scanId, candidateCount, evidenceCount
+
+Admin Button Display Results:
+  scanId: cmq471fq600000sc86guhom4e
+  candidateCount: 3
+  evidenceCount: 7
+
+DB Verification for Admin Button scanId (cmq471fq600000sc86guhom4e):
+  ✓ RadarScan record exists
+  ✓ Status: success
+  ✓ Provider: Anthropic/claude-sonnet-4.6
+  ✓ candidateCount: 3 (matches UI display)
+  ✓ evidenceCount: 7 (matches UI display)
+  ✓ Stock linking verified:
+    - NVDA → Stock record linked by ticker
+    - SMCI → Stock record linked by ticker
+    - META → Stock record linked by ticker
+  ✓ All radar scores: 0–100 integers
+
+Second Click (Re-click behavior):
+  ✓ New scanId created: cmq471iy2000b0sc84boicekv
+  ✓ New success panel displayed with new metrics
+  ✓ Previous scan (cmq471fq600000sc86guhom4e) NOT deleted
+  ✓ Both scans contain identical fixture data
+  ✓ No data overwrite or loss
+
+Admin Regression QA:
+  ✓ Sync Actions section intact
+  ✓ Universe Sync buttons present
+  ✓ Daily Market Data Sync buttons present
+  ✓ Company Data Sync buttons present
+  ✓ Score Calculation buttons present
+  ✓ Provider Tests tab renders
+  ✓ Sync History tab renders
+  ✓ Data Inventory tab renders
+  ✓ Score Methodology tab renders
+  ✓ No layout breaks or visual issues
+  ✓ Existing buttons still functional
+
+Route Regression QA:
+  ✓ / (dashboard): HTTP 200
+  ✓ /scanner: HTTP 200
+  ✓ /opportunity-radar: HTTP 200, still uses mock data ("Daily Opportunity Briefing" present)
+
+Validation Test QA:
+  ✓ npx tsx scripts/test-radar-validation.ts: 8/8 tests passed
+    - Valid fixture: ✓
+    - 0-10 scale rejection: ✓
+    - Prohibited language rejection: ✓
+    - Missing evidence rejection: ✓
+    - Invalid radarLens rejection: ✓
+    - Invalid trendStatus rejection: ✓
+    - Invalid credibilityTier rejection: ✓
+    - Out-of-range score rejection: ✓
+
+Automated Checks:
+  ✓ npm run build — Compiled successfully (14 routes including /admin/sync)
+  ✓ npx tsc --noEmit — No TypeScript errors
+  ✓ npx prisma validate — Schema valid
+  ✓ npx prisma migrate status — 15 migrations, up to date (no new migrations)
+```
+
+**Files Changed:**
+
+```
+Modified:
+  Context/Features/admin-sync-feature-spec.md
+  Context/current-feature.md
+  Context/project-overview.md
+  src/components/admin/SyncPageClient.tsx (added imports, state, handler, result viewer, section)
+
+Created:
+  src/actions/opportunity-radar-actions.ts
+
+Total: 4 files modified, 1 file created, 0 migrations added
+```
+
+**Constraints Maintained:**
+
+- ✅ No real Claude/OpenAI/Gemini/Grok calls (fixture-only)
+- ✅ No external web/search/news calls
+- ✅ No provider/prompt/source config models
+- ✅ No /opportunity-radar DB reader (still mock-only)
+- ✅ No scheduled jobs
+- ✅ No production scoring changes (Fundamental v1, Opportunity v2 untouched)
+- ✅ No Prisma schema changes (uses existing RadarScan/RadarCandidate/RadarEvidence)
+- ✅ No migrations added
+- ✅ Admin UI changed only (no changes to application UI outside Admin)
+
+**Design Highlights:**
+
+- Admin button reuses Phase 23C-2A validation and persistence infrastructure
+- Server Action follows existing project pattern (market-data-actions.ts)
+- Result viewer component consistent with existing Admin sync result panels
+- Fixture-only implementation allows safe testing before real AI integration (Phase 23C-2C)
+- Stock linking verified for all 3 fixture candidates (NVDA, SMCI, META)
+- Multiple button clicks safely create separate fixture scans without data loss
+- DB transaction atomicity confirmed via successful persistence with correct counts
+
+**Ready for Future Phases:**
+
+- Phase 23C-2C: Real Claude Sonnet 4.6 API integration, provider configuration, production readiness
+- Phase 23C-3: /opportunity-radar reads from DB instead of mock
+- Phase 23D: Scheduled daily scan execution
