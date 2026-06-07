@@ -50,6 +50,9 @@ If a migration is added, update this file.
 | `StockDrawerDetail` | Legacy — no active owner | Not used by any UI render path (Phase 21C). Schema retained, no migration yet. |
 | `SyncRun` | Admin sync workflows | Admin Sync, freshness checks |
 | `SyncRunItem` | Admin sync workflows | Sync history/details |
+| `RadarScan` | Future admin AI scan button / scheduled jobs (Phase 23C+) | Opportunity Radar UI (Phase 23C+), admin history |
+| `RadarCandidate` | RadarScan execution results | Opportunity Radar UI, research candidate display |
+| `RadarEvidence` | RadarScan execution results | Evidence citations in Radar UI |
 
 ---
 
@@ -442,6 +445,222 @@ Use clear provider labels.
 Use partial_success when some symbols are skipped but useful data was persisted.
 Do not treat expected provider coverage limitations as application failures.
 ```
+
+---
+
+### RadarScan
+
+Purpose:
+
+```txt
+Represents one Opportunity Radar AI agent execution.
+Stores metadata about the scan run, provider/model used, timing, token usage, and overall results.
+```
+
+Primary Owner:
+
+```txt
+Phase 23C+: Admin AI Scan button and future scheduled daily jobs
+```
+
+Important fields:
+
+```txt
+scanDate — when the scan executed
+timeWindow — time period scanned (e.g., "24h", "7d", "30d")
+provider — AI provider name (e.g., "claude", "gpt")
+model — model identifier (e.g., "claude-sonnet-4.6")
+promptVersion — versioned prompt identifier (e.g., "opportunity-radar-v1")
+schemaVersion — versioned output schema (e.g., "candidate-output-v1")
+status — scan status (e.g., "completed", "failed", "partial_success")
+sourceMode — how sources were gathered (e.g., "web_search", "provider_native", "mock")
+searchEnabled — whether external search was used
+totalCandidatesReturned — total candidates produced by AI
+totalRejected — candidates rejected by validation layer
+totalProcessed — successfully persisted candidates
+executionTimeMs — total scan duration
+tokenPrompt — prompt tokens used
+tokenCompletion — completion tokens used
+costEstimate — estimated API cost
+summaryOverallMarketTheme — AI's overall market assessment
+summaryQualityNotes — AI's self-assessment of output quality
+```
+
+Relationships:
+
+```txt
+RadarScan has many RadarCandidate records
+RadarScan has no direct Stock relationship
+candidates RadarCandidate[] — inverse relation
+```
+
+Rules:
+
+```txt
+RadarScan is immutable once created (no updates to status/summary after initial completion).
+Do not read from RadarScan during normal UI render; use RadarCandidate and RadarEvidence.
+Provider and model names use strings (not enums) to support future provider additions.
+Status field uses strings (not enums) to allow flexible AI/validation state tracking.
+```
+
+---
+
+### RadarCandidate
+
+Purpose:
+
+```txt
+Represents one research candidate discovered and assessed by a RadarScan execution.
+Stores the AI agent's structured output for a single candidate: thesis, scores, evidence pointers, and UI metadata.
+These are AI assessment scores, NOT production Opportunity/Fundamental scores.
+```
+
+Primary Owner:
+
+```txt
+RadarScan execution results (written once per scan)
+```
+
+Important fields:
+
+```txt
+scanId — foreign key to parent RadarScan
+stockId — optional reference to Stock DB if matched during enrichment
+ticker — candidate ticker symbol
+companyName — candidate company name
+radarLens — categorization lens (e.g., "Attention Spike", "Overreaction", "Value Gap", "Future Theme")
+detailedCategory — sub-category or specific signal (e.g., "Analyst Upgrade")
+headline — one-line summary suitable for UI display
+thesis — longer explanation of why the candidate appeared
+whyNow — time-context (e.g., catalyst, earnings, news)
+mainCatalyst — primary reason for signal (free-text or structured)
+attentionScore — AI assessment 0-100 (not production Opportunity Score)
+confidenceScore — AI confidence in assessment
+hypeRiskScore — AI assessment of hype/manipulation risk
+radarSignalStrength — AI strength of signal evidence
+radarConvictionScore — AI conviction level (distinct from production scores)
+trendStatus — trend direction (e.g., "emerging", "strengthening", "fading")
+appearancesLast7Days — how many scans mentioned this candidate in last 7 days
+appearancesLast30Days — how many scans mentioned this candidate in last 30 days
+tags — user/AI-assigned labels (array of strings)
+sortRank — UI display rank within the scan
+```
+
+Relationships:
+
+```txt
+RadarCandidate belongs to RadarScan (required)
+RadarCandidate optionally belongs to Stock (stockId can be null)
+RadarCandidate has many RadarEvidence records
+scan RadarScan @relation
+stock Stock? @relation
+evidence RadarEvidence[]
+```
+
+Unique constraint:
+
+```txt
+@@unique([scanId, ticker]) — no duplicate ticker within a single scan
+```
+
+Rules:
+
+```txt
+Radar scores (attentionScore, confidenceScore, etc.) are AI assessment scores, NOT production scores.
+Do not use Radar scores in production Opportunity Score or Fundamental Score calculations.
+Do not use Radar scores to override or replace production scores in UI display.
+stockId can be null if the candidate was not matched to an existing Stock record.
+Deleting a RadarScan cascades to delete all child RadarCandidate records.
+Deleting a Stock does not delete RadarCandidate records; stockId becomes null.
+```
+
+---
+
+### RadarEvidence
+
+Purpose:
+
+```txt
+Represents source citations and evidence for a RadarCandidate assessment.
+Stores where/why the AI agent found the candidate: article URLs, news titles, credibility scores.
+```
+
+Primary Owner:
+
+```txt
+RadarScan execution results (written as part of candidate output)
+```
+
+Important fields:
+
+```txt
+candidateId — foreign key to parent RadarCandidate
+sourceName — human-readable source label (e.g., "TradingView Ideas", "Finviz", "Reddit WSB")
+sourceType — source category (e.g., "news", "social_media", "technical_analysis", "analyst_report")
+url — hyperlink to the source (optional if source is not online)
+title — headline or label of the source material
+publishedAt — timestamp of source publication
+snippet — excerpt or summary of the source content
+credibilityTier — AI's credibility assessment (e.g., "tier1_established", "tier2_credible", "tier3_community", "tier4_unverified")
+relevanceScore — how relevant the evidence is to the candidate assessment (0-100)
+```
+
+Relationships:
+
+```txt
+RadarEvidence belongs to RadarCandidate (required)
+candidate RadarCandidate @relation
+```
+
+Rules:
+
+```txt
+Evidence is read-only once persisted (no updates).
+Deleting a RadarCandidate cascades to delete all child RadarEvidence records.
+Multiple evidence records can support a single candidate.
+Evidence is used for UI citations and transparency, not for future re-ranking.
+```
+
+---
+
+## Radar Scores vs. Production Scores
+
+**Important distinction:**
+
+Radar models (RadarScan, RadarCandidate, RadarEvidence) store **AI agent assessment outputs**, not production scores.
+
+**Production scores** (Fundamental Score v1, Opportunity Score v2):
+- Calculated from DB fundamentals, analyst data, and price metrics
+- Used in Scanner default sort and Dashboard priority
+- Deterministic and reproducible from DB state
+
+**Radar scores** (attentionScore, confidenceScore, radarSignalStrength, radarConvictionScore):
+- AI agent's subjective assessment of signal strength, confidence, hype risk
+- Not used in production scoring
+- Useful for AI-powered discovery and ranking within Radar candidates
+- Should never be confused with or substituted for production scores
+
+**Radar candidates** are research discoveries, not investment recommendations.
+They are presented to the user for further manual review, not as automatic buy signals.
+
+---
+
+## Radar Schema — Phase 23C-1B Status
+
+**Phase 23C-1B (completed):**
+- RadarScan, RadarCandidate, RadarEvidence models added
+- Migration created and applied
+- Cascade deletes implemented correctly
+- String types used (no Prisma enums) for flexibility during prompt/schema iterations
+
+**Phase 23C-2 (future):**
+- Admin AI Scan button implementation
+- Validation layer for AI output
+- Provider/prompt/source configuration models (RadarPromptVersion, RadarProviderConfig, etc.)
+
+**Phase 23C-3+ (future):**
+- Scheduled daily scans
+- /opportunity-radar reads from DB instead of mock data
 
 ---
 

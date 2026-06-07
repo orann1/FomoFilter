@@ -44,6 +44,7 @@ model Stock {
   watchlistItems      WatchlistItem[]
   alertRules          AlertRule[]
   universeMemberships StockUniverseMember[]
+  radarCandidates     RadarCandidate[]
 }
 
 enum StockUniverseType {
@@ -462,4 +463,107 @@ model SyncRunItem {
   @@index([syncRunId])
   @@index([symbol])
   @@index([status])
+}
+
+model RadarScan {
+  id                      String           @id @default(cuid())
+  scanDate                DateTime         @default(now())
+  timeWindow              String
+  provider                String
+  model                   String
+  promptVersion           String
+  schemaVersion           String
+  status                  String
+  sourceMode              String
+  actualThinkingEffort    String?
+  searchEnabled           Boolean          @default(false)
+  totalCandidatesReturned Int              @default(0)
+  totalRejected           Int              @default(0)
+  totalProcessed          Int              @default(0)
+  validOutputCount        Int              @default(0)
+  executionTimeMs         Int?
+  tokenPrompt             Int?
+  tokenCompletion         Int?
+  tokenTotal              Int?
+  costEstimate            Decimal?
+  summaryOverallMarketTheme String?
+  summaryQualityNotes     String?
+  summaryLimitations      String?
+  errorMessage            String?
+  rejectedCandidates      Json?
+  agentSelfCheck          Json?
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+
+  candidates              RadarCandidate[]
+
+  @@index([scanDate])
+  @@index([status])
+  @@index([provider])
+  @@index([timeWindow])
+}
+
+model RadarCandidate {
+  id                      String           @id @default(cuid())
+  scanId                  String
+  scan                    RadarScan        @relation(fields: [scanId], references: [id], onDelete: Cascade)
+  stockId                 String?
+  stock                   Stock?           @relation(fields: [stockId], references: [id], onDelete: SetNull)
+
+  ticker                  String
+  companyName             String
+  radarLens               String
+  detailedCategory        String
+  headline                String
+  radarBullets            String[]
+  thesis                  String
+  whyNow                  String
+  mainCatalyst            String
+  whatLooksInteresting    String[]
+  keyConcerns             String[]
+  nextCheck               String
+  attentionScore          Int
+  confidenceScore         Int
+  hypeRiskScore           Int
+  radarSignalStrength     Int
+  radarConvictionScore    Int
+  sourceQualityScore      Int
+  manipulationRiskScore   Int
+  trendStatus             String
+  appearancesLast7Days    Int              @default(0)
+  appearancesLast30Days   Int              @default(0)
+  tags                    String[]
+  disqualifiedReason      String?
+  sortRank                Int?
+  createdAt               DateTime         @default(now())
+  updatedAt               DateTime         @updatedAt
+
+  evidence                RadarEvidence[]
+
+  @@unique([scanId, ticker])
+  @@index([scanId])
+  @@index([ticker])
+  @@index([radarLens])
+  @@index([stockId])
+  @@index([trendStatus])
+}
+
+model RadarEvidence {
+  id                  String           @id @default(cuid())
+  candidateId         String
+  candidate           RadarCandidate   @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+
+  sourceName          String
+  sourceType          String
+  url                 String?
+  title               String?
+  publishedAt         DateTime?
+  snippet             String
+  credibilityTier     String
+  relevanceScore      Int
+  createdAt           DateTime         @default(now())
+
+  @@index([candidateId])
+  @@index([sourceType])
+  @@index([credibilityTier])
 }

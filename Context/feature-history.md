@@ -1160,3 +1160,108 @@ Context/feature-history.md (this file, append Phase 23B-3 summary)
 - Text length limits ensure UI suitability
 - Evidence validation rules enforce quality
 - Validation rules are actionable for Phase 23C engineers
+
+---
+
+## Phase 23C-1B — Opportunity Radar DB Persistence Schema
+
+**Goal:** Add the minimal database schema needed to persist Opportunity Radar AI scan results.
+
+**Status:** Completed. Prisma schema updated, migration created and applied, all automated checks passing.
+
+**Branch:** `feature/radar-db-schema`
+
+**Deliverable:**
+
+Three new Prisma models added to persist Opportunity Radar scan results:
+
+**RadarScan Model:**
+- Purpose: Represents one Opportunity Radar AI agent execution
+- Stores: scan metadata (scanDate, timeWindow, provider, model, promptVersion, schemaVersion), status, sourceMode
+- Tracks: execution metrics (executionTimeMs, tokenPrompt, tokenCompletion, tokenCost, costEstimate)
+- Includes: summary fields (summaryOverallMarketTheme, summaryQualityNotes, summaryLimitations)
+- Stores: structured data (rejectedCandidates JSON, agentSelfCheck JSON)
+- Relationships: has many RadarCandidate records; no direct Stock relation
+- Indexes: scanDate, status, provider, timeWindow for query patterns
+
+**RadarCandidate Model:**
+- Purpose: Represents one research candidate discovered by a RadarScan execution
+- Stores: candidate identification (ticker, companyName), radar lens assignment, detailed category
+- Narrative fields: headline, radarBullets, thesis, whyNow, mainCatalyst, whatLooksInteresting, keyConcerns, nextCheck
+- AI Assessment scores (NOT production scores): attentionScore, confidenceScore, hypeRiskScore, radarSignalStrength, radarConvictionScore, sourceQualityScore, manipulationRiskScore (all 0–100 integers)
+- Trend context: trendStatus, appearancesLast7Days, appearancesLast30Days, tags
+- Relationships: belongs to RadarScan (required, cascading delete), optionally links to Stock (stockId nullable, SET NULL delete), has many RadarEvidence records
+- Unique constraint: (scanId, ticker) — prevents duplicates within a scan
+- Indexes: scanId, ticker, radarLens, stockId, trendStatus for joins and filtering
+
+**RadarEvidence Model:**
+- Purpose: Stores source citations and evidence for RadarCandidate assessments
+- Stores: source metadata (sourceName, sourceType, url, title, publishedAt), snippet (excerpt), credibilityTier, relevanceScore
+- Relationships: belongs to RadarCandidate (required, cascading delete)
+- Indexes: candidateId, sourceType, credibilityTier for citation lookups
+
+**Stock Model Update:**
+- Added inverse relation: `radarCandidates RadarCandidate[]`
+- Allows future joins from Stock → RadarCandidate for enrichment
+
+**Cascade Delete Behavior:**
+```txt
+RadarScan deleted
+  ↓ CASCADE
+RadarCandidate deleted
+  ↓ CASCADE
+RadarEvidence deleted
+
+Stock deleted
+  ↓ SET NULL
+RadarCandidate.stockId becomes null (preserves candidate history)
+```
+
+**Schema Decisions:**
+- All Radar-specific fields use TEXT type (not Prisma enums) for flexibility during AI iterations
+- Radar scores are AI assessment scores, explicitly NOT production scores (Opportunity Score v2, Fundamental Score v1)
+- No Prisma enums added in this phase — validation layer deferred to Phase 23C-2
+- No provider/prompt/source configuration models added in this phase — deferred to Phase 23C-2
+- JSON fields (rejectedCandidates, agentSelfCheck) stored as JSONB in PostgreSQL
+
+**Migration Created and Applied:**
+- Migration: `20260607175904_add_opportunity_radar_models`
+- Location: `prisma/migrations/20260607175904_add_opportunity_radar_models/`
+- Status: Applied to live database (Neon PostgreSQL)
+- DDL: 3 CREATE TABLE statements, 13 CREATE INDEX statements, 3 ADD CONSTRAINT statements
+
+**Documentation Updates:**
+- `Context/data-model.md`: Added Model Ownership entries, detailed descriptions of all three models, clarification that Radar scores ≠ production scores, Phase 23C-1B status section
+- `Context/current-feature.md`: Updated to Phase 23C-1B as active phase (replacing Phase 23B-3)
+- `Context/project-overview.md`: Updated roadmap to mark Phase 23B as Completed, Phase 23C-1B as Active, split Phase 23C into sub-phases (23C-1B schema, 23C-2 admin button, 23C-3 DB reader)
+
+**Constraints Maintained:**
+- ✅ No application code changed (only Prisma schema)
+- ✅ No Admin Scan button implementation
+- ✅ No AI/provider execution or calls
+- ✅ No /opportunity-radar route changes (still uses mock data)
+- ✅ No scheduled jobs
+- ✅ No production scoring logic changes
+- ✅ No Admin UI changes
+- ✅ No API routes added
+- ✅ No Server Actions added
+- ✅ No seed data changes
+
+**Automated Checks:**
+- `npm run build` — ✅ Pass (Compiled successfully, TypeScript passed, 12 static pages generated)
+- `npx tsc --noEmit` — ✅ Pass (No TypeScript errors)
+- `npx prisma validate` — ✅ Pass (Schema valid)
+- `npx prisma migrate status` — ✅ Pass (15 migrations total, database schema up to date)
+
+**Design Highlights:**
+- Cascade deletes properly configured to protect data integrity
+- Optional Stock link preserves candidate history when stocks are removed
+- Flexible string types support future schema/prompt iterations
+- Clear separation of Radar assessment scores from production scores
+- Index coverage optimized for query patterns (date, status, provider, lens, ticker, trend)
+- Unique constraint on (scanId, ticker) prevents duplicate research in same scan
+
+**Ready for Future Phases:**
+- Phase 23C-2: Admin Scan button, output validation layer, provider/prompt/source config models
+- Phase 23C-3: /opportunity-radar reads from DB instead of mock
+- Phase 23D: Scheduled daily scan execution

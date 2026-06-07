@@ -187,8 +187,10 @@ Expanded row with:
 | Phase 22B | Completed | Multi-Universe Unique Sync Foundation + S&P 500 Expansion |
 | Phase 22C | Completed | Data Inventory pagination / sync hardening |
 | Phase 23A | Completed | Opportunity Radar Mock Experience — Lens-based discovery with 4 lenses, 3-card Opportunity Deck, Intel Brief. Visual product direction validated. |
-| Phase 23B | Active | Opportunity Radar AI Agent Design — spec completed; provider/model research decision documented (Phase 23B-2); prompt and output schema drafting in progress (Phase 23B-3). Claude Sonnet 4.6 is primary quality candidate, GPT 5.4 fallback. Design/docs only; no implementation yet. |
-| Phase 23C | Planned | Opportunity Radar Persistence + Admin Scan Integration — AI agent runs through Admin, results stored in DB, page reads DB |
+| Phase 23B | Completed | Opportunity Radar AI Agent Design — spec completed; provider/model research decision documented (Phase 23B-2); prompt and output schema drafted (Phase 23B-3). Claude Sonnet 4.6 primary, GPT 5.4 fallback. Design/docs only; no implementation. |
+| Phase 23C-1B | Active | Opportunity Radar DB Persistence Schema — RadarScan, RadarCandidate, RadarEvidence models added. Migration created and applied. No Admin scan button or AI execution yet. |
+| Phase 23C-2 | Planned | Opportunity Radar Admin Scan Button + Validation Layer — Manual admin scan execution, output validation, results storage |
+| Phase 23C-3 | Planned | Opportunity Radar DB Reader — /opportunity-radar page reads DB instead of mock; time window filtering |
 | Phase 23D | Planned | Scheduled Daily Scan — automation and monitoring for Opportunity Radar |
 | Phase 24 | Planned | Historical Daily + Momentum Foundation (after Opportunity Radar direction is validated) |
 | Phase 25 | Planned | Momentum Indicators |

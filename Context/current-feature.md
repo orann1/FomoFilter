@@ -1,11 +1,11 @@
-# Current Feature — Phase 23B-3: Opportunity Radar Prompt + Output Schema Draft
+# Current Feature — Phase 23C-1B: Opportunity Radar DB Persistence Schema
 
 ## Active Phase
 
 ```txt
-Phase 23B-3 — Opportunity Radar Prompt + Output Schema Draft
-Status: Documentation-only planning; schema and prompt specification in progress
-Focus: Define production-ready prompt contract and output schema before Phase 23C implementation
+Phase 23C-1B — Opportunity Radar DB Persistence Schema
+Status: Completed; Prisma schema added, migration created and applied, automated checks passed, ready for merge
+Focus: Add minimal database schema for Radar scan results persistence (RadarScan, RadarCandidate, RadarEvidence)
 ```
 
 ---
@@ -20,212 +20,141 @@ Context/project-overview.md
 Context/current-feature.md
 Context/coding-standards.md
 Context/ai-interaction.md
-Context/product-lead-workflow.md
+Context/architecture.md
+Context/data-model.md
+Context/sync-workflows.md
 ```
 
 For this phase, also read:
 
 ```txt
-Context/Features/opportunity-radar-ai-agent-spec.md (especially Phase 23B-3 section)
+Context/Features/opportunity-radar-ai-agent-spec.md
 Context/Features/opportunity-radar-feature-spec.md
 Context/Features/admin-sync-feature-spec.md
-Context/architecture.md
-Context/scoring-system.md (to understand why Radar scores differ from production scores)
+Context/scoring-system.md
+Context/Algorithms/opportunity-score-v2.md
+Context/Algorithms/fundamental-score-v1.md
 ```
 
 ---
 
 ## Goal
 
-Define a production-ready prompt contract and output schema for the Opportunity Radar AI Agent before Phase 23C implementation begins.
+Implement Phase 23C-1B — Opportunity Radar DB Persistence Schema.
 
-This phase documents:
-- Production Prompt v1 for Claude Sonnet 4.6 (primary) and GPT 5.4 (fallback)
-- Strict JSON output schema v1 with all required and optional fields
-- Validation rules, score ranges, and prohibited language checks
-- Text length limits for UI suitability
-- Field classification (DB-persisted vs. UI-facing vs. internal-only)
-- Score clarifications (why Radar scores ≠ production scores)
-- Implementation implications for Phase 23C
+Add the minimal database schema needed to persist Opportunity Radar AI scan results for future use by /opportunity-radar page.
 
-This phase does not implement code, run AI agents, change schemas, or modify production scoring.
+**This phase does NOT:**
+- Implement AI execution or provider calls
+- Add Admin Scan button
+- Update /opportunity-radar to read from DB
+- Add scheduled jobs
+- Add provider/prompt/source admin configuration models
+- Change production scoring logic
+
+**This phase DOES:**
+- Add RadarScan model (scan metadata)
+- Add RadarCandidate model (research candidates)
+- Add RadarEvidence model (source citations)
+- Create Prisma migration
+- Validate schema and build
+- Update documentation
 
 ---
 
-## Scope — Documentation Only
+## Scope — Prisma Schema + Migration Only
 
 ### In Scope
 
 ```txt
-- Production Prompt v1 text (system + user template)
-- Output Schema v1 with TypeScript-like notation
-- Validation rules for Phase 23C implementation
-- Text length limits by field
-- Field classification table
-- Score definitions and clarifications
-- Claude Sonnet 4.6 specific notes
-- GPT 5.4 fallback notes
-- Safety and prohibited language rules
-- Provider metadata structure
-- Agent self-check structure
-- Rejected candidate structure
+- RadarScan model (scan execution metadata)
+- RadarCandidate model (candidate research data)
+- RadarEvidence model (source citations)
+- Stock inverse relation (radarCandidates)
+- Prisma migration creation and validation
+- Cascade delete rules
+- Database index placement
+- Schema documentation in Context/data-model.md
 ```
 
 ### Out of Scope
 
 ```txt
-- Real AI provider API calls or integration
-- Provider authentication or key storage code
-- Web/search pipeline implementation
-- Database schema changes or migrations
-- Prisma model additions
-- Admin UI implementation
-- API routes or server-side handlers
+- Admin Scan button UI or Server Action
+- /opportunity-radar route changes
+- AI provider API calls
+- Web search implementation
+- Validation layer
 - Scheduled job implementation
+- RadarPromptVersion, RadarProviderConfig, RadarSource models (Phase 23C-2)
 - Production scoring changes
-- Prompt execution code
-- Multi-provider routing logic
-- Testing or validation runs
+- Seed data
+- Admin UI
+- API routes
 ```
 
 ---
 
-## Scope — Documentation Only
-
-### In Scope
-
-```txt
-- Update AI agent spec with model research findings
-- Document primary/fallback provider decision
-- Document actual benchmark caveats
-- Document that quality outranks latency/cost for daily scans
-- Document Phase 23C implications
-- Append completed Phase 23B-2 summary to feature history
-```
-
-### Out of Scope
-
-```txt
-- Real AI provider API calls or integration
-- Provider authentication or key storage code
-- Web/search pipeline implementation
-- Database schema changes or migrations
-- Prisma model additions
-- Admin UI implementation
-- API routes or server-side handlers
-- Scheduled job implementation
-- Production scoring changes
-- Prompt execution code
-- Multi-provider routing or fallback logic
-```
-
----
-
-## Phase 23B-3 Deliverables
+## Phase 23C-1B Deliverables
 
 This phase produces:
 
 ```txt
-1. Production Prompt v1 (system + user template) in Context/Features/opportunity-radar-ai-agent-spec.md
-2. Output Schema v1 (TypeScript-like specification) in same file
-3. Validation Rules section with specific rules for Phase 23C implementation
-4. Text Field Length Limits table
-5. Field Classification table (DB persisted, UI-facing, internal QA)
-6. Score Clarification section explaining why Radar scores ≠ Opportunity/Fundamental scores
-7. Claude Sonnet 4.6 specific notes (quality, latency, implementation considerations)
-8. GPT 5.4 fallback notes (schema issue with 0–10 scores, validation strictness)
-9. Non-scope list (what is explicitly NOT included)
-10. Documentation updates to Context/current-feature.md and Context/project-overview.md
-```
-
----
-
-## Phase 23C Implications
-
-When Phase 23C begins (DB schema + manual admin scan), it should use:
-
-```txt
-- The Production Prompt v1 defined in Phase 23B-3
-- The Output Schema v1 defined in Phase 23B-3
-- The Validation Rules section for output validation
-- The Text Length Limits for enforcing UI-friendly output
-- The Field Classification table to decide DB schema structure
-- Claude Sonnet 4.6 as the default quality candidate (with GPT 5.4 as fallback)
-- Single active provider architecture (not multi-provider ensemble)
-- Provider adapter pattern so the active provider can be changed without code deployment
-- Output validation layer that rejects or normalizes bad outputs
-- Server-side execution only through Admin button / future scheduled job
-- DB-backed persisted scan results before /opportunity-radar reads real results
-```
-
-Important implementation caveat:
-
-```txt
-If Claude Sonnet 4.6 does not have native web/search access in the chosen API/runtime, Phase 23C must include a server-side source/search pipeline that feeds source material into Claude.
-The UI must never call AI or external search/providers directly.
-Claude output should be constrained with max_tokens to keep it compact.
-```
-
----
-
-## Documentation Checklist
-
-Update now:
-
-```txt
-✅ Context/Features/opportunity-radar-ai-agent-spec.md — add Phase 23B-3 section with prompt, schema, validation rules
-✅ Context/current-feature.md — this file, reflect Phase 23B-3 scope and deliverables
-✅ Context/project-overview.md — roadmap note for Phase 23B progress (provider decision + prompt/schema drafting)
-```
-
-Check but do not update (no implementation changes):
-
-```txt
-Context/data-model.md — no schema changes in this phase
-Context/sync-workflows.md — no workflow changes in this phase
-Context/Features/admin-sync-feature-spec.md — no Admin workflow change yet
-Context/scoring-system.md — no production scoring changes
-Context/Algorithms/*.md — no algorithm changes
-Context/architecture.md — no architectural changes in this phase
+1. Prisma schema: RadarScan, RadarCandidate, RadarEvidence models added to schema.prisma
+2. Stock inverse relation: radarCandidates RadarCandidate[] added to Stock model
+3. Migration: 20260607175904_add_opportunity_radar_models created and applied
+4. Context/data-model.md updated with model descriptions and clarifications
+5. Context/current-feature.md updated to reflect Phase 23C-1B as active phase
+6. Context/project-overview.md updated with Phase 23C-1B status
+7. All automated checks passing: build, TypeScript, prisma validate, prisma migrate status
 ```
 
 ---
 
 ## Acceptance Criteria
 
-**Documentation Completeness:**
+**Schema Implementation:**
 ```txt
-✅ Production Prompt v1 documented (system + user template)
-✅ Output Schema v1 documented (TypeScript-like specification)
-✅ Validation Rules documented for Phase 23C
-✅ Text Length Limits table created
-✅ Field Classification table created
-✅ Score Clarification section explains Radar scores ≠ production scores
-✅ Claude Sonnet 4.6 specific notes documented
-✅ GPT 5.4 fallback notes documented (including 0–10 score issue)
-✅ Non-scope list is explicit
+✅ RadarScan model added with all specified fields and indexes
+✅ RadarCandidate model added with all specified fields and indexes
+✅ RadarEvidence model added with all specified fields and indexes
+✅ Stock model updated with radarCandidates inverse relation
+✅ Cascade deletes: RadarScan → RadarCandidate, RadarCandidate → RadarEvidence
+✅ SetNull delete: Stock deletion does not delete RadarCandidate (stockId becomes null)
+✅ Unique constraint on [scanId, ticker] for RadarCandidate
+✅ String types used (no Prisma enums) for Radar fields
+✅ Index placement matches existing patterns
 ```
 
-**Quality Standards:**
+**Database & Validation:**
 ```txt
-✅ Prompt is production-ready and specific
-✅ Schema is strict and validates well
-✅ Validation rules are clear and actionable
-✅ All text limits are enforced
-✅ Field classification is complete
-✅ Score definitions prevent confusion with production scores
-✅ Provider notes are implementation-ready for Phase 23C
+✅ Migration created and applied to live database
+✅ npx prisma validate passes
+✅ npx prisma migrate status shows clean state
+✅ npm run build succeeds
+✅ npx tsc --noEmit succeeds (no TypeScript errors)
+```
+
+**Documentation:**
+```txt
+✅ Context/data-model.md updated with Model Ownership Summary entries
+✅ Context/data-model.md updated with detailed RadarScan/RadarCandidate/RadarEvidence sections
+✅ Context/data-model.md includes "Radar Scores vs. Production Scores" clarification
+✅ Context/data-model.md includes "Radar Schema — Phase 23C-1B Status" section
+✅ Context/current-feature.md updated to show Phase 23C-1B as active phase
+✅ Context/project-overview.md updated with Phase 23C-1B in roadmap
 ```
 
 **Scope Confirmation:**
 ```txt
 ✅ No application code changed
-✅ No database schema changed
-✅ No migrations added
-✅ No provider/AI/API implementation added
-✅ No production scoring changed
-✅ No Admin UI implementation
-✅ No scheduled job implementation
+✅ No /opportunity-radar route changes
+✅ No Admin UI changes
+✅ No API routes added
+✅ No Server Actions added
+✅ No AI/provider calls
+✅ No scheduled jobs
+✅ No production scoring changes
 ```
 
 ---
@@ -238,22 +167,30 @@ Before commit approval, return in English:
 1. Branch name used
 2. Files inspected
 3. Files changed
-4. Documentation summary
-5. Prompt/Schema summary
-6. Scope confirmation:
-   - Application code changed or not
-   - DB/schema changed or not
-   - Migrations added or not
-   - Provider/AI/API implementation added or not
-   - Production scoring changed or not
+4. Migration created:
+   - migration folder/name
+   - summary of schema changes
+5. Implementation summary
+6. Automated check results:
+   - npm run build
+   - npx tsc --noEmit
+   - npx prisma validate
+   - npx prisma migrate status
 7. Documentation Updates:
    - Updated:
    - Checked but not updated:
    - Reason:
    - MD files changed:
-8. Known issues or open questions
-9. Ready for review or not
+8. Scope confirmation:
+   - application code changed or not
+   - DB/schema changed or not
+   - migrations added or not
+   - provider/AI/API implementation added or not
+   - production scoring changed or not
+   - Admin UI changed or not
+   - /opportunity-radar UI changed or not
+9. Known issues or risks
+10. Ready for review or not
 ```
 
 Do not commit without explicit approval.
-Do not start Phase 23C from this task.
