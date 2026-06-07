@@ -868,3 +868,115 @@ Documented 10 design decisions deferred to Phase 23C:
 - `Context/README.md` (routing update)
 - `Context/current-feature.md` (active phase setup)
 - `Context/project-overview.md` (roadmap update)
+
+---
+
+## Phase 23B-2 — Opportunity Radar Provider / Model Research Decision
+
+**Goal:** Document the product decision for Opportunity Radar AI provider/model selection before Phase 23C implementation.
+
+**Status:** Completed as documentation/product research only. No implementation.
+
+**Research Context:**
+
+The user ran Opportunity Radar-style public web/search tests with:
+
+```txt
+Claude Sonnet 4.6
+OpenAI GPT 5.4
+Google Gemini
+xAI Grok
+```
+
+Important caveats:
+
+```txt
+- Claude Sonnet 4.6 was the slowest by a meaningful margin.
+- Latency is not treated as a blocking factor because Opportunity Radar scans are expected to run once daily or from Admin, not as an interactive UI request.
+- Grok was tested using a free / fast model, so the result is not a fair production-grade comparison against paid Claude/OpenAI models.
+- Benchmark JSON fields that claimed high/extended thinking effort were not reliable for the actual run conditions. Actual effort should be treated as regular/default unless explicitly configured.
+```
+
+**Observed Quality Ranking:**
+
+| Rank | Model | Decision |
+| ---: | --- | --- |
+| 1 | Claude Sonnet 4.6 | Primary quality candidate for Phase 23C MVP |
+| 2 | OpenAI GPT 5.4 | Fallback / benchmark provider |
+| 3 | Grok free/fast | Experimental; retest paid/high-quality Grok later before production decision |
+| 4 | Gemini | Deprioritized for MVP default based on this benchmark |
+
+**Model Findings:**
+
+```txt
+Claude Sonnet 4.6:
+  Best candidate quality, strongest narratives, strongest risk/concern handling, best rejected-candidate reasoning.
+  Slow, but acceptable for daily scan cadence.
+
+OpenAI GPT 5.4:
+  Clean and conservative output with good evidence quality.
+  Strong fallback.
+  Needs stricter schema validation because one benchmark output used 0–10 style scores instead of required 0–100 scores.
+
+Grok free/fast:
+  Found some differentiated names and may be useful for attention/social/buzz research.
+  Free/fast result is not enough for production decision. Retest with paid/high-quality Grok if needed.
+
+Gemini:
+  Returned weaker breadth/quality in this benchmark.
+  May remain useful for grounding/search/cost experiments but should not be MVP default.
+```
+
+**Product Decision:**
+
+```txt
+Default provider candidate for Phase 23C MVP: Claude Sonnet 4.6
+Fallback provider candidate: OpenAI GPT 5.4
+Experimental future retest: paid xAI Grok
+Not prioritized for MVP default: Gemini
+```
+
+**Architecture Implications:**
+
+```txt
+- Phase 23C should use a single active provider first, not multi-provider ensemble logic.
+- Keep provider adapter architecture so the active provider can be changed later through Admin configuration.
+- Quality of results is more important than lowest cost or fastest latency.
+- If Claude Sonnet 4.6 lacks native web/search access in the chosen API/runtime, Phase 23C must provide a server-side source/search pipeline that feeds evidence into Claude.
+- UI must still never call AI, web search, or external providers directly.
+- Future production flow remains Admin/scheduled job → agent → DB persistence → /opportunity-radar reads DB.
+```
+
+**Prompt / Validation Implications:**
+
+Future prompt and validation logic must enforce:
+
+```txt
+- Scores must be 0–100 integers, not 0–10.
+- Radar Lens enum values must be valid.
+- Every candidate must include source evidence.
+- Output must avoid buy/sell/recommendation language.
+- Output must disclose uncertainty and evidence weakness.
+- Validation should reject or normalize malformed provider output before persistence.
+```
+
+**Constraints Maintained:**
+
+```txt
+No application code changes
+No database schema changes
+No Prisma migrations
+No provider / AI / API implementation
+No Admin UI implementation
+No production scoring changes
+Documentation and product decision only
+```
+
+**Files Updated:**
+
+```txt
+Context/Features/opportunity-radar-ai-agent-spec.md
+Context/current-feature.md
+Context/project-overview.md
+Context/feature-history.md
+```

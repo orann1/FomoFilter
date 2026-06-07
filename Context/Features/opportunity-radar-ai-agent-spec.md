@@ -420,6 +420,125 @@ Use official benchmarks (HellaSwag, MATH, HumanEval, Financial Reasoning dataset
 7. Select provider/model based on tradeoff analysis.
 ```
 
+### Phase 23B-2 Provider / Model Research Decision
+
+**Status:** Product research completed and documented. No code implementation.
+
+Phase 23B-2 compared real Opportunity Radar-style outputs from:
+
+```txt
+Claude Sonnet 4.6
+OpenAI GPT 5.4
+Google Gemini
+xAI Grok
+```
+
+The test used the real-agent benchmark direction: each model was asked to search public sources and return structured Opportunity Radar candidates. The user did not manually prepare source packs. This better reflects the desired product workflow, where the agent searches, filters, and returns research candidates.
+
+**Important Test Conditions:**
+
+```txt
+- Search was enabled in the tested environments.
+- Claude Sonnet 4.6 was significantly slower than the other models.
+- Latency is not a primary blocker because the Radar scan is expected to run once daily.
+- All models should be treated as normal/default thinking effort unless explicitly configured otherwise.
+- Grok was tested using a free / fast model, so it should not be considered a fair production-quality comparison against paid Claude/OpenAI models.
+- Prompt-declared thinkingEffort values in some benchmark JSON outputs may not reflect the real execution settings and should not be used as ground truth.
+```
+
+**Observed Quality Ranking:**
+
+| Rank | Model | Product Decision | Notes |
+| ---: | --- | --- | --- |
+| 1 | Claude Sonnet 4.6 | Primary quality candidate for Phase 23C MVP | Best overall candidate quality, strongest narrative depth, best concerns/rejected-candidate reasoning. Slow, but acceptable for daily scan. |
+| 2 | OpenAI GPT 5.4 | Strong fallback / comparison model | Clean, conservative, good evidence quality. Needs stricter schema validation because one run used 0–10 style scores where 0–100 was requested. |
+| 3 | Grok free/fast | Experimental; retest only with paid/high-quality Grok before production conclusions | Found some differentiated names, but free/fast test is not comparable. JSON/schema compliance and depth require retesting. |
+| 4 | Gemini | Deprioritized as primary model based on this benchmark | Returned fewer candidates and showed weaker breadth/quality relative to Claude and GPT in this test. May remain useful for grounding/cost experiments. |
+
+**Primary Model Recommendation:**
+
+```txt
+Default Provider Candidate for Phase 23C MVP: Anthropic Claude Sonnet 4.6
+Fallback Provider Candidate: OpenAI GPT 5.4
+Experimental / Retest Later: paid xAI Grok model
+Deprioritized for MVP Default: Gemini
+```
+
+**Why Claude Sonnet 4.6 Leads:**
+
+```txt
+- Best qualitative stock-selection output from user testing.
+- Strongest explanations for why candidates appeared now.
+- Better handling of concerns, uncertainty, and rejected candidates.
+- Better fit for research-first, narrative-heavy Opportunity Radar output.
+- Slower latency is acceptable because the scan is daily / admin-triggered, not interactive UI.
+```
+
+**GPT 5.4 Role:**
+
+```txt
+GPT 5.4 should remain the first fallback and benchmark model.
+It produced good, structured results and used strong evidence, but schema enforcement must be stricter.
+Validation must reject or normalize outputs that use 0–10 scoring when the schema requires 0–100.
+```
+
+**Grok Role:**
+
+```txt
+The Grok result should not be used to reject or approve Grok as a production candidate because it was produced with a free/fast model.
+Grok remains interesting for attention/social/buzz discovery, but it should be retested later with a paid production-capable model and explicit schema constraints.
+```
+
+**Gemini Role:**
+
+```txt
+Gemini remains a possible grounding/search or low-cost candidate, but it is not the primary MVP model based on the current benchmark.
+It should not block Phase 23C if Claude and GPT cover quality and fallback needs.
+```
+
+**Product Weighting Decision:**
+
+```txt
+Quality of candidates is more important than latency or lowest cost.
+Daily scan latency is acceptable if output quality is meaningfully better.
+Phase 23C should start with a single active provider, not multi-provider production routing.
+Admin/provider configuration should still support switching provider/model without code changes.
+```
+
+**Implementation Consequences for Phase 23C:**
+
+```txt
+- Build provider adapter architecture, but run one active provider by default.
+- Configure Claude Sonnet 4.6 as the default candidate if API/tooling supports the required search/source pipeline.
+- Keep GPT 5.4 as fallback / comparison.
+- Do not build multi-provider consensus, voting, or ensemble logic in the MVP.
+- Add output validation for score ranges, enum values, prohibited language, and evidence presence.
+- If Claude API execution lacks native web search in the chosen runtime, Phase 23C must provide a server-side source/search pipeline that feeds source material into Claude.
+```
+
+**Benchmark Prompt Adjustment:**
+
+Future benchmark and production prompts must explicitly enforce:
+
+```txt
+Use scores from 0 to 100 only.
+Do not use 0–10 scoring.
+Example: attentionScore: 85, confidenceScore: 72, hypeRiskScore: 41.
+```
+
+Provider metadata should distinguish configured prompt labels from actual runtime settings:
+
+```ts
+type ProviderBenchmarkMetadata = {
+  provider: string;
+  model: string;
+  actualThinkingEffort: "default" | "regular" | "high" | "extended" | "fast" | "free";
+  promptDeclaredThinkingEffort?: string;
+  searchEnabled: boolean;
+  notes?: string;
+};
+```
+
 ---
 
 ## I. Agent Input Design
@@ -831,7 +950,7 @@ Status:    Planning / Documentation only
 Scope:     Spec document, evaluation framework, prompt drafts
 Output:    Context/Features/opportunity-radar-ai-agent-spec.md
 Timeline:  1 phase (docs-only)
-Next:      Phase 23B-2 if provider research is needed
+Next:      Phase 23B-3 prompt/schema drafting or Phase 23B-4 admin config UX/spec, if approved
 ```
 
 ### Phase 23B-1
@@ -843,17 +962,19 @@ Output:    Context/Features/opportunity-radar-ai-agent-spec.md (current task)
 Timeline:  1 phase (docs-only, no code)
 ```
 
-### Phase 23B-2 (Optional, Future)
+### Phase 23B-2 — Provider / Model Research Decision (Completed)
 
 ```txt
-Goal:      Provider / model research and comparison
-Scope:     Test prompts on OpenAI, Anthropic, Google, xAI
-           Collect structured outputs
-           Compare reliability, quality, cost, latency
-           Document findings
-Output:    Evaluation report, selected provider/model recommendation
-Timeline:  1 phase (research / testing)
-Constraint: Use official documentation; verify prices
+Goal:      Compare model outputs and document the initial provider decision
+Scope:     Real-agent benchmark across Claude Sonnet 4.6, GPT 5.4, Gemini, and Grok
+           Evaluate candidate quality, why-now clarity, evidence quality, reasoning, safety, and schema reliability
+           Record product decision for Phase 23C MVP provider selection
+Output:    Provider decision documented in this spec and feature history
+Decision:  Claude Sonnet 4.6 = primary quality candidate
+           GPT 5.4 = fallback / benchmark
+           Grok = experimental; retest paid model later
+           Gemini = deprioritized for MVP default
+Constraint: No code, no API integration, no schema changes, no production scoring changes
 ```
 
 ### Phase 23B-3 (Optional, Future)
@@ -1004,6 +1125,7 @@ The phase establishes:
 - **Configuration system**: admin-editable provider, source, and prompt management
 - **Output schema**: structured candidate records with evidence and scoring
 - **Evaluation framework**: comparison methodology for providers/models
+- **Provider research decision**: Claude Sonnet 4.6 primary candidate, GPT 5.4 fallback, Grok experimental, Gemini deprioritized for MVP default
 - **Architectural rules**: server-side only, DB-backed reads, UI never calls AI
 - **Phase breakdown**: incremental rollout from Phase 23C onward
 - **Open questions**: design decisions deferred to Phase 23C
