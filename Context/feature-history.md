@@ -980,3 +980,183 @@ Context/current-feature.md
 Context/project-overview.md
 Context/feature-history.md
 ```
+
+---
+
+## Phase 23B-3 — Opportunity Radar Prompt + Output Schema Draft
+
+**Goal:** Define a production-ready prompt contract and output schema for the Opportunity Radar AI Agent before Phase 23C implementation.
+
+**Status:** Specification and planning phase (documentation only, no implementation).
+
+**Branch:** `docs/radar-prompt-schema`
+
+**Deliverable:**
+
+Comprehensive Phase 23B-3 section added to `Context/Features/opportunity-radar-ai-agent-spec.md` (541 new lines) documenting production-ready prompt and output schema:
+
+**A. Purpose Statement:**
+15 core directives for the AI agent:
+- Search public sources for research candidates in the last 24–30 hours
+- Return research candidates only, no buy/sell recommendations
+- Assign exactly one radar lens per candidate
+- Use 0–100 integer scores only (never 0–10)
+- Include at least one evidence item per candidate
+- Include rejected candidates with disqualification reasons
+- Include uncertainty and limitations
+- Never invent URLs, titles, sources, or tickers
+
+**B. Provider Target and Constraints:**
+- Primary: Claude Sonnet 4.6 (best research quality from Phase 23B-2 benchmark)
+- Fallback: GPT 5.4 (conservative output, requires strict 0–100 score validation)
+- Constraint: Claude output can be verbose; prompt must enforce compact JSON
+- Constraint: Prompt runs server-side only, not from UI or browser
+- Constraint: Phase 23C infrastructure will provide sources if native web search unavailable
+
+**C. Production Prompt v1:**
+Complete system prompt with 10 critical constraints:
+1. Research only, not financial advice (no buy/sell/hold language)
+2. Structured JSON output only (no markdown or text outside JSON)
+3. Score scale 0–100 integers only (rejects 0–10 style)
+4. Hallucination prevention (no invented tickers, URLs, sources)
+5. Evidence requirements (≥1 source per candidate, real URLs where possible)
+6. Rejected candidates (show filtering logic and safety checks)
+7. Radar lens assignment (attention_spike, overreaction, value_gap, future_theme)
+8. Time window awareness (focus on last 24–30h, mark old stories as cooling_down)
+9. Uncertainty and limitations (calibrate confidence to evidence quality)
+10. Quality over quantity (5–10 high-quality candidates, not 20–50 weak ones)
+
+Complete user prompt template with placeholders for timeWindow, scanDate, sourceRegistry, optional DB universe context
+
+**D. Output Schema v1:**
+Full TypeScript-like specification with three main objects:
+
+RadarScanOutput:
+- schemaVersion, scanDate, timeWindow
+- providerMetadata (provider, model, actualThinkingEffort, searchEnabled, sourceMode, notes)
+- summary (headline, candidateCount, rejectedCount, topTheme)
+- candidates array
+- rejectedCandidates array
+- agentSelfCheck object
+
+RadarCandidate (30+ fields):
+- Identification: ticker, companyName
+- Radar lens: radarLens enum, detailedCategory
+- Narrative: headline (140 chars), radarBullets (3 × 120 chars), thesis (500 chars), whyNow (350 chars), mainCatalyst (180 chars)
+- Review guidance: whatLooksInteresting (2–4 × 160 chars), keyConcerns (2–4 × 160 chars), nextCheck (180 chars)
+- Evidence: sourceEvidence array with sourceName, sourceType, url, title, publishedAt, snippet (250 chars), credibilityTier, relevanceScore
+- Radar scoring: attentionScore, confidenceScore, hypeRiskScore, radarSignalStrength, radarConvictionScore, sourceQualityScore, manipulationRiskScore (all 0–100)
+- Trend context: trendStatus enum, appearancesLast7Days, appearancesLast30Days
+- Tags: array of categorical labels
+
+RejectedCandidate:
+- ticker, companyName (if known), reason, evidenceSummary (if relevant)
+
+**E. Validation Rules for Phase 23C:**
+- JSON parsing validation
+- schemaVersion must match expected version
+- Candidate array: max 10 items
+- radarLens must be one of: attention_spike, overreaction, value_gap, future_theme
+- Score validation (CRITICAL): all scores must be integers 0–100, rejects 0–10 style, rejects decimals
+- Evidence validation: each candidate must have ≥1 sourceEvidence item; url can be null (with sourceQualityScore impact)
+- Prohibited language: scan for "buy", "sell", "strong buy", "guaranteed", "safe", "will go up", etc.
+- Ticker/company: both must be non-empty and verifiable
+- trendStatus must be one of: new_today, repeated, back_on_radar, cooling_down
+- Text field length enforcement (per Section F)
+
+**F. Text Length Limits Table:**
+Documented 13 field-specific character limits:
+- headline: 140 chars
+- radarBullets (each): 120 chars
+- thesis: 500 chars
+- whyNow: 350 chars
+- mainCatalyst: 180 chars
+- whatLooksInteresting (each): 160 chars
+- keyConcerns (each): 160 chars
+- nextCheck: 180 chars
+- snippet: 250 chars
+- detailedCategory: 100 chars
+- sourceName: 100 chars
+- tags (each): 50 chars
+
+**G. Field Classification Table:**
+24 fields classified by persistence, UI visibility, and QA status:
+- DB persisted: radarLens, headline, radarBullets, thesis, whyNow, mainCatalyst, whatLooksInteresting, keyConcerns, nextCheck, sourceEvidence, providerMetadata, agentSelfCheck, trendStatus, appearancesLast7Days, appearancesLast30Days, tags
+- UI-facing: radarLens, headline, radarBullets, thesis, whyNow, mainCatalyst, whatLooksInteresting, keyConcerns, nextCheck, sourceEvidence
+- Internal QA only: attentionScore, confidenceScore, hypeRiskScore, radarSignalStrength, sourceQualityScore, manipulationRiskScore, providerMetadata, agentSelfCheck, rejectedCandidates
+- Future UI candidates: radarConvictionScore, trendStatus, appearancesLast7Days, appearancesLast30Days, tags
+
+**H. Score Clarification:**
+Radar scores are agent assessment scores, NOT production scores:
+- NOT Opportunity Score replacement
+- NOT Fundamental Score replacement
+- NOT buy/sell indicators
+- NOT financial recommendations
+- Internal QA use only unless future feature explicitly designs UI display
+- radarConvictionScore = agent's conviction worth researching (0–100)
+- All radar scores stored in DB for debugging and future feature work
+
+**I. Claude Sonnet 4.6 Specific Notes:**
+- Quality advantages: strongest narrative quality, best why-now clarity, superior risk handling
+- Latency: 30–60 seconds expected for full scan; acceptable for daily/admin usage
+- Output characteristics: can be verbose (prompt enforces compact JSON), excellent evidence citation, good confidence calibration
+- Implementation: No native web search in standard API; Phase 23C must provide server-side source pipeline
+- API: Use Anthropic SDK, configure claude-sonnet-4.6, max_tokens 8000–12000, consider prompt caching
+
+**J. GPT-5.4 Fallback and Benchmark Notes:**
+- Quality: strong, conservative output, good evidence quality
+- Critical issue: one Phase 23B-2 run used 0–10 scores despite 0–100 requirement
+- Validation: Stricter validation required; detect 0–10 scale and normalize (multiply by 10) or reject
+- Fallback workflow: If Claude times out/fails, fall back to GPT-5.4 with same prompt
+- Fallback results flagged in providerMetadata as fallback_provider
+- API: Use OpenAI SDK, configure gpt-5.4, max_tokens 8000–12000, OpenAI natively supports web search
+
+**K. Non-Scope for Phase 23B-3:**
+Explicitly NOT included:
+- Implementation code (no TypeScript, no API calls)
+- Database schema or migrations
+- Admin UI screens
+- Provider API integration or authentication
+- Web scraping or source-fetching infrastructure
+- Scheduled job implementation
+- Real AI agent execution or testing
+- Changes to Opportunity Score or Fundamental Score
+- Changes to Scanner, Dashboard, Drawer
+- Prisma model additions
+
+**Constraints Maintained:**
+
+```txt
+✅ No application code changed
+✅ No database schema changes
+✅ No Prisma migrations
+✅ No provider/AI/API implementation
+✅ No Admin UI implementation
+✅ No production scoring changes
+✅ Documentation and specification only
+```
+
+**Files Updated:**
+
+```txt
+Context/Features/opportunity-radar-ai-agent-spec.md (added Phase 23B-3 section, +541 lines)
+Context/current-feature.md (updated to Phase 23B-3 active status)
+Context/project-overview.md (updated Phase 23B roadmap line)
+Context/feature-history.md (this file, append Phase 23B-3 summary)
+```
+
+**Automated Checks:**
+- `npm run build` — ✅ Pass (all routes functional)
+- `npx tsc --noEmit` — ✅ Pass (no TypeScript errors)
+- `npx prisma validate` — ✅ Pass (schema valid)
+- `npx prisma migrate status` — ✅ Pass (14 migrations, up to date)
+
+**Design Highlights:**
+- Production Prompt v1 ready for Phase 23C implementation
+- Strict Output Schema v1 with all validation rules documented
+- Provider-specific notes (Claude, GPT) guide implementation
+- Field classification table clarifies DB/UI/QA data ownership
+- Score clarification prevents confusion with production scoring
+- Text length limits ensure UI suitability
+- Evidence validation rules enforce quality
+- Validation rules are actionable for Phase 23C engineers

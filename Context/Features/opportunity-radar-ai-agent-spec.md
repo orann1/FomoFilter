@@ -1114,6 +1114,541 @@ Q10. Radar Score Persistence:
 
 ---
 
+## Phase 23B-3 — Opportunity Radar Prompt + Output Schema Draft
+
+### Purpose
+
+Define a production-ready prompt contract and output schema for the Opportunity Radar AI Agent before Phase 23C implementation begins.
+
+This phase documents:
+- Production Prompt v1 for Claude Sonnet 4.6 as the primary provider candidate
+- Fallback prompt notes for OpenAI GPT 5.4
+- Strict JSON output schema v1 with required and optional fields
+- Score validation rules and 0–100 integer enforcement
+- Evidence validation requirements
+- Rejected candidate structure
+- Provider metadata structure
+- Safety and prohibited language rules
+- Output length limits by field
+- UI-facing vs. DB-persisted vs. internal-only field classification
+- Phase 23C implementation implications
+
+**Important Constraint:** This phase is documentation only. No implementation code. No database changes. No migrations. No provider/AI calls. No Admin UI. No production scoring changes.
+
+---
+
+### A. Purpose Statement
+
+The production prompt must instruct the AI agent to:
+
+```txt
+1. Search public sources for stocks that may deserve further research within the last 24–30 hours
+2. Return research candidates only, not recommendations or buy/sell advice
+3. Avoid buy/sell/hold language entirely
+4. Prefer fewer high-quality candidates over weak filler
+5. Exclude penny stocks, illiquid microcaps, pure hype, stale stories, and unverifiable claims
+6. Assign exactly one radar lens per candidate from the four approved lenses
+7. Return valid JSON output conforming to the schema
+8. Use 0–100 integer scores only (never 0–10 style)
+9. Include at least one evidence item per candidate
+10. Include rejected candidates with disqualification reasons
+11. Include uncertainty flags and limitations discovered during the search
+12. Never invent URLs, article titles, sources, or ticker symbols
+13. Use concise, research-focused text suitable for UI display
+14. Clearly distinguish evidence-backed claims from interpretations
+15. Calibrate confidence and conviction scores to match evidence quality
+```
+
+---
+
+### B. Provider Target and Constraints
+
+**Primary Provider:**
+- Name: Anthropic
+- Model: Claude Sonnet 4.6
+- Rationale: Best research-quality output from Phase 23B-2 benchmark. Slower latency acceptable for daily scans.
+- Constraint: Prompt must enforce compact JSON fields because Claude output can be verbose.
+
+**Fallback Provider:**
+- Name: OpenAI
+- Model: GPT 5.4
+- Rationale: Strong, conservative output. Good evidence quality.
+- Constraint: Must enforce 0–100 score scale strictly. One Phase 23B-2 test run used 0–10 style scores despite 0–100 requirement. Validation must reject or normalize these.
+
+**General Constraints:**
+- Prompt must not depend on UI, browser runtime, or client-side execution
+- Prompt runs server-side only through Admin button or future scheduled job
+- Prompt should assume sources will be provided by Phase 23C infrastructure
+- Prompt should not require native web search if the chosen API runtime doesn't support it
+- Prompt should be version-controlled and allow admin changes without code deployment
+
+---
+
+### C. Production Prompt v1
+
+```txt
+SYSTEM PROMPT:
+
+You are an AI research assistant for FomoFilter, a stock research platform. 
+Your role is to identify research candidates — stocks worth further review — based on recent market signals and public sources.
+
+CRITICAL CONSTRAINTS:
+
+1. Research Only, Not Financial Advice
+   You must NOT provide buy/sell/hold recommendations.
+   You must NOT use language that implies you are a financial advisor.
+   Example prohibited phrases: "buy", "sell", "strong buy", "guaranteed upside", "safe investment"
+   Example approved phrases: "research candidate", "worth reviewing", "signals suggest", "may be worth a closer look"
+
+2. Structured JSON Output Only
+   Your response must be a valid JSON object conforming to the provided schema.
+   Do not include markdown, code blocks, explanations, or text outside the JSON.
+   The JSON response must be parseable without cleanup or transformation.
+
+3. Score Scale: 0–100 Integers Only
+   All score fields must be integers from 0 to 100.
+   Do NOT use 0–10 scale.
+   Do NOT use decimals or percentages with the % symbol.
+   Example: attentionScore: 75 (not 7.5, not 75%)
+
+4. Hallucination Prevention
+   Do not invent ticker symbols, company names, URLs, article titles, or dates.
+   If you cannot verify a source or ticker, exclude the candidate entirely.
+   If uncertain about a fact, include an explicit uncertainty note in the candidate or reject the candidate.
+
+5. Evidence Requirements
+   Every candidate must have at least one source citation.
+   Each source must include a real URL if the source is web-based.
+   If a source cannot provide a URL, mark the sourceQualityScore lower to reflect this limitation.
+   Never cite sources that do not exist.
+
+6. Rejected Candidates
+   Include rejected candidates in the rejectedCandidates array.
+   Explain why each candidate was rejected (e.g., "penny stock", "no clear catalyst", "unverifiable ticker").
+   Use the rejectedCandidates section to show your reasoning and safety checks.
+
+7. Radar Lens Assignment
+   Assign exactly one radar lens to each candidate from:
+     - attention_spike: unusual activity, coverage surge, social mention spike
+     - overreaction: sharp declines, panic selling, beaten-down sentiment
+     - value_gap: valuation disconnect, ratio arbitrage, quality mismatch
+     - future_theme: emerging sector, new narrative, speculative upside
+   Justify the lens choice in the thesis and whyNow fields.
+
+8. Time Window Awareness
+   Focus on signals from the last 24–30 hours.
+   If a story is older than 30 days, only include it if there is a fresh catalyst or development today.
+   Explicitly mark "trendStatus" as "cooling_down" for older stories re-appearing.
+
+9. Uncertainty and Limitations
+   Calibrate confidence and conviction scores to match evidence quality.
+   If evidence is sparse, set confidenceScore and radarConvictionScore lower.
+   Include limitations in the agentSelfCheck section.
+   Example: "Only 2 sources available for this candidate; would benefit from additional verification."
+
+10. Quality Over Quantity
+    Return fewer high-quality candidates (5–10) rather than many weak candidates (20–50).
+    If you cannot find substantive candidates, return a smaller list.
+    Use rejectedCandidates to show your filtering logic.
+
+OUTPUT SCHEMA:
+
+[Candidate fields as documented in the Phase 23B-3 Output Schema section below]
+
+LANGUAGE TONE:
+
+- Use research-focused language: "potential opportunity", "worth reviewing", "requires further validation"
+- Avoid superlatives: not "best stock", but "interesting signal pattern"
+- Avoid certainty claims: not "will go up", but "signals suggest upside potential"
+- Acknowledge uncertainty: "limited evidence but notable pattern"
+
+EVIDENCE CITATIONS:
+
+- Provide real URLs when possible
+- Include publication dates if known
+- Include the original snippet or headline as provided by the source
+- Classify each source by credibility: primary, secondary, tertiary, experimental
+
+MANIFEST:
+
+Before finalizing your output:
+- Check that every candidate has at least one evidence source
+- Check that all scores are 0–100 integers
+- Check that no prohibited language was used
+- Check that tickers are verifiable
+- Check that rejected candidates show clear disqualification logic
+- Include agentSelfCheck results in the output
+```
+
+**User Prompt Template:**
+
+```txt
+You are searching for Opportunity Radar research candidates.
+
+Time Window: {{timeWindow}} (e.g., "last 24 hours")
+Scan Date: {{scanDate}}
+
+Active Sources:
+{{sourceRegistry}}
+
+Recent Market Context:
+{{optionalDbUniverse}}
+
+Task:
+
+1. Search the provided sources for interesting stocks.
+2. Identify candidates using the four Radar Lenses.
+3. Structure each candidate with required fields.
+4. Include at least 3–10 candidates if substantive opportunities exist.
+5. Include rejected candidates showing why they were excluded.
+6. Return valid JSON conforming to the schema.
+
+Return only JSON. No explanations outside the JSON object.
+```
+
+---
+
+### D. Output Schema v1
+
+**Top-Level Response Object:**
+
+```typescript
+type RadarScanOutput = {
+  // Schema metadata
+  schemaVersion: string;              // e.g., "1.0"
+  scanDate: string;                   // ISO 8601 date-time, e.g., "2026-06-07T14:30:00Z"
+  timeWindow: string;                 // e.g., "24h", "7d", "30d", "custom"
+  
+  // Provider metadata
+  providerMetadata: {
+    provider: string;                 // "Anthropic" | "OpenAI" | "Google" | "xAI"
+    model: string;                    // exact model name, e.g., "claude-sonnet-4.6", "gpt-5.4"
+    actualThinkingEffort?: string;    // "default" | "regular" | "high" | "extended"
+    promptDeclaredThinkingEffort?: string; // what the prompt config said
+    searchEnabled: boolean;            // was web search used?
+    sourceMode: string;               // "live_search" | "provided_sources" | "hybrid"
+    notes?: string;                   // any runtime notes (e.g., "search rate limited")
+  };
+  
+  // Summary
+  summary: {
+    headline: string;                 // brief scan summary
+    candidateCount: number;
+    rejectedCount: number;
+    topTheme: string;                 // highest-priority theme, e.g., "AI-related earnings catalysts"
+  };
+  
+  // Main results
+  candidates: RadarCandidate[];
+  rejectedCandidates: RejectedCandidate[];
+  
+  // Agent self-check
+  agentSelfCheck: {
+    jsonValid: boolean;               // did output validate against schema?
+    noBuySellLanguage: boolean;       // no prohibited financial language?
+    allCandidatesHaveEvidence: boolean; // every candidate has ≥1 evidence?
+    allScoresUseZeroToHundred: boolean; // all scores 0–100 integers?
+    uncertaintyDisclosed: boolean;    // agent noted limitations?
+    possibleWeaknesses: string[];     // list of identified weaknesses
+  };
+};
+
+type RadarCandidate = {
+  // Identification
+  ticker: string;                     // non-empty, verified symbol
+  companyName: string;                // non-empty legal name
+  
+  // Radar lens
+  radarLens: "attention_spike" | "overreaction" | "value_gap" | "future_theme";
+  detailedCategory: string;           // e.g., "unusual_attention", "beaten_down", "emerging_theme"
+  
+  // Narrative
+  headline: string;                   // max 140 chars, one-line summary
+  radarBullets: string[];             // 3 key signals, max 120 chars each
+  thesis: string;                     // max 500 chars, detailed investment case
+  whyNow: string;                     // max 350 chars, catalyst / timing explanation
+  mainCatalyst: string;               // max 180 chars, primary reason for appearance
+  
+  // Review guidance
+  whatLooksInteresting: string[];     // 2–4 bullish signals, max 160 chars each
+  keyConcerns: string[];              // 2–4 bearish signals / risks, max 160 chars each
+  nextCheck: string;                  // max 180 chars, what to verify next
+  
+  // Evidence
+  sourceEvidence: {
+    sourceName: string;               // e.g., "TechCrunch", "Yahoo Finance", "Seeking Alpha"
+    sourceType: string;               // "news_site" | "finance_site" | "blog" | "social" | "analyst" | "rss"
+    url?: string;                     // web URL if available; null if source cannot expose URL
+    title?: string;                   // article headline if available
+    publishedAt?: string;             // ISO 8601 date if known
+    snippet: string;                  // excerpt or summary, max 250 chars
+    credibilityTier: "primary" | "secondary" | "tertiary" | "experimental";
+    relevanceScore: number;           // 0–100, agent's confidence in relevance
+  }[];
+  
+  // Radar scoring (agent assessment, not DB-backed production scores)
+  attentionScore: number;             // 0–100: signal volume / activity level
+  confidenceScore: number;            // 0–100: confidence this is real / verified
+  hypeRiskScore: number;              // 0–100: pure hype vs. substance (higher = more hype)
+  
+  // Aggregate radar signals
+  radarSignalStrength: number;        // 0–100: combined signal strength across lenses
+  radarConvictionScore: number;       // 0–100: agent's conviction worth researching
+  sourceQualityScore: number;         // 0–100: quality of evidence sources
+  manipulationRiskScore: number;      // 0–100: risk of pump/scheme (higher = more risk)
+  
+  // Trend context
+  trendStatus: "new_today" | "repeated" | "back_on_radar" | "cooling_down";
+  appearancesLast7Days?: number;      // count of mentions in last 7 days
+  appearancesLast30Days?: number;     // count of mentions in last 30 days
+  
+  // Tags
+  tags: string[];                     // e.g., ["AI", "earnings_pending", "CEO_change"]
+};
+
+type RejectedCandidate = {
+  ticker: string;                     // symbol (if known)
+  companyName?: string;               // name (if known)
+  reason: string;                     // disqualification reason
+  evidenceSummary?: string;           // brief note on what was found
+};
+```
+
+---
+
+### E. Validation Rules for Phase 23C
+
+**JSON Conformance:**
+- Output must parse without cleanup
+- No trailing commas
+- All required fields present
+- No extra undefined fields
+
+**Schema Version Matching:**
+- schemaVersion must equal the expected version (e.g., "1.0")
+- Reject outputs if version mismatch
+
+**Candidate Array Limits:**
+- Maximum 10 candidates per scan (to avoid noise)
+- Minimum 1 candidate (if substantive opportunities found)
+- If fewer than 3 candidates found, include notes explaining why
+
+**Radar Lens Enum:**
+- radarLens must be one of: `attention_spike`, `overreaction`, `value_gap`, `future_theme`
+- Reject if other value
+
+**Score Validation (Critical):**
+- All numeric score fields must be integers
+- All numeric score fields must be in range [0, 100]
+- Reject output if any score uses 0–10 style
+- Reject output if any score is a decimal or has % suffix
+
+**Evidence Validation:**
+- Each candidate must have `sourceEvidence.length >= 1`
+- Each evidence item must have `sourceName`, `sourceType`, `snippet`
+- Each evidence item must have `credibilityTier` matching approved enum
+- If `url` is null, set `sourceQualityScore` lower and document why
+- Reject candidates if all evidence sources are marked "experimental"
+
+**Ticker and Company Name:**
+- Both must be non-empty strings
+- Both should be verifiable against a ticker database
+- Consider rejecting if ticker cannot be verified against live ticker API
+
+**Prohibited Language Scan:**
+- Scan headline, thesis, radarBullets, whatLooksInteresting, keyConcerns for prohibited words:
+  - "buy", "sell", "strong buy", "underperform", "outperform", "guaranteed upside", "safe investment", "will go up"
+- If any prohibited word found, reject output or mark as unsafe
+
+**Trend Status Enum:**
+- trendStatus must be one of: `new_today`, `repeated`, `back_on_radar`, `cooling_down`
+- Reject if other value
+
+**Text Field Length Limits:**
+- See Section F below for exact limits
+
+---
+
+### F. Suggested Text Length Limits
+
+These limits are guidelines to keep output UI-friendly. Enforce as soft limits or hard limits based on Phase 23C's choice.
+
+| Field | Max Length | Notes |
+| --- | --- | --- |
+| headline | 140 characters | One-line summary for card title |
+| radarBullets (each) | 120 characters | 3 key signals, displayed as bullet list |
+| thesis | 500 characters | Detailed case, fits in Intel Brief panel |
+| whyNow | 350 characters | Catalyst / timing explanation |
+| mainCatalyst | 180 characters | Primary reason for appearance |
+| whatLooksInteresting (each) | 160 characters | Bullish signal; typically 2–4 items |
+| keyConcerns (each) | 160 characters | Risk / concern; typically 2–4 items |
+| nextCheck | 180 characters | What to verify next |
+| snippet (in evidence) | 250 characters | Excerpt from source |
+| detailedCategory | 100 characters | Specific category within lens |
+| sourceName | 100 characters | Publication / source name |
+| tags (each) | 50 characters | E.g., "AI", "earnings_pending" |
+
+---
+
+### G. Field Classification Table
+
+This table clarifies which fields are persisted to DB, shown in UI, or internal-only.
+
+| Field | Purpose | Future DB Persisted? | UI-facing? | Internal QA Only? |
+| --- | --- | --- | --- | --- |
+| **radarLens** | Primary category | Yes | Yes (filter/tab) | No |
+| **headline** | Card title | Yes | Yes | No |
+| **radarBullets** | Key signals | Yes | Yes (card content) | No |
+| **thesis** | Detailed case | Yes | Yes (Intel Brief) | No |
+| **whyNow** | Catalyst/timing | Yes | Yes (Intel Brief) | No |
+| **mainCatalyst** | Primary reason | Yes | Yes (Intel Brief) | No |
+| **whatLooksInteresting** | Bullish signals | Yes | Yes (Intel Brief) | No |
+| **keyConcerns** | Risks | Yes | Yes (Intel Brief) | No |
+| **nextCheck** | Verification steps | Yes | Yes (Intel Brief) | No |
+| **sourceEvidence** | Citations | Yes | Yes (footnotes/links) | No |
+| **attentionScore** | Signal volume | Maybe | No | Yes (debug only) |
+| **confidenceScore** | Verification confidence | Maybe | No | Yes (debug only) |
+| **hypeRiskScore** | Hype vs. substance | Maybe | No | Yes (debug only) |
+| **radarSignalStrength** | Aggregate strength | Maybe | No | Yes (debug only) |
+| **radarConvictionScore** | Research conviction | Maybe | Possibly (future) | No |
+| **sourceQualityScore** | Evidence quality | Maybe | No | Yes (debug only) |
+| **manipulationRiskScore** | Pump/scheme risk | Maybe | No | Yes (debug only) |
+| **providerMetadata** | AI provider details | Yes (audit trail) | No | Yes (debugging) |
+| **agentSelfCheck** | Validation status | Yes (audit trail) | No | Yes (QA) |
+| **rejectedCandidates** | Disqualified candidates | Maybe | No | Yes (QA/transparency) |
+| **trendStatus** | Recurrence pattern | Yes | Possibly (future) | No |
+| **appearancesLast7Days** | Historical mention count | Yes | Possibly (future) | No |
+| **tags** | Categorical labels | Yes | Possibly (filter) | No |
+
+---
+
+### H. Score Clarification
+
+**What Radar Scores Are:**
+
+```txt
+Radar scores are agent assessment scores generated by the AI during the scan.
+They represent the agent's opinion about signal quality, confidence, and risk.
+They are NOT production database scores.
+```
+
+**What They Are NOT:**
+
+```txt
+✗ Radar scores are NOT "Opportunity Score" — Opportunity Score remains a DB-backed, internal calculation.
+✗ Radar scores are NOT "Fundamental Score" — Fundamental Score remains unchanged.
+✗ Radar scores do NOT replace Opportunity Score or Fundamental Score.
+✗ Radar scores are NOT a buy/sell indicator.
+✗ Radar scores are NOT a financial recommendation.
+✗ Radar scores should NOT be displayed in Scanner or Dashboard as if they are production scores.
+```
+
+**Score Definitions (Agent Assessment Only):**
+
+| Score | Meaning | Inputs | Range | Display Policy |
+| --- | --- | --- | --- | --- |
+| **attentionScore** | Signal volume / buzz level | source volume, social mentions | 0–100 | Internal QA only |
+| **confidenceScore** | How confident agent is this is real | evidence quality, verification status | 0–100 | Internal QA only |
+| **hypeRiskScore** | Pure hype vs. substantive signal | source credibility, language patterns | 0–100 | Internal QA only |
+| **radarSignalStrength** | Combined signal strength across lenses | aggregate of above | 0–100 | Internal QA only |
+| **radarConvictionScore** | Agent's conviction this is worth researching | signal strength + confidence - hype risk | 0–100 | Future: possibly in Intel Brief |
+| **sourceQualityScore** | Quality of evidence sources | credibility tier distribution, URL validity | 0–100 | Internal QA only |
+| **manipulationRiskScore** | Risk of pump/scheme | source patterns, timing patterns | 0–100 | Internal QA only |
+
+**In Phase 23C+:**
+- Radar scores should be stored in database for debugging and future feature work
+- Radar scores should NOT be shown in normal UI unless explicitly designed as research-support signals
+- If a radar score is shown to users, it must be clearly labeled "Research Signal Confidence" or "Signal Quality Assessment" — never "Buy/Sell Score"
+
+---
+
+### I. Claude Sonnet 4.6 Specific Notes
+
+**Quality Advantages:**
+- Strongest research narrative quality from Phase 23B-2 benchmark
+- Best handling of uncertainty and rejected-candidate reasoning
+- Superior explanation of "why now" and catalyst clarity
+- Strong financial reasoning and sector knowledge
+
+**Latency:**
+- Significantly slower than GPT-5.4 and other models tested
+- Latency is acceptable for daily/manual scans (not real-time interactive use)
+- Expect 30–60 seconds for a full scan; consider this in timeout configuration
+
+**Output Characteristics:**
+- Can be verbose; prompt must enforce compact JSON fields
+- Usually adheres to schema constraints well
+- Excellent at evidence citation and source attribution
+- Good calibration of confidence scores to evidence quality
+
+**Implementation Considerations for Phase 23C:**
+- Claude Sonnet 4.6 does not have native web search in standard API as of knowledge cutoff
+- Phase 23C infrastructure must provide server-side search/source pipeline
+- Feed search results or curated sources to Claude via the user prompt
+- Use the `sourceRegistry` to inform which sources Claude should prioritize
+
+**API Integration:**
+- Use Anthropic SDK for server-side execution
+- Configure to use `claude-sonnet-4.6` model ID
+- Consider prompt caching for repeated scans with similar source data
+- Set max_tokens to 8000–12000 to constrain output size
+
+---
+
+### J. GPT-5.4 Fallback and Benchmark Notes
+
+**Quality Characteristics:**
+- Strong, conservative output from Phase 23B-2 benchmark
+- Good evidence quality and source attribution
+- Reliable schema compliance in most cases
+
+**Critical Schema Issue:**
+- One Phase 23B-2 test run returned scores in 0–10 style despite 0–100 requirement in prompt
+- Example: `attentionScore: 7` instead of `attentionScore: 70`
+- Validation layer MUST reject or normalize 0–10 outputs
+- Validation logic: If any score < 0 or > 10, assume 0–10 scale and multiply by 10; reject if score > 100 after normalization
+
+**Schema Validation Strictness:**
+- More strict validation required for OpenAI outputs vs. Claude
+- Always validate that all scores are truly 0–100 integers
+- Check for off-by-one or scale-switching errors
+
+**Fallback Workflow:**
+- If Claude Sonnet 4.6 times out or fails, Phase 23C infrastructure should automatically fall back to GPT-5.4
+- Fallback should use same prompt structure and output schema
+- Fallback results should be flagged in providerMetadata as "fallback_provider: true"
+- User should be notified that fallback occurred and quality may differ
+
+**API Integration:**
+- Use OpenAI SDK for server-side execution
+- Configure to use `gpt-5.4` (or current latest model ID)
+- Set max_tokens similar to Claude (8000–12000)
+- OpenAI natively supports web search; can be enabled in request configuration
+
+---
+
+### K. Non-Scope for Phase 23B-3
+
+Explicitly NOT included in this phase:
+
+```txt
+✗ Implementation code (no TypeScript, no API calls, no routes)
+✗ Database schema or migrations (no Prisma changes)
+✗ Admin UI screens or forms
+✗ Provider API integration or authentication
+✗ Web scraping or source-fetching infrastructure
+✗ Scheduled job implementation
+✗ Real AI agent execution or testing
+✗ Changes to production Opportunity Score or Fundamental Score
+✗ Changes to Scanner, Dashboard, or Drawer
+✗ Changes to existing Admin Sync workflows
+✗ Prisma model additions
+```
+
+This phase is **documentation and specification only**, preparing the groundwork for Phase 23C implementation.
+
+---
+
 ## Summary
 
 Phase 23B defines the Opportunity Radar AI Agent system through comprehensive documentation and design patterns, without implementing any real AI calls, provider integration, or database changes.
@@ -1125,7 +1660,8 @@ The phase establishes:
 - **Configuration system**: admin-editable provider, source, and prompt management
 - **Output schema**: structured candidate records with evidence and scoring
 - **Evaluation framework**: comparison methodology for providers/models
-- **Provider research decision**: Claude Sonnet 4.6 primary candidate, GPT 5.4 fallback, Grok experimental, Gemini deprioritized for MVP default
+- **Provider research decision (23B-2)**: Claude Sonnet 4.6 primary candidate, GPT 5.4 fallback, Grok experimental, Gemini deprioritized for MVP default
+- **Prompt and schema (23B-3)**: production-ready prompt contract, strict JSON output schema, validation rules, text limits, field classification
 - **Architectural rules**: server-side only, DB-backed reads, UI never calls AI
 - **Phase breakdown**: incremental rollout from Phase 23C onward
 - **Open questions**: design decisions deferred to Phase 23C
