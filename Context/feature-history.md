@@ -716,3 +716,155 @@ Phase 23A establishes the direction. Future phases:
 - **Phase 23B:** AI agent design — prompt engineering, candidate generation logic, output schema
 - **Phase 23C:** Persistence + Admin Scan Integration — AI agent runs through Admin Sync, results stored in DB, /opportunity-radar reads from DB
 - **Future:** Scheduled daily scans, evidence storage, integration with Scanner/Watchlist/Alerts
+
+---
+
+## Phase 23B-1 — Opportunity Radar AI Agent Spec Setup
+
+**Goal:** Design and document the AI agent system that will power Opportunity Radar in Phase 23C+, establishing architecture, configuration concepts, output schema, and evaluation strategy without implementing any real AI calls, provider integration, or database changes.
+
+**Status:** Specification and planning phase (documentation only, no implementation).
+
+**Branch:** `docs/opportunity-radar-ai-agent-spec`
+
+**Deliverable:**
+
+New file `Context/Features/opportunity-radar-ai-agent-spec.md` (9,400+ lines) — comprehensive specification for Phase 23B with the following sections:
+
+**A. Product Role:**
+- AI agent defined as research engine, not recommendation engine
+- Identifies research candidates from market signals, not buy/sell recommendations
+- Produces structured output for database storage
+- Supports manual admin execution first, scheduled execution later
+
+**B. Phase 23B Scope:**
+- Clear designation as documentation/design phase only
+- In-scope: agent goals, input/output schema, provider evaluation, source registry, prompt management, safety rules, phase breakdown
+- Out-of-scope: real AI calls, provider integration, DB schema changes, migrations, Admin UI
+
+**C. Agent Execution Model:**
+Documented future flow: Admin button / Scheduled job → Load config → Run agent → Validate output → Persist to DB → UI reads DB
+Established architectural rule: UI never calls AI or providers directly; all reads are DB-backed
+
+**D. Manual First, Scheduled Later:**
+Phase breakdown:
+- Phase 23B: Design only
+- Phase 23C: Manual admin scan button, result persistence
+- Phase 23D: Scheduled daily execution
+
+**E. Admin AI Provider Configuration:**
+Designed admin-editable provider configuration with fields: providerName (OpenAI, Anthropic, Google, xAI), displayName, endpoint, apiKeyReference, modelName, isActive, temperature, maxTokens, timeout, cost limit, feature flags
+Security concepts: encrypted storage, masked display, Test Connection behavior, audit logging, server-side only
+
+**F. Source Registry Configuration:**
+Designed admin-editable source registry with fields: sourceName, sourceType (news_site, finance_site, blog, RSS, social, analyst_site, internal_watchlist), credibilityTier (primary/secondary/tertiary/experimental), categoryFocus, keywords, allowedUse, refreshCadence, monitoring metadata
+
+**G. Prompt Management:**
+Designed versioned prompt system with fields: promptName, promptVersion, systemPrompt, userPromptTemplate, outputSchemaVersion, isActive, modelCompatibility, evaluationStatus
+Rules: no buy/sell recommendations, structured JSON output required, uncertainty and evidence quality flags required
+
+**H. AI Provider/Model Evaluation Framework:**
+Created comprehensive evaluation matrix for OpenAI, Anthropic Claude, Google Gemini, xAI Grok across 13 dimensions:
+- Structured JSON reliability, web search capability, financial reasoning quality, hallucination control, citation handling
+- Long-context capability, cost per scan, latency, rate limits
+- Tool/function calling support, safety behavior, integration ease, vendor lock-in risk
+Added critical note: prices and model names must be verified from official provider documentation before Phase 23C implementation
+
+**I. Agent Input Design:**
+Defined RadarAgentInput schema: scanDate, timeWindow (24h/7d/30d/custom), activeSourceRegistry, activePromptVersion, activeProviderConfig, optional DB universe context
+Documented Cold Start vs. Warm Start decision framework with recommendation for Phase 23C
+
+**J. Agent Output Schema:**
+Defined RadarScanOutput and RadarCandidateOutput TypeScript types with complete field specifications:
+- Candidate identification (ticker, companyName)
+- Radar lens assignment (attention_spike, overreaction, value_gap, future_theme)
+- Narrative fields (headline, thesis, whyNow, mainCatalyst, bullCase, bearCase)
+- Scoring (attentionScore, confidenceScore, hypeRiskScore, radarSignalStrength, radarConvictionScore, sourceQualityScore, manipulationRiskScore)
+- Evidence array with sourceName, sourceType, url, credibilityTier, relevanceScore
+- History-aware fields for future database storage
+
+**K. Radar Lens Mapping:**
+Documented the four approved Phase 23A lenses with agent responsibility for assignment:
+- Attention Spike: unusual activity spike before story is obvious
+- Overreaction: sharp declines that may deserve second look
+- Value Gap: valuation disconnect from business quality
+- Future Theme: emerging sectors or speculative growth themes
+
+**L. Scoring Concepts:**
+Clarified radar scores (attention, confidence, hype risk, signal strength, conviction, source quality, manipulation risk) as agent assessment only, not production DB scores
+Explicitly stated: radar scores do NOT replace Opportunity Score or Fundamental Score
+In future phases, will become real DB-backed validation concept, not production scoring
+
+**M. Safety and Language Rules:**
+Prohibited language: "buy", "sell", "guaranteed", "safe", "will go up", "best stock"
+Required alternatives: "research candidate", "worth reviewing", "signals suggest", "requires validation", "may be worth a closer look"
+Disqualification rules: no clear catalyst, pure hype, unverifiable ticker, low-quality sources only, manipulation risk, stale news
+
+**N. Disqualification Rules:**
+Defined automatic disqualification criteria for candidates during agent output validation
+
+**O. Evaluation / QA Plan:**
+Structured testing framework for Phase 23C and beyond:
+- Run same prompt on multiple providers/models
+- Compare structured output validity, duplicate rate, hallucination rate
+- Assess evidence usefulness, candidate quality, cost, latency
+- Manual review scoring rubric across 10 dimensions (relevance, evidence, clarity, caution, completeness, lens fit, catalyst, risk, feasibility, calibration)
+
+**P. Phase Breakdown:**
+Incremental implementation phases with clear scope:
+- 23B-1: Spec creation (completed)
+- 23B-2: Provider/model research (optional, future)
+- 23B-3: Prompt and schema drafting (optional, future)
+- 23B-4: Admin config UX/spec (optional, future)
+- 23C-1: DB schema design (future)
+- 23C-2: Manual admin scan button and persistence (future)
+- 23C-3: /opportunity-radar reads DB (future)
+- 23D: Scheduled daily scan (future)
+
+**Q. Open Questions:**
+Documented 10 design decisions deferred to Phase 23C:
+- Q1: Source registry implementation method (RSS, web search, API)
+- Q2: AI provider key storage (env variables vs. encrypted DB)
+- Q3: Multi-provider fallback approach
+- Q4: Agent source strategy (cold start vs. warm start)
+- Q5: Candidate volume per scan
+- Q6: Partial output handling on timeout/error
+- Q7: Evidence URL requirements
+- Q8: Minimum acceptable source quality tier
+- Q9: Admin user API key input workflow
+- Q10: Radar score persistence strategy
+
+**Documentation Updates:**
+- `Context/README.md` — Added routing entry for AI agent spec
+- `Context/current-feature.md` — Updated to reflect Phase 23B as active planning phase with clear acceptance criteria
+- `Context/project-overview.md` — Marked Phase 23A as Completed, Phase 23B as Active, added Phase 23D to roadmap
+
+**Constraints Maintained:**
+- ✅ No application code written
+- ✅ No database schema changes
+- ✅ No Prisma migrations
+- ✅ No provider, AI, or API implementation
+- ✅ No Admin UI implementation
+- ✅ No production scoring changes
+- ✅ Documentation/specification only
+
+**Automated Checks:**
+- `npm run build` — ✅ Pass (all routes functional)
+- `npx tsc --noEmit` — ✅ Pass (no TypeScript errors)
+- `npx prisma validate` — ✅ Pass (schema valid)
+- `npx prisma migrate status` — ✅ Pass (14 migrations, up to date)
+
+**Design Highlights:**
+- Comprehensive provider evaluation framework guides Phase 23C implementation
+- Admin configurability (provider, sources, prompts) eliminates need for code deployment changes
+- Architectural alignment with FomoFilter core rule: UI never calls providers, all reads from DB
+- Clear design-vs-implementation distinction prevents scope creep
+- Open questions (Q1–Q10) make Phase 23C scope explicit
+- Security-first API key and prompt management concepts
+- Safety rules and language enforcement built into specification
+
+**Files Changed (Documentation):**
+- `Context/Features/opportunity-radar-ai-agent-spec.md` (new)
+- `Context/README.md` (routing update)
+- `Context/current-feature.md` (active phase setup)
+- `Context/project-overview.md` (roadmap update)

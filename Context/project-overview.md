@@ -186,9 +186,10 @@ Expanded row with:
 | Phase 21E | Completed | Data Inventory / Admin Data Health Cleanup |
 | Phase 22B | Completed | Multi-Universe Unique Sync Foundation + S&P 500 Expansion |
 | Phase 22C | Completed | Data Inventory pagination / sync hardening |
-| Phase 23A | Implementation Complete | Opportunity Radar Mock Experience — Lens-based discovery with 4 lenses, 3-card Opportunity Deck, Intel Brief. Visual direction validated. Awaiting commit approval. |
-| Phase 23B | Planned | Opportunity Radar AI Agent Design — prompt engineering, candidate generation logic, output schema |
-| Phase 23C | Planned | Opportunity Radar Persistence + Admin Scan Integration — AI agent runs through Admin, results stored in DB |
+| Phase 23A | Completed | Opportunity Radar Mock Experience — Lens-based discovery with 4 lenses, 3-card Opportunity Deck, Intel Brief. Visual product direction validated. |
+| Phase 23B | Active | Opportunity Radar AI Agent Design — specification, architecture, evaluation framework, configuration concepts, prompt strategy, output schema. Design/docs phase only. |
+| Phase 23C | Planned | Opportunity Radar Persistence + Admin Scan Integration — AI agent runs through Admin, results stored in DB, page reads DB |
+| Phase 23D | Planned | Scheduled Daily Scan — automation and monitoring for Opportunity Radar |
 | Phase 24 | Planned | Historical Daily + Momentum Foundation (after Opportunity Radar direction is validated) |
 | Phase 25 | Planned | Momentum Indicators |
 | Phase 26 | Planned | Hot Score v1 |
