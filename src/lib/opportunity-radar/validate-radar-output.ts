@@ -12,8 +12,15 @@ export type ValidationResult<T> = {
 };
 
 const PROHIBITED_PHRASES = [
-  "buy",
-  "sell",
+  // Single words (word boundary required)
+  "\\bbuy\\b",
+  "\\bsell\\b",
+  "\\bhold\\b",
+  "\\bbuys\\b",
+  "\\bsells\\b",
+  "\\bbuying\\b",
+  "\\bselling\\b",
+  // Phrases
   "strong buy",
   "guaranteed",
   "safe investment",
@@ -21,6 +28,9 @@ const PROHIBITED_PHRASES = [
   "best stock to buy",
   "underperform",
   "outperform",
+  "recommendation",
+  "should buy",
+  "should sell",
 ];
 
 const VALID_RADAR_LENSES = [
@@ -46,14 +56,35 @@ const VALID_CREDIBILITY_TIERS = [
 
 /**
  * Scan text for prohibited financial language
+ * Uses regex patterns for word boundary matching to avoid false positives
  */
 function findProhibitedLanguage(text: string): string[] {
   const found: string[] = [];
   const lowerText = text.toLowerCase();
 
   for (const phrase of PROHIBITED_PHRASES) {
-    if (lowerText.includes(phrase.toLowerCase())) {
-      found.push(phrase);
+    try {
+      // If phrase contains \b, it's a regex pattern for word boundaries
+      if (phrase.includes("\\b")) {
+        const regex = new RegExp(phrase, "gi");
+        if (regex.test(lowerText)) {
+          // Extract the word without \b for display
+          const displayPhrase = phrase.replace(/\\b/g, "");
+          if (!found.includes(displayPhrase)) {
+            found.push(displayPhrase);
+          }
+        }
+      } else {
+        // Phrase without \b: simple substring match
+        if (lowerText.includes(phrase.toLowerCase())) {
+          found.push(phrase);
+        }
+      }
+    } catch (e) {
+      // If regex is invalid, fall back to substring match
+      if (lowerText.includes(phrase.toLowerCase())) {
+        found.push(phrase);
+      }
     }
   }
 
@@ -116,6 +147,13 @@ function validateCandidate(
   if (!VALID_RADAR_LENSES.includes(c.radarLens as string)) {
     errors.push(
       `Candidate ${index}: radarLens must be one of ${VALID_RADAR_LENSES.join(", ")}`
+    );
+  }
+
+  // Detailed category (required for Prisma persistence)
+  if (typeof c.detailedCategory !== "string" || c.detailedCategory.trim() === "") {
+    errors.push(
+      `Candidate ${index}: detailedCategory must be a non-empty string (required for persistence)`
     );
   }
 

@@ -1055,6 +1055,35 @@ Output:    Working /opportunity-radar connected to DB
 Timeline:  1 phase (implementation complete)
 ```
 
+### Phase 23C-3+ — Tool Use Debug Trace Logging (Current)
+
+**Status: Implementation Complete - Development Debug Infrastructure**
+
+```txt
+Goal:      Add development-only debug trace logging for Claude Radar Tool Use flow
+Scope:     Development-only debug tracing (RADAR_DEBUG_AI_TRACE=true)
+           Debug trace helper module: src/lib/opportunity-radar/radar-debug-trace.ts
+           Structured JSON logging of: DB context, API request/response, tool use diagnostics, validation, persistence
+           Debug output directory: tmp/radar-debug/ (git-ignored)
+           One trace file per Claude scan attempt
+           No secrets (API key redacted) in trace files
+           Admin result shows debug trace path when available
+           Optional full-payload logging (RADAR_DEBUG_FULL_PAYLOAD=true)
+           Safe serialization: BigInt, Date, Error objects handled
+           Non-blocking: if trace write fails, scan continues
+Completed: src/lib/opportunity-radar/radar-debug-trace.ts (trace collector)
+           Updated src/lib/opportunity-radar/claude-radar-provider.ts (trace integration)
+           Updated src/actions/opportunity-radar-actions.ts (trace lifecycle)
+           Updated src/components/admin/SyncPageClient.tsx (display debug trace path)
+           Updated .gitignore (tmp/ ignored)
+           Created scripts/test-radar-debug-trace.ts (comprehensive test suite)
+Output:    Development debug infrastructure for Claude Radar Tool Use diagnostics
+Timeline:  1 phase (infrastructure only, no production changes)
+Notes:     Use RADAR_DEBUG_AI_TRACE=true in .env to enable
+           Debug traces help diagnose Tool Use shape issues without guessing
+           Traces are local files only, never committed to repository
+```
+
 ### Phase 23D (Future)
 
 ```txt

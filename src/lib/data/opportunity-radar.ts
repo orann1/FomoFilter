@@ -129,8 +129,22 @@ export async function getOpportunityRadarData(): Promise<OpportunityRadarPageDat
     };
   }
 
-  // Get the latest scan for source metadata
-  const latestScan = dbScans[0];
+  // Prefer the latest scan that has candidates for source metadata
+  // If latest scan is empty, fall back to next-most-recent scan with candidates
+  const latestScanWithCandidates = dbScans.find((scan) => scan.candidates.length > 0);
+
+  if (!latestScanWithCandidates) {
+    return {
+      hasDbData: false,
+      generatedAt: null,
+      latestScanId: null,
+      scans: [],
+      candidates: [],
+      sourceSummary: null,
+    };
+  }
+
+  const latestScan = latestScanWithCandidates;
 
   // Transform scans to view format
   const scansView: RadarScanView[] = dbScans.map((scan) => ({

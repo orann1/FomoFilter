@@ -127,6 +127,14 @@ Real Claude Sonnet 4.6 API execution with database-backed context (controlled so
 - Validation failure: Shows error list + rawOutputPreview for debugging
 - No DB persistence on any error
 
+**Debug Tracing (Development):**
+- In development, set `RADAR_DEBUG_AI_TRACE=true` to enable debug trace logging
+- Each Claude Radar Scan attempt writes a JSON trace file to `tmp/radar-debug/`
+- Trace includes: DB context, request shape, response shape, tool use diagnostics, validation result, persistence result
+- Optional `RADAR_DEBUG_FULL_PAYLOAD=true` includes full prompt and response (for troubleshooting)
+- Debug trace path shown in success/failure result panel when enabled
+- Trace files must not include secrets (API keys, tokens are redacted)
+
 **Source Mode:**
 - Declared as "db_context" in providerMetadata
 - Claude receives ordered list of active stocks with key metrics

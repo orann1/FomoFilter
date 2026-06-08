@@ -269,6 +269,12 @@ function RadarClaudeScanResultViewer({ result }: { result: RadarClaudeScanResult
             <p className="font-mono text-slate-300">{result.sourceMode}</p>
           </div>
         </div>
+        {result.debugTracePath && (
+          <div className="border-t border-slate-700/50 pt-3">
+            <p className="text-xs text-slate-400 mb-1">Debug trace:</p>
+            <p className="font-mono text-xs text-slate-300">{result.debugTracePath}</p>
+          </div>
+        )}
       </div>
     );
   }
@@ -298,6 +304,49 @@ function RadarClaudeScanResultViewer({ result }: { result: RadarClaudeScanResult
           </pre>
         </div>
       )}
+      {result.debugTracePath && (
+        <div className="border-t border-slate-700/50 pt-3">
+          <p className="text-xs text-slate-400 mb-1">Debug trace:</p>
+          <p className="font-mono text-xs text-slate-300">{result.debugTracePath}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Radar Claude scan progress viewer ────────────────────────────────────────
+
+function RadarClaudeScanProgressViewer() {
+  const steps = [
+    "Preparing Claude scan",
+    "Loading database context",
+    "Sending request to Claude",
+    "Waiting for structured tool output",
+    "Validating tool output",
+    "Persisting scan results",
+    "Finalizing result",
+  ];
+
+  return (
+    <div className="rounded-lg bg-slate-900/80 border border-blue-800/60 p-4 space-y-3">
+      <div className="flex items-center gap-2">
+        <Loader2 className="w-4 h-4 text-blue-400 shrink-0 animate-spin" />
+        <span className="text-sm font-semibold text-blue-300">Claude scan in progress</span>
+      </div>
+
+      {/* Progress steps */}
+      <div className="space-y-2">
+        {steps.map((step, idx) => {
+          return (
+            <div key={idx} className="flex items-center gap-2 text-xs">
+              <div className="w-3.5 h-3.5 rounded-full border border-slate-600 bg-slate-700 shrink-0 flex items-center justify-center">
+                <div className="w-1.5 h-1.5 rounded-full bg-slate-600" />
+              </div>
+              <span className="text-slate-500">{step}</span>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
@@ -2451,6 +2500,7 @@ export default function SyncPageClient({
               </button>
             </div>
 
+            {radarClaudeLoading && <RadarClaudeScanProgressViewer />}
             {radarClaudeResult && <RadarClaudeScanResultViewer result={radarClaudeResult} />}
 
             <div className="rounded bg-slate-900/60 border border-slate-700/60 px-3 py-2.5 space-y-2">

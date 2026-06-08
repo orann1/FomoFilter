@@ -4,7 +4,9 @@ import { validateRadarScanOutput } from "@/src/lib/opportunity-radar/validate-ra
 import { persistRadarScanOutput } from "@/src/lib/opportunity-radar/persist-radar-output";
 import { sampleRadarOutput } from "@/src/lib/opportunity-radar/sample-radar-output";
 import { callClaudeRadar } from "@/src/lib/opportunity-radar/claude-radar-provider";
-import { buildRadarPrompt } from "@/src/lib/opportunity-radar/build-radar-prompt";
+import { buildRadarPrompt, loadStockContext } from "@/src/lib/opportunity-radar/build-radar-prompt";
+import { createRadarDebugTrace } from "@/src/lib/opportunity-radar/radar-debug-trace";
+import { RADAR_TOOL_DEFINITION } from "@/src/lib/opportunity-radar/radar-tool-schema";
 
 export type RadarFixtureScanResult = {
   success: boolean;
@@ -27,6 +29,7 @@ export type RadarClaudeScanResult = {
   error?: string;
   validationErrors?: string[];
   rawOutputPreview?: string;
+  debugTracePath?: string;
 };
 
 /**
@@ -87,25 +90,45 @@ export async function runOpportunityRadarFixtureScanAction(): Promise<RadarFixtu
 
 /**
  * Run Opportunity Radar Claude scan
- * Phase 23C-2C: Real Claude API execution from Admin
+ * Phase 23C-2C+: Real Claude API execution with Tool Use structured output
  *
  * This action:
  * - Builds a prompt with DB context (controlled source pack mode)
- * - Calls Claude server-side via Anthropic API
- * - Validates the output with strict rules
+ * - Calls Claude server-side with Tool Use (structured output requirement)
+ * - Claude returns tool_use block with create_radar_scan_output
+ * - Validates the structured output with strict rules
  * - Persists valid output to DB if validation passes
- * - Returns clear error if API key missing, provider fails, or validation fails
+ * - Returns clear error if tool_use is missing, validation fails, or API fails
  * - Does NOT persist invalid output
+ * - Optionally writes debug trace file when RADAR_DEBUG_AI_TRACE=true
  */
 export async function runOpportunityRadarClaudeScanAction(): Promise<RadarClaudeScanResult> {
+  const trace = createRadarDebugTrace();
+  let debugTracePath: string | null = null;
+
   try {
     // Step 1: Build prompt with DB context
     const prompt = await buildRadarPrompt();
+    const stocks = await loadStockContext(20);
 
-    // Step 2: Call Claude
-    const providerResponse = await callClaudeRadar({ prompt });
+    // Populate trace with DB context
+    trace.setDbContext(stocks, prompt);
 
-    if (!providerResponse.success || !providerResponse.rawText) {
+    // Step 2: Call Claude (expects tool_use response with structured output)
+    const providerResponse = await callClaudeRadar({
+      prompt,
+      trace,
+      toolSchema: RADAR_TOOL_DEFINITION,
+    });
+
+    // Step 3: Check for provider error
+    if (!providerResponse.success) {
+      trace.setFinalResult(
+        "provider_error",
+        providerResponse.error || "Claude call failed"
+      );
+      debugTracePath = await trace.writeToDisk();
+
       return {
         success: false,
         error: providerResponse.error || "Claude call failed",
@@ -113,29 +136,78 @@ export async function runOpportunityRadarClaudeScanAction(): Promise<RadarClaude
         model: providerResponse.metadata?.model || "claude-sonnet-4.6",
         sourceMode: "db_context",
         executionTimeMs: providerResponse.metadata?.executionTimeMs,
+        debugTracePath: debugTracePath || undefined,
       };
     }
 
-    // Step 3: Parse and validate
-    const validationResult = providerResponse.parsed
-      ? validateRadarScanOutput(providerResponse.parsed)
-      : { success: false, data: undefined, errors: ["Invalid JSON from Claude"], warnings: [] };
+    // Step 4: Check if tool_use was returned
+    if (!providerResponse.toolUseFound) {
+      trace.setFinalResult(
+        "provider_error",
+        "Claude did not return the required structured tool output"
+      );
+      debugTracePath = await trace.writeToDisk();
 
-    if (!validationResult.success) {
-      const preview = providerResponse.rawText.slice(0, 500);
       return {
         success: false,
-        error: "Claude output validation failed",
-        validationErrors: validationResult.errors,
-        rawOutputPreview: preview,
+        error: "Claude did not return the required structured tool output. Tool Use may not be available in your API version.",
         provider: providerResponse.metadata?.provider || "Anthropic",
         model: providerResponse.metadata?.model || "claude-sonnet-4.6",
         sourceMode: "db_context",
         executionTimeMs: providerResponse.metadata?.executionTimeMs,
+        debugTracePath: debugTracePath || undefined,
+      };
+    }
+
+    // Step 5: Validate tool output
+    if (!providerResponse.parsed) {
+      trace.setFinalResult(
+        "provider_error",
+        "Tool input could not be parsed or is invalid"
+      );
+      debugTracePath = await trace.writeToDisk();
+
+      return {
+        success: false,
+        error: "Tool input could not be parsed or is invalid",
+        provider: providerResponse.metadata?.provider || "Anthropic",
+        model: providerResponse.metadata?.model || "claude-sonnet-4.6",
+        sourceMode: "db_context",
+        executionTimeMs: providerResponse.metadata?.executionTimeMs,
+        debugTracePath: debugTracePath || undefined,
+      };
+    }
+
+    const validationResult = validateRadarScanOutput(providerResponse.parsed);
+
+    trace.setValidation(validationResult);
+
+    if (!validationResult.success) {
+      trace.setFinalResult(
+        "validation_error",
+        `Tool output validation failed: ${validationResult.errors[0] || "unknown"}`
+      );
+      debugTracePath = await trace.writeToDisk();
+
+      return {
+        success: false,
+        error: "Tool output validation failed",
+        validationErrors: validationResult.errors,
+        provider: providerResponse.metadata?.provider || "Anthropic",
+        model: providerResponse.metadata?.model || "claude-sonnet-4.6",
+        sourceMode: "db_context",
+        executionTimeMs: providerResponse.metadata?.executionTimeMs,
+        debugTracePath: debugTracePath || undefined,
       };
     }
 
     if (!validationResult.data) {
+      trace.setFinalResult(
+        "validation_error",
+        "No validated data to persist"
+      );
+      debugTracePath = await trace.writeToDisk();
+
       return {
         success: false,
         error: "No validated data to persist",
@@ -143,13 +215,30 @@ export async function runOpportunityRadarClaudeScanAction(): Promise<RadarClaude
         model: providerResponse.metadata?.model || "claude-sonnet-4.6",
         sourceMode: "db_context",
         executionTimeMs: providerResponse.metadata?.executionTimeMs,
+        debugTracePath: debugTracePath || undefined,
       };
     }
 
-    // Step 4: Persist to database
+    // Step 6: Persist to database
+    trace.setPersistence(true, false, null, 0, 0);
+
     const persistResult = await persistRadarScanOutput(validationResult.data);
 
     if (!persistResult.success) {
+      trace.setPersistence(
+        true,
+        false,
+        null,
+        0,
+        0,
+        persistResult.error || "Persistence failed"
+      );
+      trace.setFinalResult(
+        "persistence_error",
+        persistResult.error || "Persistence failed"
+      );
+      debugTracePath = await trace.writeToDisk();
+
       return {
         success: false,
         error: persistResult.error || "Persistence failed",
@@ -157,10 +246,21 @@ export async function runOpportunityRadarClaudeScanAction(): Promise<RadarClaude
         model: providerResponse.metadata?.model || "claude-sonnet-4.6",
         sourceMode: "db_context",
         executionTimeMs: providerResponse.metadata?.executionTimeMs,
+        debugTracePath: debugTracePath || undefined,
       };
     }
 
-    // Step 5: Return success with metrics
+    // Step 7: Return success with metrics
+    trace.setPersistence(
+      true,
+      true,
+      persistResult.scanId || null,
+      persistResult.candidateCount || 0,
+      persistResult.evidenceCount || 0
+    );
+    trace.setFinalResult("success", "Radar scan completed successfully");
+    debugTracePath = await trace.writeToDisk();
+
     return {
       success: true,
       scanId: persistResult.scanId,
@@ -170,15 +270,29 @@ export async function runOpportunityRadarClaudeScanAction(): Promise<RadarClaude
       model: providerResponse.metadata?.model || "claude-sonnet-4.6",
       sourceMode: "db_context",
       executionTimeMs: providerResponse.metadata?.executionTimeMs,
+      debugTracePath: debugTracePath || undefined,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
+
+    trace.setFinalResult(
+      "provider_error",
+      `Action failed: ${message}`
+    );
+
+    try {
+      debugTracePath = await trace.writeToDisk();
+    } catch {
+      // Silently ignore trace write failures
+    }
+
     return {
       success: false,
       error: `Action failed: ${message}`,
       provider: "Anthropic",
       model: "claude-sonnet-4.6",
       sourceMode: "db_context",
+      debugTracePath: debugTracePath || undefined,
     };
   }
 }

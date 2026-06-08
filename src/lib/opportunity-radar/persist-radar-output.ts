@@ -34,9 +34,11 @@ export async function persistRadarScanOutput(
     // Create RadarScan record with transaction for atomicity
     const result = await prisma.$transaction(async (tx) => {
       // Create the scan record
+      // Note: Use current time for scanDate (when the scan was RUN)
+      // not the scanDate from Claude output (which may be stale)
       const scan = await tx.radarScan.create({
         data: {
-          scanDate: new Date(input.scanDate),
+          scanDate: new Date(),
           timeWindow: input.timeWindow,
           provider: input.providerMetadata.provider,
           model: input.providerMetadata.model,

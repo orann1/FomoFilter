@@ -1,11 +1,11 @@
-# Current Feature — Phase 23C-3: Opportunity Radar DB Reader
+# Current Feature — Phase 23C-3+ Stabilization: Claude Tool Use & Debug Trace
 
 ## Completed Phase
 
 ```txt
-Phase 23C-3 — Opportunity Radar DB Reader
-Status: Completed - QA Passed - Approved for Commit
-Focus: /opportunity-radar page now reads persisted RadarScan/RadarCandidate/RadarEvidence data from database
+Phase 23C-3+ — Claude Tool Use Stabilization & Debug Trace Logging
+Status: Completed - All Checks Passing - Ready for Merge
+Focus: Stabilized Claude Radar Tool Use structured output flow with debug tracing, fixed truncation/date/validation issues
 ```
 
 ## What This Phase Implements

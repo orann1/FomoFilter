@@ -1860,3 +1860,178 @@ Total: 1 file created, 6 files modified, 0 migrations added
 
 - Phase 23D: Scheduled daily scan execution (automation, monitoring)
 - Future: Web/search source modes, multi-provider fallback, provider/source/prompt admin configuration
+
+---
+
+## Phase 23C-3+ — Claude Tool Use Stabilization & Debug Trace Logging
+
+**Goal:** Stabilize and debug the Claude Radar Tool Use structured output flow. Add development-only debug tracing infrastructure to diagnose Tool Use response failures. Fix truncation, output size, and validation issues. Harden safety language rules.
+
+**Status:** Completed. All automated checks passing. Tool Use working structurally. Validation passing with strengthened prohibited language rules. One real Claude scan executed and persisted successfully (4 candidates, 8 evidence items).
+
+**Branch:** `refactor/radar-claude-tool-output`
+
+**Deliverables:**
+
+**A. Debug Trace Infrastructure**
+
+New file `src/lib/opportunity-radar/radar-debug-trace.ts`:
+- `RadarDebugTraceCollector` class for structured diagnostic logging
+- Environment-controlled: `RADAR_DEBUG_AI_TRACE=true` to enable, `RADAR_DEBUG_FULL_PAYLOAD=false` for normal debugging
+- Output: JSON files to `tmp/radar-debug/` (git-ignored)
+- Captures per Claude scan: DB context, request shape, response shape, Tool Use diagnostics, validation, persistence, final result
+- Safe serialization: BigInt/Date/Error handling, secrets redacted (API key), no circular refs
+- Non-blocking: if file write fails, scan continues with warning logged
+- File naming: `radar-claude-debug-<timestamp>-<attemptId>.json`
+
+**B. max_tokens Truncation Fix**
+
+Modified file `src/lib/opportunity-radar/claude-radar-provider.ts`:
+- Added `getRadarMaxTokens()` function with env override: `ANTHROPIC_RADAR_MAX_TOKENS` (default: 8192, up from 4096)
+- Added `stopReason === "max_tokens"` detection returning specific error: "Claude output was truncated by max_tokens"
+- Prevents validation on incomplete tool output
+- Root cause: 4096 tokens insufficient for full structured output with 4-6 candidates
+
+**C. Output Size Reduction**
+
+Modified file `src/lib/opportunity-radar/build-radar-prompt.ts`:
+- Reduced candidate count from 2-10 to 2-5 (quality over quantity)
+- Limited evidence per candidate to 1-2 items (was unrestricted)
+- Enforced text field limits via prompt instructions:
+  - headline: 140 chars, radarBullets: 3×120 chars, thesis: 400 chars
+  - whyNow: 300 chars, mainCatalyst: 150 chars
+  - whatLooksInteresting: 2×150 chars, keyConcerns: 2×150 chars
+- Reduces token consumption, stabilizes Tool Use responses
+
+**D. scanDate Persistence Fix (Critical)**
+
+Modified file `src/lib/opportunity-radar/persist-radar-output.ts`:
+- Changed scanDate from Claude output date (potentially stale) to current execution time: `new Date()`
+- Root cause: Claude's tool output scanDate (e.g., 2026-06-07) was being used, causing scans to appear in past date filters
+- Impact: Fixes "Today" filter to include fresh Claude scans, correct metadata selection
+
+**E. Prohibited Language Hardening**
+
+Modified file `src/lib/opportunity-radar/build-radar-prompt.ts`:
+- Added explicit "PROHIBITED LANGUAGE" section in system prompt
+- Listed banned words: buy, sell, hold, strong buy, recommendation, etc.
+- Provided explicit alternatives: "research candidate", "worth reviewing", "market attention", etc.
+- Added "REQUIRED ALTERNATIVES" subsection with neutral language patterns
+
+Modified file `src/lib/opportunity-radar/validate-radar-output.ts`:
+- Extended prohibited phrases list with single-word patterns using word boundaries: `\bbuy\b`, `\bsell\b`, `\bhold\b`, etc.
+- Implemented regex-based word boundary matching to avoid false positives (e.g., "seller")
+- Added phrases: "should buy", "should sell", "recommendation"
+- Improved `findProhibitedLanguage()` function with regex support and fallback to substring matching
+
+Modified file `src/lib/opportunity-radar/radar-tool-schema.ts`:
+- Added CRITICAL warnings to text field descriptions: headline, thesis, whyNow, etc.
+- Explicitly forbade buy/sell language with examples of required alternatives
+- Tool schema now reinforces safety rules at schema level
+
+**F. Test Infrastructure**
+
+New file `scripts/test-radar-debug-trace.ts`:
+- 6/6 tests passing:
+  - Debug disabled does not write file
+  - Debug enabled writes JSON file
+  - File contains expected top-level sections
+  - Error object serializes safely
+  - API key is not included in trace
+  - Tool Use diagnostics capture correctly
+
+**G. Real Claude Execution Results**
+
+Real Claude Radar Scan executed from Admin UI:
+```
+scanId: cmq5lhxso000090c86lfgdf59
+provider: Anthropic
+model: claude-sonnet-4-6
+sourceMode: db_context
+candidateCount: 4
+evidenceCount: 8
+executionTimeMs: ~9000ms
+Validation: PASSED (no prohibited language)
+Persistence: SUCCEEDED
+```
+
+Initial issue: Claude was using "buy" and "sell" language
+After fix: Claude output now uses neutral alternatives, validation passes
+
+**H. Admin UI Updates**
+
+Modified file `src/components/admin/SyncPageClient.tsx`:
+- Added debug trace path display in success/failure result panels
+- Shows: "Debug trace: tmp/radar-debug/radar-claude-debug-....json"
+- Non-intrusive: optional section, shown only when available
+
+**I. Documentation Updates**
+
+Modified files:
+- `Context/Features/admin-sync-feature-spec.md` — Added "Debug Tracing (Development)" subsection
+- `Context/Features/opportunity-radar-ai-agent-spec.md` — Added Phase 23C-3+ implementation notes
+
+**Automated Checks:**
+
+- `npm run build` — ✅ Pass
+- `npx tsc --noEmit` — ✅ Pass
+- `npx prisma validate` — ✅ Pass
+- `npx prisma migrate status` — ✅ Pass (15 migrations, up to date)
+- `npx tsx scripts/test-radar-validation.ts` — ✅ Pass (8/8 tests)
+- `npx tsx scripts/test-radar-tool-schema.ts` — ✅ Pass (84/84 checks)
+- `npx tsx scripts/test-radar-tool-response-parser.ts` — ✅ Pass (7/7 tests)
+- `npx tsx scripts/test-radar-debug-trace.ts` — ✅ Pass (6/6 tests)
+
+**Files Changed:**
+
+```
+Created:
+  src/lib/opportunity-radar/radar-debug-trace.ts
+  scripts/test-radar-debug-trace.ts
+
+Modified:
+  .gitignore (added tmp/)
+  src/lib/opportunity-radar/claude-radar-provider.ts (max_tokens fix, truncation detection)
+  src/lib/opportunity-radar/build-radar-prompt.ts (output size reduction, language rules)
+  src/lib/opportunity-radar/persist-radar-output.ts (scanDate fix)
+  src/lib/opportunity-radar/validate-radar-output.ts (prohibited language regex)
+  src/lib/opportunity-radar/radar-tool-schema.ts (schema descriptions)
+  src/actions/opportunity-radar-actions.ts (trace lifecycle integration)
+  src/components/admin/SyncPageClient.tsx (debug trace path display)
+  Context/Features/admin-sync-feature-spec.md
+  Context/Features/opportunity-radar-ai-agent-spec.md
+
+Total: 2 files created, 8 files modified, 0 migrations added
+```
+
+**Constraints Maintained:**
+
+- ✅ No Prisma schema changes (uses existing Phase 23C-1B models)
+- ✅ No migrations added
+- ✅ Debug trace is development-only (git-ignored)
+- ✅ No production scoring changes
+- ✅ No external web/search/news calls
+- ✅ No /opportunity-radar behavior changed (still reads DB, just displays correct metadata)
+- ✅ Admin buttons unchanged (just added debug trace path display)
+- ✅ Tool Use structured output unchanged (only stabilized via larger token budget and smaller output)
+
+**Known Follow-ups (Not Fixed):**
+
+- UI still displays raw analyst labels (Buy/Sell/Hold) — should be mapped to neutral UI wording in future phase
+- `/opportunity-radar` copy still references "mock/simulated signals" for real Claude db_context scans — should be fixed in future polish phase
+- Admin should later allow editing Radar prompt and max_tokens settings
+- DB context still thin in test environment (quote/score/analyst data missing) — should be enriched with real data later
+
+**Design Highlights:**
+
+- Debug trace infrastructure provides actionable diagnostics without console.logs
+- max_tokens increase (4096→8192) + output size reduction (2-10→2-5 candidates) together stabilize Tool Use responses
+- scanDate fix makes time filtering work correctly for fresh scans
+- Prohibited language strengthening (prompt + schema + validator regex) prevents validation failures
+- No breaks to existing Admin/Fixture/Claude buttons or /opportunity-radar display
+- One real Claude scan demonstrates working Tool Use with correct validation
+
+**Ready for Future Phases:**
+
+- Phase 23D: Scheduled daily scan execution
+- Future: Editable prompt/max_tokens Admin settings, neutralized UI copy, enriched DB context, web/search source modes
