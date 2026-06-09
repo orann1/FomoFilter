@@ -61,6 +61,7 @@ async function main() {
   // Call the real reusable persistence function
   const persistResult = await persistRadarScanOutput(
     validationResult.data,
+    undefined, // configId (not provided in fixture scan)
     scriptPrisma
   );
 

@@ -28,6 +28,7 @@ import type { AdminStockDataInventoryRow } from "@/src/lib/data/admin-stock-data
 import DataInventoryTab from "@/src/components/admin/DataInventoryTab";
 import AiScanTab from "@/src/components/admin/AiScanTab";
 import DocumentationTab from "@/src/components/admin/DocumentationTab";
+import { AiScanHistoryTable } from "@/src/components/admin/AiScanHistoryTable";
 import {
   CheckCircle,
   XCircle,
@@ -2401,6 +2402,15 @@ FINNHUB_API_KEY=`}
               <span className="text-xs text-slate-500 ml-1">Latest 10 runs</span>
             </div>
             <RecentSyncRunsTable runs={recentSyncRuns} />
+          </section>
+
+          <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Database className="w-4 h-4 text-slate-400" />
+              <h2 className="text-sm font-semibold text-slate-200">AI Scan History</h2>
+              <span className="text-xs text-slate-500 ml-1">Latest 10 AI scans</span>
+            </div>
+            <AiScanHistoryTable />
           </section>
         </div>
       )}

@@ -2254,4 +2254,132 @@ Phase 24A-2 and beyond can safely build on this UI foundation:
 - Admin console clearly organized by function
 - Documentation centralized and accessible
 - Developer tools still available in code (not deleted) for future use
+
+---
+
+## Phase 24A-2 — AI Scan Config MVP + Token Accounting
+
+Implemented database-backed AI Scan configuration system enabling runtime customization of Opportunity Radar Claude scan parameters without code changes.
+
+**Data Model:**
+- Added `RadarAiConfig` model: stores editable promptTemplate, maxTokens, dbContextLimit, candidateLimit, model, debugTraceEnabled, promptVersion, schemaVersion, changeNotes
+- Added `RadarScan.configId` (nullable, SetNull on delete) for audit trail linking scans to configs
+- Two migrations created and applied: (1) RadarAiConfig model, (2) model field addition
+
+**Config Loading System:**
+- Implemented fallback chain: DB active config → ANTHROPIC_RADAR_MODEL env → code default
+- Source tracking for all fields (promptSource, maxTokensSource, dbContextLimitSource, candidateLimitSource, modelSource, debugTraceEnabledSource)
+- Validation: prompt min 200 chars, tokens 2000–50000, context 1–100, candidates 1–20
+- Seeded default config on init (idempotent)
+
+**AI Scan Config Admin UI:**
+- Collapsed by default, expandable form
+- Editable fields: promptTemplate, maxTokens, dbContextLimit, candidateLimit, model, debugTraceEnabled, changeNotes
+- Field labels clarified: "DB Context Limit" → "DB Stocks Sent to Claude", "Candidate Limit" → "Max Candidates to Return"
+- Helper text explains each field and trade-offs
+- Config source display (DB / Env / Code Default)
+- API key status explanation (env-only, never shown)
+- Save/error messaging
+- Config reloads after save
+
+**Token Accounting UX:**
+- Prompt template token count (editable prompt only)
+- Token Breakdown section showing:
+  - Prompt template tokens
+  - DB stock context tokens (estimated from stock count)
+  - Tool schema / runtime tokens (estimate)
+  - Estimated full request tokens (sum)
+  - Exact full request tokens (from Anthropic API if counted)
+- "Count full request tokens" button calls Anthropic token counting endpoint (server-side only, no inference)
+- Clear error if ANTHROPIC_API_KEY missing (no key value exposed)
+- Token estimation uses hybrid algorithm (char/4.5 vs words*1.25, uses lower)
+
+**Claude Scan Behavior:**
+- Loads effective config on each scan
+- Uses DB prompt if active config exists, else env/code default
+- Uses DB context limit for stock selection
+- Uses DB max tokens for API call
+- Uses DB model for Claude call
+- Stores configId on RadarScan
+
+**UI Reorganization:**
+- AI Scan Config at top (collapsed)
+- Claude Scan as primary action
+- Latest AI Scan Summary below Claude Scan (auto-refreshes)
+- QA / Test Scan (collapsed) with Fixture Scan
+- Fixture Scan fully functional in collapsed section
+
+**Progress & Result Display:**
+- Estimated progress UI improved: honest 8-step sequence, stays on "Waiting for Claude response" while running
+- Post-scan result report shows: scanId, candidates, evidence, duration, tokens, provider, model, sourceMode, config source, debug trace path, safety disclaimer
+
+**AI Scan History:**
+- Latest 10 RadarScans shown in Sync History tab
+- Shows: date, status, provider, source mode, candidates, duration, config, link to /opportunity-radar
+
+**Security:**
+- API key remains env-only (ANTHROPIC_API_KEY)
+- Key value never exposed in UI or logs
+- Token counting uses Anthropic API (no inference, no completion)
+- No scan data persisted during token counting
+- No provider calls added to normal UI render paths
+
+**Constraints Maintained:**
+- ✅ No schema changes beyond RadarAiConfig and configId
+- ✅ No provider switching UI
+- ✅ No API key editing UI
+- ✅ No scheduled scans
+- ✅ No real-time DB progress tracking
+- ✅ No Scanner changes
+- ✅ No Dashboard changes
+- ✅ No Drawer changes
+- ✅ No /opportunity-radar page changes
+
+**QA Results:**
+- Admin UI config management: ✅ form, save, reload, persist
+- Token counting: ✅ estimates accurate, exact count from API works, error handling safe
+- Claude Scan: ✅ loads config, executes, persists scan with configId
+- Fixture Scan: ✅ works from collapsed QA section, persists with configId=null
+- Latest AI Scan Summary: ✅ displays, auto-refreshes after scan
+- AI Scan History: ✅ shows latest 10 scans in Sync History tab
+- Progress UX: ✅ honest labeled, 8 steps, stays on "waiting" during execution
+- Result report: ✅ shows metadata, tokens, config source, disclaimer, link to /opportunity-radar
+- Regression routes: ✅ /, /scanner, /opportunity-radar load without errors
+
+**Automated Checks:**
+- ✅ npm run build — Success (Compiled in 2.8s)
+- ✅ npx tsc --noEmit — Pass (no TypeScript errors)
+- ✅ npx prisma validate — Pass (schema valid)
+- ✅ npx prisma migrate status — Pass (17 migrations, up to date)
+
+**Documentation Updates:**
+
+Updated:
+- `Context/Features/admin-sync-feature-spec.md` — Documented AI Scan Config, Claude Scan, Latest AI Scan, QA/Test, Progress, Result Report, Token Breakdown
+- `Context/Features/opportunity-radar-ai-agent-spec.md` — Phase 24A-2 implementation notes, config fallback chain, validation rules
+- `Context/data-model.md` — RadarAiConfig model, RadarScan.configId field, fallback chain, model field
+- `Context/current-feature.md` — Phase 24A-2 complete feature spec and acceptance criteria
+
+Checked but not updated:
+- `Context/architecture.md` (no data-flow changes)
+- `Context/sync-workflows.md` (no workflow changes)
+- `Context/scoring-system.md` (no scoring changes)
+
+**Design Highlights:**
+- Config fallback chain separates DB-backed configuration from environment variables and code defaults
+- Token accounting UX clearly distinguishes prompt-only vs full-request costs
+- Estimated vs exact token counts labeled clearly (estimated local, exact from Anthropic API)
+- Admin UI field labels match product terminology (stocks, candidates, return)
+- Progress UX honest: labeled "Estimated" and explains it's not live backend tracking
+- Result report shows audit trail: which config was used, what scan produced what candidates
+- Fixture Scan remains accessible for validation testing without hiding it in admin tools
+- No provider behavior changed; only admin configuration added
+
+**Ready for Next Phase:**
+
+Phase 24A-3 and beyond can build on this foundation:
+- AI Scan Config system in place for runtime customization
+- Token accounting visible to admins for budget awareness
+- Result audit trail (configId) enables config-to-outcome analysis
+- Fixture Scan isolated in test section keeps production-like admin UX clean
 - All data and admin workflows verified functional

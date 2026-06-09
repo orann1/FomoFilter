@@ -42,7 +42,7 @@ Is the data fresh enough?
 
 ---
 
-## Current Main Sections (Phase 24A-1)
+## Current Main Sections (Phase 24A-2)
 
 ### Sync Actions
 
@@ -56,20 +56,110 @@ Score Calculation
 ```
 
 Developer/legacy tools backend code is preserved but removed from visible UI.
-Backend handlers and state management remain functional for potential future use.
 
-### AI Scan Tab (Phase 24A-1)
+### AI Scan Tab (Phase 24A-2)
 
 **Role:**
-Centralized interface for Opportunity Radar AI execution and testing. Contains both fixture-based validation and real Claude integration.
+Centralized interface for Opportunity Radar AI configuration and execution with admin controls for prompt/token customization.
 
-**Sections:**
-- Fixture Scan
-- Claude Scan
-- Real-time progress and result display
+**Sections (in order):**
+1. **AI Scan Config** — Collapsed by default, editable configuration (Phase 24A-2 fix: added token estimate)
+2. **Claude Scan** — Primary visible action, uses active DB config (Phase 24A-2 fix: improved progress UX)
+3. **Latest AI Scan** — Summary of most recent scan (read-only, auto-refreshes) (Phase 24A-2 fix: moved below Claude Scan for better UX)
+4. **QA / Test Scan** — Collapsed by default, contains Fixture Scan
 
-**Backend Code Preservation:**
-All backend handlers, server actions, and database operations remain intact. Only visible UI was reorganized.
+**UX Rationale:**
+The updated order (configure → run → review result → test tools) follows the natural user workflow: edit config, execute scan, review result, then test with fixture if needed.
+
+**Latest AI Scan Summary (Phase 24A-2):**
+- Displays most recent RadarScan from database
+- Shows: scan date/time, status, provider/model, candidates processed/total
+- Shows: execution duration, prompt version, config source
+- Shows: link to /opportunity-radar
+- Clean empty state if no scans exist: "No AI scans yet"
+- Auto-refreshes after scan completes
+- Read-only display (no editing)
+
+**Config Management (Phase 24A-2 + Token Accounting):**
+- Editable prompt template (min 200 chars)
+  - Shows character count and prompt-only token count
+  - Helper: "Prompt template tokens: ~{number}" (only the editable prompt, not full request)
+  - Token count updates live as user edits
+  - Estimation: hybrid algorithm (char/4.5 vs words*1.25, takes lower) — local, no API calls
+  
+**Token Breakdown Section** (below prompt field):
+  - Displays clear cost breakdown:
+    - Prompt template: ~{tokens} (editable prompt only)
+    - DB stock context: ~{tokens} (estimated from selected stock count)
+    - Tool schema / runtime: ~{tokens} (tool definition, message formatting, instructions)
+    - Estimated full request: ~{tokens} (sum of above)
+    - Exact full request: {tokens} (from Anthropic API, if counted)
+  - "Count full request tokens" button:
+    - Calls Anthropic token counting API with full message structure (server-side only)
+    - Uses current prompt, model, and DB stock count
+    - Includes message formatting, tool schema, and system instructions
+    - Shows exact token count result
+    - Clear error if ANTHROPIC_API_KEY missing: "Exact full request token count requires ANTHROPIC_API_KEY"
+    - No Claude inference, no scan data persisted
+  - Helper text: "Full request includes the editable prompt, selected DB stock context, Claude message formatting, and tool schema. Final API usage may differ slightly."
+
+- Editable max tokens (2000–50000)
+- "DB Stocks Sent to Claude" (was "DB Context Limit") (1–100 stocks)
+  - Helper text: "Number of stocks included in context (1–100). Higher values increase token usage."
+- "Max Candidates to Return" (was "Candidate Limit") (1–20)
+  - Helper text: "Maximum research candidates Claude can return (1–20). Higher values may increase noise."
+- Editable Claude model (e.g., "claude-sonnet-4-6", "claude-opus-4-8")
+- Debug trace toggle
+- Change notes field (optional)
+- Save and cancel buttons
+- Config source display showing source for each field (DB / Env / Code Default)
+- API key status explanation:
+  - "API Key: Read from ANTHROPIC_API_KEY environment variable on the server."
+  - "The key value is never displayed or logged. Restart the dev server after updating .env."
+- Model source display (DB / Env / Code Default)
+
+**Claude Scan Behavior (Phase 24A-2):**
+- Loads effective config from DB config chain (DB → Env → Code Default)
+- Uses DB-backed prompt template if active config exists
+- Uses DB context limit to control how many stocks are included
+- Uses DB max tokens for API call
+- Stores configId on RadarScan when DB config was used
+- Returns post-scan result report with metadata, token usage, and disclaimer
+
+**Progress Display (Phase 24A-2 — Improved Client-Side UX):**
+- Shows honest client-side estimated progress (not real-time backend)
+- Labeled clearly: "Estimated progress"
+- Includes note: "Progress is estimated. Exact backend step tracking will require future scan job progress tracking."
+- Displays 8-step progress sequence:
+  1. Preparing Claude scan
+  2. Loading database context
+  3. Building prompt from active config
+  4. Sending request to Claude
+  5. Waiting for Claude response (stays here while action runs)
+  6. Validating structured output
+  7. Persisting scan results
+  8. Finalizing result
+- Progress advances through steps 1-4 within first few seconds
+- Remains on step 5 ("Waiting for Claude response") while server action is in flight
+- After server action returns, quickly marks steps 6-8 complete and shows result report
+- Button remains disabled while scan is running
+- Does not claim true backend real-time progress
+
+**Post-Scan Result Report (Phase 24A-2):**
+- Scan ID, candidate count, evidence count
+- Provider, model, source mode, execution time
+- Token usage (prompt, completion, total)
+- Config source if DB config was used
+- Debug trace path if enabled
+- Safety disclaimer: "Research candidates only — not financial advice"
+- Link to /opportunity-radar for reviewing persisted candidates
+
+**Fixture Scan (Phase 24A-2):**
+- Moved into collapsed "QA / Test Scan" section
+- Still validates and persists fixture to DB
+- Button: "Run Fixture Scan"
+- Result display unchanged
+- Kept for validation/testing pipeline without changing backend code
 
 ---
 
@@ -165,15 +255,24 @@ Purpose:
 Validate provider/API access without writing app data.
 ```
 
-### Sync History
+### Sync History (Phase 24A-2)
 
-Purpose:
+**Purpose:**
+Show SyncRun and RadarScan execution history.
 
-```txt
-Show SyncRun / SyncRunItem history.
-```
-
-Both current and legacy SyncRun type strings are displayed with readable labels.
+**Structure:**
+1. **Recent Sync Runs** — SyncRun history (latest 10)
+   - Shows market data syncs, provider tests, score calculations
+   - Current and legacy SyncRun types with readable labels
+   
+2. **AI Scan History** — RadarScan history (latest 10) — NEW in Phase 24A-2
+   - Separate section from SyncRun history
+   - Columns: Date/time, status, provider, source mode, candidates, duration, config, action link
+   - Status color-coded (green for success, red for failure, yellow for other)
+   - Config shows "DB: {configId prefix}..." if DB config used, otherwise "Env/Def"
+   - Each row has link to /opportunity-radar for viewing detailed results
+   - Clean empty state: "No AI scans yet"
+   - Never calls AI/providers during render (reads from DB only)
 
 ### Data Inventory (Phase 24A-1)
 

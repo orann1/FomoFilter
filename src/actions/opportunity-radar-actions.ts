@@ -7,6 +7,7 @@ import { callClaudeRadar } from "@/src/lib/opportunity-radar/claude-radar-provid
 import { buildRadarPrompt, loadStockContext } from "@/src/lib/opportunity-radar/build-radar-prompt";
 import { createRadarDebugTrace } from "@/src/lib/opportunity-radar/radar-debug-trace";
 import { RADAR_TOOL_DEFINITION } from "@/src/lib/opportunity-radar/radar-tool-schema";
+import { loadEffectiveRadarConfig } from "@/src/lib/opportunity-radar/radar-ai-config";
 
 export type RadarFixtureScanResult = {
   success: boolean;
@@ -107,9 +108,12 @@ export async function runOpportunityRadarClaudeScanAction(): Promise<RadarClaude
   let debugTracePath: string | null = null;
 
   try {
-    // Step 1: Build prompt with DB context
-    const prompt = await buildRadarPrompt();
-    const stocks = await loadStockContext(20);
+    // Step 0: Load effective config from DB/Env/Defaults
+    const config = await loadEffectiveRadarConfig();
+
+    // Step 1: Build prompt with DB context using config values
+    const prompt = await buildRadarPrompt(config.promptTemplate, config.dbContextLimit);
+    const stocks = await loadStockContext(config.dbContextLimit);
 
     // Populate trace with DB context
     trace.setDbContext(stocks, prompt);
@@ -119,6 +123,8 @@ export async function runOpportunityRadarClaudeScanAction(): Promise<RadarClaude
       prompt,
       trace,
       toolSchema: RADAR_TOOL_DEFINITION,
+      maxTokens: config.maxTokens,
+      model: config.model,
     });
 
     // Step 3: Check for provider error
@@ -222,7 +228,7 @@ export async function runOpportunityRadarClaudeScanAction(): Promise<RadarClaude
     // Step 6: Persist to database
     trace.setPersistence(true, false, null, 0, 0);
 
-    const persistResult = await persistRadarScanOutput(validationResult.data);
+    const persistResult = await persistRadarScanOutput(validationResult.data, config.configId);
 
     if (!persistResult.success) {
       trace.setPersistence(

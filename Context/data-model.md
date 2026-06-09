@@ -448,6 +448,76 @@ Do not treat expected provider coverage limitations as application failures.
 
 ---
 
+### RadarAiConfig
+
+Purpose:
+
+```txt
+Stores database-backed configuration for Opportunity Radar AI scans.
+Allows admin to edit prompt template, token limits, context limits, and debug settings without code changes.
+Phase 24A-2: Initial MVP with editable prompt, token, and context controls.
+```
+
+Primary Owner:
+
+```txt
+Phase 24A-2: Admin users via AI Scan Config section in /admin/sync
+```
+
+Important fields:
+
+```txt
+name — human-readable config name (e.g., "Default Radar AI Config")
+isActive — whether this config is currently active (only one active config at a time)
+promptTemplate — the system prompt used by Claude for Radar scans
+maxTokens — max output tokens for Claude API calls (range: 2000–50000)
+dbContextLimit — how many stocks to include in the database context (range: 1–100)
+candidateLimit — target number of candidates to return from Claude (range: 1–20)
+model — Claude model to use for scans (e.g., "claude-sonnet-4-6", "claude-opus-4-8")
+debugTraceEnabled — whether to write debug trace files on next scan
+promptVersion — versioned identifier for the prompt (e.g., "opportunity-radar-v1")
+schemaVersion — versioned identifier for the output schema (e.g., "candidate-output-v1")
+changeNotes — optional notes on why this config was created/updated
+createdAt — timestamp when config was created
+updatedAt — timestamp when config was last modified
+```
+
+Relationships:
+
+```txt
+RadarAiConfig can have many RadarScan records (one-to-many)
+RadarScan.configId (nullable) — foreign key to RadarAiConfig
+```
+
+Fallback chain (when loading effective config):
+
+```txt
+1. Active DB config (isActive: true) — if exists
+2. Environment variables (RADAR_PROMPT, ANTHROPIC_RADAR_MAX_TOKENS, ANTHROPIC_RADAR_MODEL, etc.) — if set
+3. Code defaults — built-in prompt, hardcoded limits, and "claude-sonnet-4-6"
+
+For model field specifically:
+1. DB config.model — if set and active config exists
+2. ANTHROPIC_RADAR_MODEL env var — if set
+3. Code default: "claude-sonnet-4-6"
+```
+
+Rules:
+
+```txt
+API key remains environment-only (ANTHROPIC_API_KEY). Never store API keys in DB.
+Model selection remains environment-only (ANTHROPIC_RADAR_MODEL). Not editable in UI this phase.
+promptTemplate must be at least 200 characters.
+maxTokens must be an integer between 2000 and 50000.
+dbContextLimit must be an integer between 1 and 100.
+candidateLimit must be an integer between 1 and 20.
+Only one active config at a time. Setting isActive=true deactivates others (manual process).
+Backward compatibility: existing RadarScan rows with configId=null are valid.
+When a RadarScan is created with a DB config, configId is stored and can be referenced for auditing.
+```
+
+---
+
 ### RadarScan
 
 Purpose:
@@ -484,14 +554,17 @@ tokenCompletion — completion tokens used
 costEstimate — estimated API cost
 summaryOverallMarketTheme — AI's overall market assessment
 summaryQualityNotes — AI's self-assessment of output quality
+configId — optional foreign key to RadarAiConfig if DB config was used
 ```
 
 Relationships:
 
 ```txt
 RadarScan has many RadarCandidate records
+RadarScan optionally belongs to RadarAiConfig (configId nullable)
 RadarScan has no direct Stock relationship
 candidates RadarCandidate[] — inverse relation
+config RadarAiConfig? — optional relation (null if using env/code defaults)
 ```
 
 Rules:
@@ -645,7 +718,7 @@ They are presented to the user for further manual review, not as automatic buy s
 
 ---
 
-## Radar Schema — Phase 23C-1B/2A Status
+## Radar Schema — Phase 24A-2 Status
 
 **Phase 23C-1B (completed):**
 - RadarScan, RadarCandidate, RadarEvidence models added
@@ -653,20 +726,35 @@ They are presented to the user for further manual review, not as automatic buy s
 - Cascade deletes implemented correctly
 - String types used (no Prisma enums) for flexibility during prompt/schema iterations
 
-**Phase 23C-2A (in progress):**
-- Validation function for RadarScanOutput with strict rules (enums, scores 0-100, prohibited language, evidence requirements)
+**Phase 23C-2A (completed):**
+- Validation function for RadarScanOutput with strict rules
 - Persistence function using Prisma transactions
 - Sample fixture with 3 test candidates
 - QA script for validation and persistence testing
-- No external AI/provider calls; fixture data only
 
-**Phase 23C-2B/2C (future):**
-- Admin AI Scan button implementation with real AI execution
-- Provider/prompt/source configuration models (RadarPromptVersion, RadarProviderConfig, etc.)
-
-**Phase 23C-3+ (future):**
-- Scheduled daily scans
+**Phase 23C-2B/2C (completed):**
+- Admin AI Scan button implementation with real Claude execution
 - /opportunity-radar reads from DB instead of mock data
+
+**Phase 24A-1 (completed):**
+- Admin UI reorganization: Fixture Scan and Claude Scan moved to dedicated AI Scan tab
+- Backend code preservation, UI-only changes
+
+**Phase 24A-2 (completed):**
+- RadarAiConfig model added with editable prompt, token, and context controls
+- Migration: configId field added to RadarScan
+- Effective config loader with fallback chain (DB → Env → Code Default)
+- Admin UI: AI Scan Config section (collapsed by default) with editable form
+- Admin UI: Claude Scan remains primary action, uses DB config
+- Admin UI: Fixture Scan moved to collapsed "QA / Test Scan" section
+- Post-scan result report with metadata and disclaimer
+- Honest progress UI labeling ("Estimated progress")
+- API key remains env-only (not editable in UI)
+
+**Phase 24A-3+ (future):**
+- Scheduled daily scans
+- Full real-time DB job progress tracking
+- Additional configuration options (provider switching, etc.)
 
 ---
 

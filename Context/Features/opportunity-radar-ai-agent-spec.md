@@ -1693,9 +1693,52 @@ This phase is **documentation and specification only**, preparing the groundwork
 
 ---
 
+---
+
+## Phase 24A-2 Implementation: DB-Backed Config MVP
+
+Phase 24A-2 implements the admin configuration system for Opportunity Radar, enabling runtime customization of prompt, tokens, and context without code changes.
+
+**Implemented (Phase 24A-2):**
+- RadarAiConfig model: stores editable prompt template, max tokens, context limit, candidate limit, Claude model, debug settings
+- Config loader with fallback chain: DB active config → Environment variables → Code defaults
+- Admin UI: collapsed "AI Scan Config" section with editable form (prompt, tokens, context, candidates, model)
+- Server Actions: saveRadarConfigAction, getEffectiveRadarConfigAction, getLatestRadarScanAction, getRadarScanHistoryAction
+- Latest AI Scan summary: displays most recent RadarScan metadata
+- AI Scan History table: shows latest 10 RadarScans in Sync History tab
+- Claude Scan behavior: loads effective config, uses DB-backed prompt/tokens/context limit/model
+- Post-scan result report: displays metadata, token usage, config source, model used, disclaimer
+- Token estimation: improved word-based algorithm (words * 1.35 + punctuation * 0.6 + linebreaks) with live feedback
+- Documentation: config fallback behavior, admin UI, history tracking, model selection
+
+**Config Fallback Chain (24A-2):**
+1. DB: Active RadarAiConfig (isActive: true)
+2. Env: RADAR_PROMPT, ANTHROPIC_RADAR_MAX_TOKENS, RADAR_DB_CONTEXT_LIMIT, RADAR_CANDIDATE_LIMIT, RADAR_DEBUG_AI_TRACE, ANTHROPIC_RADAR_MODEL
+3. Code defaults: DEFAULT_RADAR_PROMPT, 8192 tokens, 20 context, 10 candidates, "claude-sonnet-4-6" model
+
+**Validation (24A-2):**
+- Prompt template: min 200 characters
+- maxTokens: 2000–50000 range
+- dbContextLimit: 1–100 range
+- candidateLimit: 1–20 range
+- model: non-empty string (e.g., "claude-sonnet-4-6")
+- All validation happens server-side
+
+**Not Yet Implemented (future phases):**
+- Provider switching UI (currently supports Claude only; switching to other providers requires code changes)
+- Full real-time DB job progress tracking (currently shows honest client-side estimated progress)
+- Scheduled scans (currently manual admin button only)
+- Cost estimation
+- Multiple active config versions/history
+- API key management UI (currently env-only)
+
+---
+
 ## Summary
 
 Phase 23B defines the Opportunity Radar AI Agent system through comprehensive documentation and design patterns, without implementing any real AI calls, provider integration, or database changes.
+
+Phase 24A-2 implements the **admin configuration system**, enabling runtime customization of core agent parameters (prompt, token limits, context scope) through a database-backed config with environment variable fallback.
 
 The phase establishes:
 

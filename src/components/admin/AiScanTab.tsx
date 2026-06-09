@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import {
   runOpportunityRadarFixtureScanAction,
   runOpportunityRadarClaudeScanAction,
@@ -16,7 +16,15 @@ import {
   Info,
   Play,
   Radar,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
+import { RadarConfigSection } from "./RadarConfigSection";
+import { RadarScanResultReport } from "./RadarScanResultReport";
+import { LatestAiScanSummary } from "./LatestAiScanSummary";
+import { EstimatedProgressPanel } from "./EstimatedProgressPanel";
+import { getEffectiveRadarConfigAction } from "@/src/actions/radar-config-actions";
+import type { EffectiveRadarConfig } from "@/src/lib/opportunity-radar/radar-ai-config";
 
 interface AiScanTabProps {
   anyChunkedRunning?: boolean;
@@ -156,46 +164,42 @@ function RadarClaudeScanResultViewer({ result }: { result: RadarClaudeScanResult
   );
 }
 
-function RadarClaudeScanProgressViewer() {
-  const steps = [
-    "Preparing Claude scan",
-    "Loading database context",
-    "Sending request to Claude",
-    "Waiting for structured tool output",
-    "Validating tool output",
-    "Persisting scan results",
-    "Finalizing result",
-  ];
-
-  return (
-    <div className="rounded-lg bg-slate-900/80 border border-blue-800/60 p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <Loader2 className="w-4 h-4 text-blue-400 shrink-0 animate-spin" />
-        <span className="text-sm font-semibold text-blue-300">Claude scan in progress</span>
-      </div>
-
-      <div className="space-y-2">
-        {steps.map((step, idx) => {
-          return (
-            <div key={idx} className="flex items-center gap-2 text-xs">
-              <div className="w-3.5 h-3.5 rounded-full border border-slate-600 bg-slate-700 shrink-0 flex items-center justify-center">
-                <div className="w-1.5 h-1.5 rounded-full bg-slate-600" />
-              </div>
-              <span className="text-slate-500">{step}</span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 export default function AiScanTab({ anyChunkedRunning }: AiScanTabProps) {
   const [radarResult, setRadarResult] = useState<RadarFixtureScanResult | null>(null);
   const [radarLoading, setRadarLoading] = useState(false);
   const [radarClaudeResult, setRadarClaudeResult] = useState<RadarClaudeScanResult | null>(null);
   const [radarClaudeLoading, setRadarClaudeLoading] = useState(false);
+  const [isQaTestExpanded, setIsQaTestExpanded] = useState(false);
+  const [currentConfig, setCurrentConfig] = useState<EffectiveRadarConfig | null>(null);
+  const [configLoading, setConfigLoading] = useState(true);
   const [isLoading] = useTransition();
+
+  // Load current config on mount
+  useEffect(() => {
+    const loadConfig = async () => {
+      setConfigLoading(true);
+      try {
+        const result = await getEffectiveRadarConfigAction();
+        if (result.success && result.config) {
+          setCurrentConfig(result.config);
+        }
+      } catch (error) {
+        console.error("Failed to load config:", error);
+      } finally {
+        setConfigLoading(false);
+      }
+    };
+
+    loadConfig();
+  }, []);
+
+  const handleConfigUpdate = async () => {
+    // Reload config after update
+    const result = await getEffectiveRadarConfigAction();
+    if (result.success && result.config) {
+      setCurrentConfig(result.config);
+    }
+  };
 
   function handleRunRadarFixtureScan() {
     setRadarLoading(true);
@@ -215,65 +219,34 @@ export default function AiScanTab({ anyChunkedRunning }: AiScanTabProps) {
     });
   }
 
+  if (configLoading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="w-5 h-5 animate-spin text-slate-400" />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-5">
-      {/* Opportunity Radar Fixture Scan */}
-      <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
-        <div>
-          <div className="flex items-center gap-2 mb-0.5">
-            <Radar className="w-4 h-4 text-slate-400" />
-            <h2 className="text-sm font-semibold text-slate-200">Fixture Scan</h2>
-            <span className="text-xs font-medium text-blue-700 bg-blue-900/40 border border-blue-800/50 px-2 py-0.5 rounded ml-1">
-              Test Data
-            </span>
-          </div>
-          <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-            Run fixture-based Radar validation and persistence. No AI provider or external search is called.
-            Validates sample fixture data against strict rules and persists to RadarScan, RadarCandidate, and RadarEvidence tables.
-          </p>
-        </div>
+      {/* AI Scan Config Section */}
+      {currentConfig && (
+        <RadarConfigSection currentConfig={currentConfig} onConfigUpdate={handleConfigUpdate} />
+      )}
 
-        <button
-          onClick={handleRunRadarFixtureScan}
-          disabled={radarLoading || isLoading || anyChunkedRunning}
-          className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium bg-blue-700 hover:bg-blue-600 text-white border border-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {radarLoading ? (
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-          ) : (
-            <Play className="w-3.5 h-3.5" />
-          )}
-          Run Fixture Scan
-        </button>
-
-        {radarResult && <RadarFixtureScanResultViewer result={radarResult} />}
-
-        <div className="rounded bg-slate-900/60 border border-slate-700/60 px-3 py-2.5 space-y-2">
-          <div className="flex items-start gap-2">
-            <Info className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
-            <div className="text-xs space-y-0.5 text-slate-500">
-              <p className="text-slate-400 font-medium">Local test data — no external APIs</p>
-              <p>This action runs a local sample fixture through the validation and persistence pipeline. It does not call Claude, OpenAI, or any external APIs. Real AI integration is available in the Claude Scan section below.</p>
-              <p className="mt-1">On success, creates 1 RadarScan record, 3 RadarCandidate records (NVDA, SMCI, META), and 7 RadarEvidence records with full validation of scores, enums, evidence, and prohibited language.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Opportunity Radar Claude Scan */}
+      {/* Claude Scan — Primary Action */}
       <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
         <div>
           <div className="flex items-center gap-2 mb-0.5">
             <Radar className="w-4 h-4 text-slate-400" />
             <h2 className="text-sm font-semibold text-slate-200">Claude Scan</h2>
             <span className="text-xs font-medium text-emerald-700 bg-emerald-900/40 border border-emerald-800/50 px-2 py-0.5 rounded ml-1">
-              Server-Side AI
+              Primary Action
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-            Run a real Claude Sonnet 4.6 scan using database-backed context (controlled source pack mode).
-            Claude analyzes active stocks from the database and identifies research candidates.
-            Uses server-side execution only — requires <span className="font-mono text-slate-400">ANTHROPIC_API_KEY</span> environment variable.
+            Run a real Claude scan using the active AI Scan Config. Claude analyzes database context and identifies research candidates.
+            Server-side execution only — requires <span className="font-mono text-slate-400">ANTHROPIC_API_KEY</span> environment variable.
           </p>
         </div>
 
@@ -290,8 +263,8 @@ export default function AiScanTab({ anyChunkedRunning }: AiScanTabProps) {
           Run Claude Scan
         </button>
 
-        {radarClaudeLoading && <RadarClaudeScanProgressViewer />}
-        {radarClaudeResult && <RadarClaudeScanResultViewer result={radarClaudeResult} />}
+        <EstimatedProgressPanel isRunning={radarClaudeLoading} />
+        {radarClaudeResult && <RadarScanResultReport result={radarClaudeResult} />}
 
         <div className="rounded bg-slate-900/60 border border-slate-700/60 px-3 py-2.5 space-y-2">
           <div className="flex items-start gap-2">
@@ -299,26 +272,89 @@ export default function AiScanTab({ anyChunkedRunning }: AiScanTabProps) {
             <div className="text-xs space-y-0.5 text-slate-500">
               <p className="text-slate-400 font-medium">Real Claude integration — server-side only</p>
               <p>
-                This action calls Claude Sonnet 4.6 server-side using a database-backed context (controlled source pack mode).
-                Claude receives a list of top active stocks from the database and generates research candidates without claiming public web discovery.
+                This action calls Claude Sonnet 4.6 server-side using database-backed context (controlled source pack mode).
+                Configuration is loaded from the AI Scan Config section above.
               </p>
               <p className="mt-1">
-                <strong>Important:</strong> Normal UI render paths do not call this AI scan. The /opportunity-radar page reads persisted DB results only — it never calls Claude or any external API directly.
+                <strong>Important:</strong> Normal UI render paths do not call this AI scan. The /opportunity-radar page reads persisted DB results only.
               </p>
               <p className="mt-1">
-                <strong>Requirements:</strong> Set <span className="font-mono text-slate-300">ANTHROPIC_API_KEY</span> in your environment.
-                This action does not claim real web search — it uses only database context for candidate analysis.
+                <strong>Progress Display:</strong> The progress steps shown are <em>estimated</em> stages and do not represent live real-time progress updates.
+                Exact live stage tracking requires future database job progress tracking.
               </p>
               <p className="mt-1">
-                <strong>On success:</strong> Creates 1 RadarScan record, multiple RadarCandidate records, and RadarEvidence with full validation.
-                All validation rules apply (prohibited language, score ranges, enum values, evidence quality).
+                <strong>On success:</strong> Creates 1 RadarScan record (linked to your config), multiple RadarCandidate records, and RadarEvidence.
               </p>
               <p className="mt-1">
-                <strong>On failure:</strong> Shows clear error messages (missing API key, provider errors, validation failures) without persisting invalid data.
+                <strong>On failure:</strong> Shows clear error messages without persisting invalid data.
               </p>
             </div>
           </div>
         </div>
+      </section>
+
+      {/* Latest AI Scan Summary */}
+      <LatestAiScanSummary key={radarClaudeResult ? radarClaudeResult.scanId : "no-scan"} />
+
+      {/* QA / Test Scan — Collapsed Section */}
+      <section className="bg-slate-800/50 border border-slate-700 rounded-lg space-y-0">
+        <button
+          onClick={() => setIsQaTestExpanded(!isQaTestExpanded)}
+          className="w-full px-4 py-3 flex items-center justify-between hover:bg-slate-700/30 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            {isQaTestExpanded ? (
+              <ChevronUp className="w-4 h-4 text-slate-400" />
+            ) : (
+              <ChevronDown className="w-4 h-4 text-slate-400" />
+            )}
+            <div className="text-left">
+              <h3 className="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                QA / Test Scan
+                <span className="text-xs font-medium text-blue-700 bg-blue-900/40 border border-blue-800/50 px-2 py-0.5 rounded">
+                  Test Data Only
+                </span>
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Fixture scan for validation and testing — uses local sample data only
+              </p>
+            </div>
+          </div>
+        </button>
+
+        {isQaTestExpanded && (
+          <div className="border-t border-slate-700 px-4 py-4 space-y-3">
+            <p className="text-xs text-slate-500 leading-relaxed">
+              Run fixture-based Radar validation and persistence. No AI provider or external search is called.
+              Uses local sample data to test the validation and persistence pipeline.
+            </p>
+
+            <button
+              onClick={handleRunRadarFixtureScan}
+              disabled={radarLoading || isLoading || anyChunkedRunning}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium bg-blue-700 hover:bg-blue-600 text-white border border-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {radarLoading ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Play className="w-3.5 h-3.5" />
+              )}
+              Run Fixture Scan
+            </button>
+
+            {radarResult && <RadarFixtureScanResultViewer result={radarResult} />}
+
+            <div className="rounded bg-slate-900/60 border border-slate-700/60 px-3 py-2.5">
+              <div className="flex items-start gap-2">
+                <Info className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
+                <div className="text-xs space-y-0.5 text-slate-500">
+                  <p className="text-slate-400 font-medium">Local test data — no external APIs</p>
+                  <p>Runs a local sample fixture through the validation and persistence pipeline. Creates 1 RadarScan, 3 RadarCandidate, and 7 RadarEvidence records for testing purposes.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </section>
     </div>
   );

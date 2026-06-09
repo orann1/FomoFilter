@@ -18,6 +18,8 @@ export interface ClaudeProviderRequest {
   prompt: string;
   trace?: RadarDebugTraceCollector;
   toolSchema?: unknown;
+  maxTokens?: number;
+  model?: string;
 }
 
 export interface ClaudeProviderResponse {
@@ -61,8 +63,8 @@ export async function callClaudeRadar(
   request: ClaudeProviderRequest
 ): Promise<ClaudeProviderResponse> {
   const apiKey = getAnthropicApiKey();
-  const model = getRadarModel();
-  const { trace, toolSchema } = request;
+  const model = request.model || getRadarModel();
+  const { trace, toolSchema, maxTokens: configMaxTokens } = request;
 
   if (!apiKey) {
     return {
@@ -74,7 +76,7 @@ export async function callClaudeRadar(
   }
 
   const startTime = Date.now();
-  const maxTokens = getRadarMaxTokens();
+  const maxTokens = configMaxTokens ?? getRadarMaxTokens();
 
   try {
     const toolChoice = {

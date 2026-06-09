@@ -125,10 +125,31 @@ function formatStockContext(stocks: StockContextItem[]): string {
  * Build the complete Opportunity Radar prompt
  * Uses DB context (controlled source pack mode)
  * Tool Use mode: Claude will use the create_radar_scan_output tool with structured output
+ * Optionally accepts a custom prompt template and context limit
  */
-export async function buildRadarPrompt(): Promise<string> {
-  const stocks = await loadStockContext(20);
+export async function buildRadarPrompt(
+  customPrompt?: string,
+  contextLimit?: number
+): Promise<string> {
+  const limit = contextLimit || 20;
+  const stocks = await loadStockContext(limit);
   const stockContext = formatStockContext(stocks);
+
+  // Use custom prompt if provided, otherwise use default
+  if (customPrompt) {
+    return `${customPrompt}
+
+STOCK CONTEXT (Database-Backed Controlled Source):
+${stockContext}
+
+Your analysis process:
+1. Review the stock context above carefully.
+2. Identify stocks with interesting signals, patterns, or characteristics.
+3. For each candidate, explain the radar lens (why it's worth research).
+4. Ground evidence in the provided context (scores, sectors, ratings, price movements).
+5. Reject candidates that don't have clear signals or minimum quality.
+6. Return complete structured output via the create_radar_scan_output tool.`;
+  }
 
   return `You are an AI research analyst. Your task is to identify research candidates from the provided stock context using structured tool output.
 

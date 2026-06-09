@@ -465,6 +465,28 @@ model SyncRunItem {
   @@index([status])
 }
 
+model RadarAiConfig {
+  id                  String           @id @default(cuid())
+  name                String           @default("Default Radar AI Config")
+  isActive            Boolean          @default(false)
+  promptTemplate      String
+  maxTokens           Int              @default(8192)
+  dbContextLimit      Int              @default(20)
+  candidateLimit      Int              @default(10)
+  debugTraceEnabled   Boolean          @default(false)
+  promptVersion       String           @default("opportunity-radar-v1")
+  schemaVersion       String           @default("candidate-output-v1")
+  model               String           @default("claude-sonnet-4-6")
+  changeNotes         String?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+
+  scans               RadarScan[]
+
+  @@index([isActive])
+  @@index([createdAt])
+}
+
 model RadarScan {
   id                      String           @id @default(cuid())
   scanDate                DateTime         @default(now())
@@ -492,15 +514,18 @@ model RadarScan {
   errorMessage            String?
   rejectedCandidates      Json?
   agentSelfCheck          Json?
+  configId                String?
   createdAt               DateTime         @default(now())
   updatedAt               DateTime         @updatedAt
 
+  config                  RadarAiConfig?   @relation(fields: [configId], references: [id], onDelete: SetNull)
   candidates              RadarCandidate[]
 
   @@index([scanDate])
   @@index([status])
   @@index([provider])
   @@index([timeWindow])
+  @@index([configId])
 }
 
 model RadarCandidate {

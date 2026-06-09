@@ -18,10 +18,12 @@ export type PersistenceResult<T> = {
  * Creates RadarScan, RadarCandidate, and RadarEvidence records
  *
  * @param input - Validated radar scan output
+ * @param configId - Optional config ID if DB config was used
  * @param prismaClient - Optional Prisma client override (for testing/scripts). Defaults to server-side singleton.
  */
 export async function persistRadarScanOutput(
   input: ValidatedRadarScanOutput,
+  configId?: string,
   prismaClient?: PrismaClient
 ): Promise<PersistenceResult<{
   scanId: string;
@@ -56,6 +58,7 @@ export async function persistRadarScanOutput(
           summaryQualityNotes: input.summary.headline,
           rejectedCandidates: input.rejectedCandidates || [],
           agentSelfCheck: input.agentSelfCheck,
+          configId: configId || null,
         },
       });
 
