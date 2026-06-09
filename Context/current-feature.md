@@ -1,47 +1,53 @@
-# Current Feature — Phase 23C-3+ Stabilization: Claude Tool Use & Debug Trace
+# Current Feature — Phase 24A-1: Admin Console Cleanup
 
 ## Completed Phase
 
 ```txt
-Phase 23C-3+ — Claude Tool Use Stabilization & Debug Trace Logging
-Status: Completed - All Checks Passing - Ready for Merge
-Focus: Stabilized Claude Radar Tool Use structured output flow with debug tracing, fixed truncation/date/validation issues
+Phase 24A-1 — Admin Console Cleanup
+Status: COMPLETED — Committed to main
+Focus: UI reorganization, removing dev tools from visible UI, consolidating documentation
 ```
+
+## Next Phase
+
+Currently no active phase. Phase 24A-2 and beyond are not started.
+
+Planning for Phase 24A-2 or later can begin after project review.
 
 ## What This Phase Implements
 
-**DB-backed page rendering:**
-- Server-side data loader reads successful RadarScan records from the last 30 days
-- Includes RadarCandidate and RadarEvidence records with linked Stock/StockScore/StockQuote/StockAnalystData
-- Normalized plain objects passed to client component (no Prisma exposure)
-- Empty state when no successful scans exist
+**Admin Console UI Cleanup:**
+1. **Sync Actions Tab:** Removed Developer/Legacy Tools section — production workflows only
+   - Universe Sync (Nasdaq 100 + S&P 500)
+   - Daily Market Data Sync
+   - Company Data Sync
+   - Score Calculation
+   - Backend handlers for legacy tools preserved (no code deletion)
 
-**Time window filtering:**
-- Today: candidates from current calendar day
-- Yesterday: candidates from previous calendar day
-- Last 7 Days: candidates from the last 7 days
-- Last 30 Days: candidates from the last 30 days
+2. **Data Inventory Tab:** Compacted UI without DB Stock Summary panel
+   - Removed redundant DB Stock Summary panel
+   - Universe Overview remains visible
+   - Stock Data Inventory summary compacted: smaller padding, smaller text, 8-column grid
+   - Full table with search, filters, pagination preserved
 
-**Source mode labeling:**
-- `fixture` → "Fixture scan · local test data"
-- `db_context` → "Claude DB-context scan · no public web search"
-- No false claims about public web discovery
+3. **AI Scan Tab:** New dedicated tab for Opportunity Radar operations
+   - Fixture Scan section (test data validation)
+   - Claude Scan section (real Claude integration)
+   - Progress and result display
+   - Moved from Sync Actions organization
 
-**Candidate display:**
-- Ticker, company name, headline, bullets from DB
-- Signal Snapshot uses DB-backed validation metrics (Opportunity Score, Fundamental Score, Analyst Upside, etc.)
-- Intel Brief shows thesis, narrative fields, evidence/citations
-- Missing values show as N/A, not 0
+4. **Documentation Tab:** Replaced Score Methodology standalone tab
+   - Comprehensive reference documentation
+   - All sections collapsed by default
+   - Sections: Score Methodology, Sync Workflows, Data Inventory Guide, Opportunity Radar/AI Scan, Provider Sources, Glossary, Troubleshooting
+   - Score Methodology now inside collapsed accordion
 
-**Scope confirmation:**
-- /opportunity-radar no longer displays mock data by default
-- Admin UI unchanged
-- No Prisma schema changes
+**Scope Confirmation:**
+- UI organization only — no schema changes
 - No new migrations
-- No provider/AI calls from page render
-- No external web/search API calls
-- Time tab counts calculated from DB data per selected window
-- Lens counts calculated from DB data per selected window
+- No AI/provider behavior changes
+- No Scanner/Dashboard/Drawer/opportunity-radar page changes
+- All backend code preserved for future reactivation
 
 ---
 
@@ -62,206 +68,176 @@ Context/data-model.md
 For this phase, also read:
 
 ```txt
-Context/Features/opportunity-radar-feature-spec.md
-Context/Features/opportunity-radar-ai-agent-spec.md
 Context/Features/admin-sync-feature-spec.md
 ```
 
 ---
 
-## Scope — DB Reader Only
+## Scope — Admin Console UI Cleanup Only
 
 ### In Scope
 
 ```txt
-- Server-side data loader (src/lib/data/opportunity-radar.ts)
-- Normalized UI data types (OpportunityRadarPageData, RadarCandidateView, RadarScanView, etc.)
-- Page component update (app/opportunity-radar/page.tsx)
-- Client component update (OpportunityRadarPageClient) to use DB data instead of mock
-- Time window filtering by scanDate
-- Lens filtering by radarLens
-- Empty state when no scans exist
-- Source mode labeling (fixture, db_context)
-- Evidence/citation display from RadarEvidence records
-- Snapshot metrics from linked Stock/StockScore/StockQuote/StockAnalystData
-- Type updates (opportunity-radar.ts) to support new fields
-- Documentation updates (current-feature, opportunity-radar-feature-spec, opportunity-radar-ai-agent-spec, project-overview)
+- SyncPageClient.tsx: Removed Developer/Legacy Tools section from Sync Actions tab UI
+- DataInventoryTab.tsx: Removed DB Stock Summary panel, compacted summary cards
+- AiScanTab.tsx: New tab component for Opportunity Radar Fixture and Claude Scans
+- DocumentationTab.tsx: New comprehensive documentation tab (replaces Score Methodology standalone)
+- All sections in DocumentationTab collapsed by default
+- Backend code preservation: No server actions, handlers, or routes deleted
+- Component organization: Tab reordering and consolidation
+- Documentation updates to reflect UI changes
 ```
 
 ### Out of Scope
 
 ```txt
-- Claude/OpenAI/Gemini/Grok calls from /opportunity-radar
-- Web/search/news API calls
-- Scheduled daily scans
-- Admin UI changes (buttons already added in Phase 23C-2B)
-- Prisma schema changes or migrations
-- Production scoring changes
+- Schema changes or migrations
+- AI/provider behavior changes (Claude, FMP, Finnhub, Anthropic API remain identical)
 - Scanner/Dashboard/Drawer changes
-- Provider/source config models
-- Mock data removal from repo (kept for reference/dev)
-- /opportunity-radar now uses DB by default but mock fallback not shown as real data
+- /opportunity-radar page changes (remains as Phase 23C-3)
+- Sync workflow logic changes
+- Score calculation changes
+- Database record or function changes
+- Deletion of legacy backend code (only UI hidden)
 ```
 
 ---
 
-## Phase 23C-3 Deliverables
+## Phase 24A-1 Deliverables
 
 This phase produces:
 
 ```txt
-1. src/lib/data/opportunity-radar.ts — Server-side data loader
-2. Updated app/opportunity-radar/page.tsx — Loads DB data via server loader
-3. Updated src/components/opportunity-radar/OpportunityRadarPageClient.tsx — Consumes DB data, not mock
-4. Updated src/types/opportunity-radar.ts — Added scanDate, radarLens, evidence fields
-5. Context/current-feature.md — Updated to Phase 23C-3
-6. Context/Features/opportunity-radar-feature-spec.md — Updated to reflect DB reader implementation
-7. Context/Features/opportunity-radar-ai-agent-spec.md — Added Phase 23C-3 implementation notes
-8. Context/project-overview.md — Roadmap updated
-9. All automated checks passing: build, TypeScript, prisma validate, prisma migrate status
+1. Updated src/components/admin/DataInventoryTab.tsx — Removed DB Stock Summary, compacted summary
+2. Updated src/components/admin/SyncPageClient.tsx — Removed Developer/Legacy Tools UI section
+3. New src/components/admin/AiScanTab.tsx — Dedicated AI/Opportunity Radar operations tab
+4. New src/components/admin/DocumentationTab.tsx — Comprehensive documentation (collapsed by default)
+5. Updated Context/Features/admin-sync-feature-spec.md — Phase 24A-1 UI changes documented
+6. Updated Context/current-feature.md — Phase 24A-1 active phase
+7. All automated checks passing: build, TypeScript, prisma validate, prisma migrate status
 ```
 
 ---
 
 ## Acceptance Criteria
 
-**Server-side data loader:**
+**Data Inventory Tab:**
 ```txt
-✓ getOpportunityRadarData() queries RadarScan with status="success"
-✓ Loads from last 30 days of scans
-✓ Includes RadarCandidate records
-✓ Includes RadarEvidence records
-✓ Links Stock/StockScore/StockQuote/StockAnalystData where available
-✓ Orders scans by scanDate descending
-✓ Returns normalized plain objects (no Prisma)
-✓ Handles empty state when no scans exist
+✓ DB Stock Summary panel is not visible
+✓ Universe Overview table is visible
+✓ Stock Data Inventory summary is compact (reduced padding, smaller text, 8-column grid)
+✓ Summary cards show: Total, With Quote, With Metrics, With Score, Scanner OK, NASDAQ 100, S&P 500, With Analyst
+✓ Stock Data Inventory table displays
+✓ Search functionality works
+✓ Filters work
+✓ Pagination works
 ```
 
-**Page component:**
+**Sync Actions Tab:**
 ```txt
-✓ Loads data via getOpportunityRadarData()
-✓ Passes normalized data to OpportunityRadarPageClient
-✓ Keeps page server-rendered/dynamic as appropriate
-✓ No provider calls
-✓ No mock data imports
+✓ Developer / Legacy Tools section is completely hidden
+✓ Production sync workflows visible:
+  - Universe Sync
+  - Daily Market Data Sync
+  - Company Data Sync
+  - Score Calculation
+✓ No broken links or missing UI elements
+✓ All sync action buttons functional
 ```
 
-**Client component:**
+**AI Scan Tab (New):**
 ```txt
-✓ Accepts initialData prop (OpportunityRadarPageData)
-✓ Converts DB candidates to UI format
-✓ Time tabs filter by scanDate
-✓ Lens buttons filter by radarLens
-✓ Opportunity Deck shows top 3 candidates per time + lens
-✓ Candidate cards use DB fields
-✓ Intel Brief uses DB narrative and evidence fields
-✓ Snapshot shows DB validation metrics or N/A
-✓ Source mode badge shows fixture/db_context/etc (not "Mock experience")
-✓ Empty state when no DB data
+✓ Tab is visible and selectable
+✓ Fixture Scan section renders with button and description
+✓ Claude Scan section renders with button and description
+✓ Result/error panels display correctly
+✓ Progress indicators work
+```
+
+**Documentation Tab (New):**
+```txt
+✓ Tab is visible and selectable
+✓ All sections initially collapsed by default
+✓ Each section can be expanded/collapsed by clicking
+✓ Score Methodology / Scoring & Analysis is a collapsed accordion
+✓ Sections include: Sync Workflows, Data Inventory Guide, Opportunity Radar/AI Scan, Provider Sources, Glossary, Troubleshooting
+✓ Content is readable and properly formatted
+```
+
+**Other Tabs:**
+```txt
+✓ Provider Tests tab renders (if preserved)
+✓ Sync History tab renders and functions
+```
+
+**Backend Preservation:**
+```txt
+✓ No TypeScript errors
+✓ No build errors
 ✓ No console errors
+✓ Backend handlers present (hidden from UI only)
+✓ Server actions intact
 ```
 
-**Time window filtering:**
+**Scope Confirmation:**
 ```txt
-✓ Today: scanDate within current calendar day
-✓ Yesterday: scanDate within previous calendar day
-✓ Last 7 Days: scanDate >= now - 7 days
-✓ Last 30 Days: scanDate >= now - 30 days
-```
-
-**Lens filtering:**
-```txt
-✓ Attention Spike: radarLens = "attention_spike"
-✓ Overreaction: radarLens = "overreaction"
-✓ Value Gap: radarLens = "value_gap"
-✓ Future Theme: radarLens = "future_theme"
-✓ Lens counts based on selected time window
-```
-
-**Empty state:**
-```txt
-✓ Shown when no successful RadarScan records
-✓ Clear message: "No Radar scans yet"
-✓ Copy: "Run a Fixture or Claude Radar Scan from Admin Sync to populate this briefing."
-✓ Link to /admin/sync
-✓ No mock data shown as real
-```
-
-**Source mode labeling:**
-```txt
-✓ fixture → "Fixture scan · local test data"
-✓ db_context → "Claude DB-context scan · no public web search"
-✓ Metadata shows provider, model, sourceMode, scanDate
-✓ No "public web scan" claims
-✓ No "Mock experience" badge when DB data exists
-```
-
-**Scope confirmation:**
-```txt
-✓ /opportunity-radar changed (now DB-backed)
-✓ Admin UI unchanged
-✓ /scanner, /, /admin/sync unchanged
-✓ No Prisma schema changes
-✓ No new migrations
-✓ No provider calls from page
-✓ No external API calls from page
-✓ No production scoring changes
-✓ No scheduled jobs
+✓ No schema changes
+✓ No migrations
+✓ No Scanner/Dashboard/Drawer changes
+✓ No /opportunity-radar changes
+✓ No AI/provider behavior changes
 ```
 
 ---
 
 ## QA Requirements
 
-Browser QA is required because /opportunity-radar UI changes to read from DB.
+Browser QA is required because /admin/sync UI is reorganized.
 
-### A. DB-backed data scenario
-- Ensure at least one successful RadarScan exists (from Phase 23C-2B or 23C-2C)
-- Load /opportunity-radar
-- Confirm candidates display with DB values (not mock)
-- Confirm source mode badge shows correct label (fixture or db_context)
-- Confirm no "Mock experience" badge appears
-- Confirm metadata shows provider/model/scanDate
+### A. Data Inventory Tab
+- Navigate to /admin/sync (Data Inventory tab should be default)
+- Confirm DB Stock Summary panel is NOT visible
+- Confirm Universe Overview table is visible
+- Confirm Stock Data Inventory summary is compact
+- Confirm all summary card metrics display
+- Test search field with a stock symbol
+- Test filter dropdowns
+- Test pagination controls
 
-### B. Time tabs
-- Test Today tab: candidates from current date only
-- Test Yesterday tab: candidates from previous date
-- Test Last 7 Days tab: candidates from last 7 days
-- Test Last 30 Days tab: candidates from last 30 days
-- Confirm candidate counts update per tab
-- Confirm empty state appears if time window has no candidates
+### B. Sync Actions Tab
+- Click Sync Actions tab
+- Confirm Developer / Legacy Tools section is NOT visible
+- Confirm production workflows are visible:
+  - Universe Sync
+  - Daily Market Data Sync
+  - Company Data Sync
+  - Score Calculation
+- Confirm no broken section headers or missing UI
 
-### C. Lens filtering
-- Test each lens button (Attention Spike, Overreaction, Value Gap, Future Theme)
-- Confirm deck shows top 3 candidates for selected lens + time window
-- Confirm counts are accurate for selected time window
-- Confirm empty state appears if lens has no candidates
+### C. AI Scan Tab (New)
+- Click AI Scan tab
+- Confirm Fixture Scan section visible with description and button
+- Confirm Claude Scan section visible with description and button
+- Confirm both sections render without errors
 
-### D. Candidate cards
-- Click a candidate card
-- Confirm ticker/company/headline/bullets show DB values
-- Confirm Signal Snapshot uses DB snapshot values or N/A (not 0)
-- Confirm evidence count matches
+### D. Documentation Tab (New)
+- Click Documentation tab
+- Confirm all sections initially appear collapsed (chevron pointing right)
+- Click each section title to expand
+- Confirm content appears when expanded
+- Confirm sections can be collapsed again
+- Confirm Score Methodology appears as collapsed accordion
+- Verify section titles: Sync Workflows, Data Inventory Guide, Opportunity Radar/AI Scan, Provider Sources, Glossary, Troubleshooting
 
-### E. Intel Brief
-- Click a candidate to open Intel Brief
-- Confirm narrative fields (thesis, whyNow, mainCatalyst, etc.) are DB-backed
-- Confirm evidence records display
-- Confirm URL null does not render broken links
-- Confirm validation metrics display correctly
-- Confirm sourceMode/evidence wording does not claim public web discovery
+### E. Other Tabs
+- Verify Provider Tests tab still renders (if preserved)
+- Verify Sync History tab still renders and functions
 
-### F. Empty state
-- If practical, temporarily query a time window/lens with no candidates
-- Confirm empty deck state appears
-- Do not delete production data just to test this
-
-### G. Regression routes
-- / loads
-- /scanner loads  
-- /admin/sync loads
-- Admin Fixture and Claude buttons still render
-- No console errors
+### F. Regression Routes
+- / loads without errors
+- /scanner loads without errors
+- /opportunity-radar loads without errors
+- No console errors in browser DevTools
 
 ---
 
@@ -281,32 +257,48 @@ npx prisma migrate status  # Must show "Database schema is up to date!"
 Required updates after QA and before commit:
 
 ```txt
-✓ Context/current-feature.md — This file, now describes Phase 23C-3
-✓ Context/Features/opportunity-radar-feature-spec.md — Updated to reflect DB-backed reader
-✓ Context/Features/opportunity-radar-ai-agent-spec.md — Added Phase 23C-3 implementation notes
-✓ Context/project-overview.md — Roadmap updated to active Phase 23C-3
+✓ Context/current-feature.md — This file, updated to Phase 24A-1
+✓ Context/Features/admin-sync-feature-spec.md — Updated to reflect Phase 24A-1 UI cleanup
 ```
 
-Check but likely no update:
+Checked but no update needed:
 ```txt
-- Context/data-model.md (RadarScan/Candidate/Evidence models unchanged)
-- Context/sync-workflows.md (No sync changes)
-- Context/Features/admin-sync-feature-spec.md (Admin UI already documented)
+- Context/data-model.md (No schema changes)
+- Context/sync-workflows.md (No sync workflow changes)
+- Context/architecture.md (No architecture changes)
 - Context/scoring-system.md (No scoring changes)
+- Context/project-overview.md (Keep Phase 23C-3 as most recent feature)
 ```
 
 ---
 
 ## Ready for Review?
 
-This phase is ready for browser QA and final review once:
-- All automated checks pass ✓
-- Page loads without errors ✓
-- DB-backed candidates display correctly ✓
-- Time tabs work ✓
-- Lens filters work ✓
-- Empty state works ✓
-- Source mode labeling is accurate ✓
-- Documentation updated ✓
+This phase is ready for final review once:
+
+**Automated Checks:**
+- npm run build passes ✓
+- npx tsc --noEmit passes ✓
+- npx prisma validate passes ✓
+- npx prisma migrate status shows "up to date" ✓
+
+**Browser QA:**
+- Data Inventory tab: DB Stock Summary removed, summary compacted, table works ✓
+- Sync Actions tab: Developer/Legacy Tools hidden, production workflows visible ✓
+- AI Scan tab: New tab renders, Fixture and Claude sections visible ✓
+- Documentation tab: All sections collapsed by default, expandable ✓
+- Regression routes: /, /scanner, /opportunity-radar all load ✓
+- No console errors ✓
+
+**Documentation:**
+- Context/Features/admin-sync-feature-spec.md updated ✓
+- Context/current-feature.md updated to Phase 24A-1 ✓
+
+**Scope Confirmation:**
+- No schema changes ✓
+- No migrations ✓
+- No AI/provider behavior changes ✓
+- No Scanner/Dashboard/Drawer changes ✓
+- Backend legacy code preserved ✓
 
 Do not commit until explicit approval is given.

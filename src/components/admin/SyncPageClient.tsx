@@ -13,7 +13,6 @@ import {
   calculateFundamentalScoresAction,
   calculateOpportunityScoresAction,
 } from "@/src/actions/market-data-actions";
-import { runOpportunityRadarFixtureScanAction, runOpportunityRadarClaudeScanAction } from "@/src/actions/opportunity-radar-actions";
 import type {
   ProviderTestResult,
   SyncActionResult,
@@ -24,11 +23,11 @@ import type {
   UniverseSyncActionResult,
   ScoreCalcResult,
 } from "@/src/actions/market-data-actions";
-import type { RadarFixtureScanResult, RadarClaudeScanResult } from "@/src/actions/opportunity-radar-actions";
 import type { UniverseOverviewRow, DbStockSummary } from "@/src/lib/data/admin-universes";
 import type { AdminStockDataInventoryRow } from "@/src/lib/data/admin-stock-data";
 import DataInventoryTab from "@/src/components/admin/DataInventoryTab";
-import ScoreMethodologyTab from "@/src/components/admin/ScoreMethodologyTab";
+import AiScanTab from "@/src/components/admin/AiScanTab";
+import DocumentationTab from "@/src/components/admin/DocumentationTab";
 import {
   CheckCircle,
   XCircle,
@@ -122,11 +121,9 @@ type LastResult =
   | { kind: "sync"; result: SyncActionResult }
   | { kind: "universe"; result: UniverseSyncActionResult }
   | { kind: "score-calc"; result: ScoreCalcResult }
-  | { kind: "radar"; result: RadarFixtureScanResult }
-  | { kind: "radar-claude"; result: RadarClaudeScanResult }
   | null;
 
-type TabId = "overview" | "data-inventory" | "sync-actions" | "provider-tests" | "sync-history" | "score-methodology";
+type TabId = "data-inventory" | "sync-actions" | "ai-scan" | "provider-tests" | "sync-history" | "documentation";
 
 // ── Helper — is this run continuable? ────────────────────────────────────────
 
@@ -174,181 +171,6 @@ function formatSyncRunDuration(run: SyncRunData): string {
     return secs > 0 ? `${mins}m ${secs}s` : `${mins}m`;
   }
   return "N/A";
-}
-
-// ── Radar fixture scan result viewer ──────────────────────────────────────────
-
-function RadarFixtureScanResultViewer({ result }: { result: RadarFixtureScanResult }) {
-  if (result.success) {
-    return (
-      <div className="rounded-lg bg-slate-900/80 border border-emerald-800/60 p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span className="text-sm font-semibold text-emerald-300">Success — fixture validated and persisted</span>
-        </div>
-        <div className="grid grid-cols-3 gap-3 text-xs">
-          <div>
-            <p className="text-slate-500 mb-0.5">Scan ID</p>
-            <p className="font-mono font-semibold text-slate-200 break-all">{result.scanId}</p>
-          </div>
-          <div>
-            <p className="text-slate-500 mb-0.5">Candidates</p>
-            <p className="font-mono font-semibold text-emerald-400">{result.candidateCount}</p>
-          </div>
-          <div>
-            <p className="text-slate-500 mb-0.5">Evidence</p>
-            <p className="font-mono font-semibold text-emerald-400">{result.evidenceCount}</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="rounded-lg bg-slate-900/80 border border-red-800/60 p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <XCircle className="w-4 h-4 text-red-400 shrink-0" />
-        <span className="text-sm font-semibold text-red-300">Failed</span>
-      </div>
-      <p className="text-xs text-red-400">{result.error || "Unknown error"}</p>
-      {result.validationErrors && result.validationErrors.length > 0 && (
-        <div className="space-y-1">
-          <p className="text-xs font-semibold text-slate-400">Validation errors:</p>
-          <ul className="list-disc list-inside space-y-0.5">
-            {result.validationErrors.map((err, i) => (
-              <li key={i} className="text-xs text-red-400">{err}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Radar Claude scan result viewer ──────────────────────────────────────────
-
-function RadarClaudeScanResultViewer({ result }: { result: RadarClaudeScanResult }) {
-  if (result.success) {
-    return (
-      <div className="rounded-lg bg-slate-900/80 border border-emerald-800/60 p-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
-          <span className="text-sm font-semibold text-emerald-300">Success — Claude scan executed and persisted</span>
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-          <div>
-            <p className="text-slate-500 mb-0.5">Scan ID</p>
-            <p className="font-mono font-semibold text-slate-200 break-all text-xs">{result.scanId}</p>
-          </div>
-          <div>
-            <p className="text-slate-500 mb-0.5">Candidates</p>
-            <p className="font-mono font-semibold text-emerald-400">{result.candidateCount}</p>
-          </div>
-          <div>
-            <p className="text-slate-500 mb-0.5">Evidence</p>
-            <p className="font-mono font-semibold text-emerald-400">{result.evidenceCount}</p>
-          </div>
-          <div>
-            <p className="text-slate-500 mb-0.5">Duration</p>
-            <p className="font-mono font-semibold text-slate-300">
-              {result.executionTimeMs ? `${result.executionTimeMs}ms` : "N/A"}
-            </p>
-          </div>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs border-t border-slate-700/50 pt-3">
-          <div>
-            <p className="text-slate-500 mb-0.5">Provider</p>
-            <p className="font-mono text-slate-300">{result.provider}</p>
-          </div>
-          <div>
-            <p className="text-slate-500 mb-0.5">Model</p>
-            <p className="font-mono text-slate-300">{result.model}</p>
-          </div>
-          <div>
-            <p className="text-slate-500 mb-0.5">Source Mode</p>
-            <p className="font-mono text-slate-300">{result.sourceMode}</p>
-          </div>
-        </div>
-        {result.debugTracePath && (
-          <div className="border-t border-slate-700/50 pt-3">
-            <p className="text-xs text-slate-400 mb-1">Debug trace:</p>
-            <p className="font-mono text-xs text-slate-300">{result.debugTracePath}</p>
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <div className="rounded-lg bg-slate-900/80 border border-red-800/60 p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <XCircle className="w-4 h-4 text-red-400 shrink-0" />
-        <span className="text-sm font-semibold text-red-300">Failed</span>
-      </div>
-      <p className="text-xs text-red-400">{result.error || "Unknown error"}</p>
-      {result.validationErrors && result.validationErrors.length > 0 && (
-        <div className="space-y-1">
-          <p className="text-xs font-semibold text-slate-400">Validation errors:</p>
-          <ul className="list-disc list-inside space-y-0.5">
-            {result.validationErrors.map((err, i) => (
-              <li key={i} className="text-xs text-red-400">{err}</li>
-            ))}
-          </ul>
-        </div>
-      )}
-      {result.rawOutputPreview && (
-        <div className="space-y-1">
-          <p className="text-xs font-semibold text-slate-400">Claude output (first 500 chars):</p>
-          <pre className="text-xs bg-slate-950 border border-slate-700/50 rounded p-2 overflow-x-auto text-slate-400 whitespace-pre-wrap break-words">
-            {result.rawOutputPreview}
-          </pre>
-        </div>
-      )}
-      {result.debugTracePath && (
-        <div className="border-t border-slate-700/50 pt-3">
-          <p className="text-xs text-slate-400 mb-1">Debug trace:</p>
-          <p className="font-mono text-xs text-slate-300">{result.debugTracePath}</p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Radar Claude scan progress viewer ────────────────────────────────────────
-
-function RadarClaudeScanProgressViewer() {
-  const steps = [
-    "Preparing Claude scan",
-    "Loading database context",
-    "Sending request to Claude",
-    "Waiting for structured tool output",
-    "Validating tool output",
-    "Persisting scan results",
-    "Finalizing result",
-  ];
-
-  return (
-    <div className="rounded-lg bg-slate-900/80 border border-blue-800/60 p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <Loader2 className="w-4 h-4 text-blue-400 shrink-0 animate-spin" />
-        <span className="text-sm font-semibold text-blue-300">Claude scan in progress</span>
-      </div>
-
-      {/* Progress steps */}
-      <div className="space-y-2">
-        {steps.map((step, idx) => {
-          return (
-            <div key={idx} className="flex items-center gap-2 text-xs">
-              <div className="w-3.5 h-3.5 rounded-full border border-slate-600 bg-slate-700 shrink-0 flex items-center justify-center">
-                <div className="w-1.5 h-1.5 rounded-full bg-slate-600" />
-              </div>
-              <span className="text-slate-500">{step}</span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
 }
 
 // ── Score calc result viewer ──────────────────────────────────────────────────
@@ -1347,12 +1169,12 @@ function UniverseOverviewTable({ rows }: { rows: UniverseOverviewRow[] }) {
 // ── Tab bar ───────────────────────────────────────────────────────────────────
 
 const TABS: Array<{ id: TabId; label: string; icon: React.ReactNode }> = [
-  { id: "overview", label: "Overview", icon: <BarChart3 className="w-3.5 h-3.5" /> },
   { id: "data-inventory", label: "Data Inventory", icon: <List className="w-3.5 h-3.5" /> },
   { id: "sync-actions", label: "Sync Actions", icon: <RefreshCw className="w-3.5 h-3.5" /> },
+  { id: "ai-scan", label: "AI Scan", icon: <Radar className="w-3.5 h-3.5" /> },
   { id: "provider-tests", label: "Provider Tests", icon: <FlaskConical className="w-3.5 h-3.5" /> },
   { id: "sync-history", label: "Sync History", icon: <History className="w-3.5 h-3.5" /> },
-  { id: "score-methodology", label: "Score Methodology", icon: <BookOpen className="w-3.5 h-3.5" /> },
+  { id: "documentation", label: "Documentation", icon: <BookOpen className="w-3.5 h-3.5" /> },
 ];
 
 function TabBar({
@@ -1398,12 +1220,8 @@ export default function SyncPageClient({
   const [lastResult, setLastResult] = useState<LastResult>(null);
   const [activeAction, setActiveAction] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-  const [activeTab, setActiveTab] = useState<TabId>("overview");
+  const [activeTab, setActiveTab] = useState<TabId>("data-inventory");
   const [devToolsExpanded, setDevToolsExpanded] = useState(false);
-  const [radarResult, setRadarResult] = useState<RadarFixtureScanResult | null>(null);
-  const [radarLoading, setRadarLoading] = useState(false);
-  const [radarClaudeResult, setRadarClaudeResult] = useState<RadarClaudeScanResult | null>(null);
-  const [radarClaudeLoading, setRadarClaudeLoading] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Market data chunked sync state
@@ -1898,32 +1716,6 @@ export default function SyncPageClient({
     });
   }
 
-  function handleRunRadarFixtureScan() {
-    setRadarLoading(true);
-    setRadarResult(null);
-    startTransition(async () => {
-      const result = await runOpportunityRadarFixtureScanAction();
-      setRadarResult(result);
-      setRadarLoading(false);
-      if (result.success) {
-        router.refresh();
-      }
-    });
-  }
-
-  function handleRunRadarClaudeScan() {
-    setRadarClaudeLoading(true);
-    setRadarClaudeResult(null);
-    startTransition(async () => {
-      const result = await runOpportunityRadarClaudeScanAction();
-      setRadarClaudeResult(result);
-      setRadarClaudeLoading(false);
-      if (result.success) {
-        router.refresh();
-      }
-    });
-  }
-
   // ── Derived state ──────────────────────────────────────────────────────────
 
   const isLoading = isPending;
@@ -1989,33 +1781,15 @@ export default function SyncPageClient({
       {/* ══════════════════════════════════════════════════════════════════ */}
       {/* Tab 1 — Overview                                                  */}
       {/* ══════════════════════════════════════════════════════════════════ */}
-      {activeTab === "overview" && (
-        <div className="space-y-5">
-          <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-slate-400" />
-              <h2 className="text-sm font-semibold text-slate-200">DB Stock Summary</h2>
-              <span className="text-xs text-slate-500 ml-1">Read-only snapshot</span>
-            </div>
-            <DbStockSummaryPanel summary={dbStockSummary} />
-          </section>
-
-          <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
-            <div className="flex items-center gap-2">
-              <Globe className="w-4 h-4 text-slate-400" />
-              <h2 className="text-sm font-semibold text-slate-200">Universe Overview</h2>
-              <span className="text-xs text-slate-500 ml-1">Read-only snapshot — updates after each sync</span>
-            </div>
-            <UniverseOverviewTable rows={universeOverview} />
-          </section>
-        </div>
-      )}
-
       {/* ══════════════════════════════════════════════════════════════════ */}
-      {/* Tab 2 — Data Inventory                                            */}
+      {/* Tab 1 — Data Inventory                                            */}
       {/* ══════════════════════════════════════════════════════════════════ */}
       {activeTab === "data-inventory" && (
-        <DataInventoryTab rows={stockInventory} />
+        <DataInventoryTab
+          rows={stockInventory}
+          dbStockSummary={dbStockSummary}
+          universeOverview={universeOverview}
+        />
       )}
 
       {/* ══════════════════════════════════════════════════════════════════ */}
@@ -2425,230 +2199,6 @@ export default function SyncPageClient({
             </div>
           </section>
 
-          {/* 5 — Opportunity Radar Fixture Scan (Phase 23C-2B) */}
-          <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
-            <div>
-              <div className="flex items-center gap-2 mb-0.5">
-                <Radar className="w-4 h-4 text-slate-400" />
-                <h2 className="text-sm font-semibold text-slate-200">Opportunity Radar</h2>
-                <span className="text-xs font-medium text-blue-700 bg-blue-900/40 border border-blue-800/50 px-2 py-0.5 rounded ml-1">
-                  Fixture Phase
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Run fixture-based Radar validation and persistence. No AI provider or external search is called in this phase.
-                Validates sample fixture data against strict rules and persists to RadarScan, RadarCandidate, and RadarEvidence tables.
-              </p>
-            </div>
-
-            <button
-              onClick={handleRunRadarFixtureScan}
-              disabled={radarLoading || isLoading || anyChunkedRunning}
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium bg-blue-700 hover:bg-blue-600 text-white border border-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {radarLoading ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Play className="w-3.5 h-3.5" />
-              )}
-              Run Fixture Radar Scan
-            </button>
-
-            {radarResult && <RadarFixtureScanResultViewer result={radarResult} />}
-
-            <div className="rounded bg-slate-900/60 border border-slate-700/60 px-3 py-2.5 space-y-2">
-              <div className="flex items-start gap-2">
-                <Info className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
-                <div className="text-xs space-y-0.5 text-slate-500">
-                  <p className="text-slate-400 font-medium">Fixture phase — development testing only</p>
-                  <p>This action runs the local sample fixture through the validation and persistence pipeline. It does not call Claude, OpenAI, Gemini, Grok, or any external APIs. Real AI integration comes in Phase 23C-2C.</p>
-                  <p className="mt-1">On success, creates 1 RadarScan record, 3 RadarCandidate records (NVDA, SMCI, META), and 7 RadarEvidence records with full validation of scores, enums, evidence, and prohibited language.</p>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* 5.5 — Opportunity Radar Claude Scan (Phase 23C-2C) */}
-          <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
-            <div>
-              <div className="flex items-center gap-2 mb-0.5">
-                <Radar className="w-4 h-4 text-slate-400" />
-                <h2 className="text-sm font-semibold text-slate-200">Opportunity Radar — Claude Scan</h2>
-                <span className="text-xs font-medium text-emerald-700 bg-emerald-900/40 border border-emerald-800/50 px-2 py-0.5 rounded ml-1">
-                  Real AI
-                </span>
-              </div>
-              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-                Run a real Claude Sonnet 4.6 scan using database-backed context (controlled source pack mode).
-                Claude analyzes active stocks from the database and identifies research candidates.
-                Uses server-side execution only — requires <span className="font-mono text-slate-400">ANTHROPIC_API_KEY</span> environment variable.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <button
-                onClick={handleRunRadarClaudeScan}
-                disabled={radarClaudeLoading || isLoading || anyChunkedRunning}
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium bg-emerald-700 hover:bg-emerald-600 text-white border border-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {radarClaudeLoading ? (
-                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <Play className="w-3.5 h-3.5" />
-                )}
-                Run Claude Radar Scan
-              </button>
-            </div>
-
-            {radarClaudeLoading && <RadarClaudeScanProgressViewer />}
-            {radarClaudeResult && <RadarClaudeScanResultViewer result={radarClaudeResult} />}
-
-            <div className="rounded bg-slate-900/60 border border-slate-700/60 px-3 py-2.5 space-y-2">
-              <div className="flex items-start gap-2">
-                <Info className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                <div className="text-xs space-y-0.5 text-slate-500">
-                  <p className="text-slate-400 font-medium">Phase 23C-2C — Real Claude integration</p>
-                  <p>
-                    This action calls Claude Sonnet 4.6 server-side using a database-backed context (controlled source pack mode).
-                    Claude receives a list of top active stocks from the database and generates research candidates without claiming public web discovery.
-                  </p>
-                  <p className="mt-1">
-                    <strong>Requirements:</strong> Set <span className="font-mono text-slate-300">ANTHROPIC_API_KEY</span> in your environment.
-                    This action does not claim real web search — it uses only database context for candidate analysis.
-                  </p>
-                  <p className="mt-1">
-                    <strong>On success:</strong> Creates 1 RadarScan record, multiple RadarCandidate records, and RadarEvidence with full validation.
-                    All validation rules from Phase 23C-2A apply (prohibited language, score ranges, enum values, evidence quality).
-                  </p>
-                  <p className="mt-1">
-                    <strong>On failure:</strong> Shows clear error messages (missing API key, provider errors, validation failures) without persisting invalid data.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* 6 — Developer / Legacy Tools */}
-          <section className="bg-slate-800/50 border border-slate-700/60 rounded-lg overflow-hidden">
-            <button
-              className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-slate-700/30 transition-colors"
-              onClick={() => setDevToolsExpanded((v) => !v)}
-            >
-              {devToolsExpanded ? (
-                <ChevronDown className="w-4 h-4 text-slate-500 shrink-0" />
-              ) : (
-                <ChevronRight className="w-4 h-4 text-slate-500 shrink-0" />
-              )}
-              <FlaskConical className="w-4 h-4 text-slate-500 shrink-0" />
-              <span className="text-sm font-medium text-slate-400">Developer / Legacy Tools</span>
-              <span className="text-xs font-medium text-slate-600 bg-slate-700/60 px-2 py-0.5 rounded ml-1">
-                Not production workflows
-              </span>
-            </button>
-
-            {devToolsExpanded && (
-              <div className="border-t border-slate-700/60 p-4 space-y-4">
-                <p className="text-xs text-slate-500 leading-relaxed">
-                  These tools are legacy or developer-only utilities. They are not part of the main sync workflow.
-                  Company Data Sync now uses FMP <span className="font-mono">price-target-consensus</span> as the primary target source.
-                  Analyst Target Discovery is a legacy fallback for limited/free FMP plans.
-                </p>
-
-                {/* Analyst Target Discovery (Legacy) */}
-                <div className="space-y-3">
-                  <div>
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <Database className="w-4 h-4 text-slate-500" />
-                      <h3 className="text-sm font-medium text-slate-400">Analyst Target Discovery</h3>
-                      <span className="text-xs font-medium text-amber-700 bg-amber-900/40 border border-amber-800/50 px-2 py-0.5 rounded ml-1">
-                        Legacy
-                      </span>
-                      <span className="text-xs font-medium text-blue-700 bg-blue-900/40 border border-blue-800/50 px-2 py-0.5 rounded ml-1">
-                        Quota Safe
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                      Legacy fallback for limited/free plans. Company Data Sync now uses FMP price-target-consensus as the primary target source.
-                    </p>
-                  </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    {(targetDiscoveryNeverRun || (!targetDiscoveryAutoRunning && isTerminal(targetDiscoverySync))) && (
-                      <button
-                        onClick={handleStartTargetDiscovery}
-                        disabled={isLoading || anyChunkedRunning}
-                        className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium bg-slate-700 hover:bg-slate-600 text-slate-200 border border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        {targetDiscoveryAutoRunning ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Play className="w-3.5 h-3.5" />
-                        )}
-                        Start Target Discovery
-                      </button>
-                    )}
-
-                    {targetDiscoveryShowContinue && (
-                      <button
-                        onClick={handleContinueTargetDiscovery}
-                        disabled={isLoading || anyChunkedRunning}
-                        className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium bg-blue-700 hover:bg-blue-600 text-white border border-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <SkipForward className="w-3.5 h-3.5" />
-                        Continue Target Discovery
-                      </button>
-                    )}
-
-                    {targetDiscoveryShowRestart && !targetDiscoveryAutoRunning && (
-                      <button
-                        onClick={handleRestartTargetDiscovery}
-                        disabled={isLoading || anyChunkedRunning}
-                        className="inline-flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium bg-slate-700 hover:bg-slate-600 text-slate-200 border border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <RotateCcw className="w-3.5 h-3.5" />
-                        Restart Discovery Cycle
-                      </button>
-                    )}
-                  </div>
-
-                  {targetDiscoveryShowProgress && targetDiscoverySync && (
-                    <ChunkedSyncProgressPanel
-                      progress={targetDiscoverySync}
-                      autoRunning={targetDiscoveryAutoRunning}
-                      chunkError={targetDiscoveryChunkError}
-                      elapsedMs={targetDiscoveryElapsedMs}
-                    />
-                  )}
-
-                  {targetDiscoveryShowPaused && targetDiscoverySync && (
-                    <PausedSyncPanel progress={targetDiscoverySync} chunkError={targetDiscoveryChunkError} />
-                  )}
-
-                  {targetDiscoveryChunkError && !targetDiscoverySync && (
-                    <p className="text-xs text-red-400 bg-red-900/20 border border-red-800/40 rounded px-3 py-2">
-                      {targetDiscoveryChunkError}
-                    </p>
-                  )}
-
-                  {targetDiscoveryShowResult && targetDiscoverySync && (
-                    <ChunkedSyncResultPanel progress={targetDiscoverySync} />
-                  )}
-
-                  <div className="rounded bg-slate-900/60 border border-slate-700/60 px-3 py-2.5 space-y-1">
-                    <div className="flex items-start gap-2">
-                      <Info className="w-3.5 h-3.5 text-slate-600 shrink-0 mt-0.5" />
-                      <div className="text-xs space-y-0.5 text-slate-600">
-                        <p>Uses FMP <span className="font-mono text-slate-500">/stable/price-target-summary</span>. 1 call per symbol.</p>
-                        <p>Run limits: max 40 attempts or 16 targets found per run. Chunk size: 10.</p>
-                        <p>Cooldowns: has_target → 14d · no_target → 30d · error → 1d · plan_limited (HTTP 402) → 90d.</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </section>
-
           {/* Review Results (for universe sync and score calc) */}
           {lastSyncResult !== null && (
             <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4">
@@ -2856,17 +2406,17 @@ FINNHUB_API_KEY=`}
       )}
 
       {/* ══════════════════════════════════════════════════════════════════ */}
-      {/* Tab 6 — Score Methodology                                         */}
+      {/* Tab 4 — AI Scan                                                   */}
       {/* ══════════════════════════════════════════════════════════════════ */}
-      {activeTab === "score-methodology" && (
-        <div className="space-y-3">
-          <div className="flex items-center gap-2">
-            <BookOpen className="w-4 h-4 text-slate-400" />
-            <h2 className="text-sm font-semibold text-slate-200">Score Methodology</h2>
-            <span className="text-xs text-slate-500 ml-1">How scores are calculated</span>
-          </div>
-          <ScoreMethodologyTab />
-        </div>
+      {activeTab === "ai-scan" && (
+        <AiScanTab anyChunkedRunning={anyChunkedRunning} />
+      )}
+
+      {/* ══════════════════════════════════════════════════════════════════ */}
+      {/* Tab 6 — Documentation                                             */}
+      {/* ══════════════════════════════════════════════════════════════════ */}
+      {activeTab === "documentation" && (
+        <DocumentationTab />
       )}
 
     </div>

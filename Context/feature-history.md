@@ -2035,3 +2035,223 @@ Total: 2 files created, 8 files modified, 0 migrations added
 
 - Phase 23D: Scheduled daily scan execution
 - Future: Editable prompt/max_tokens Admin settings, neutralized UI copy, enriched DB context, web/search source modes
+
+---
+
+## Phase 24A-1 — Admin Console Cleanup
+
+**Goal:** Reorganize /admin/sync UI to improve clarity and usability by removing developer tools from visible workflows, consolidating documentation, and making data inventory more compact.
+
+**Status:** Completed. UI reorganization complete, documentation updated, all automated checks passing, browser QA performed, ready for production.
+
+**Branch:** `feature/admin-console-cleanup`
+
+**Deliverables:**
+
+**A. Admin Console Tab Reorganization**
+
+New Tab Structure:
+1. **Data Inventory** (refactored)
+2. **Sync Actions** (cleaned)
+3. **AI Scan** (new)
+4. **Documentation** (replaces Score Methodology)
+5. **Provider Tests** (preserved)
+6. **Sync History** (preserved)
+
+**B. Data Inventory Tab Cleanup**
+
+Removed:
+- Separate DB Stock Summary panel (redundant with Universe Overview)
+
+Reorganized:
+- Universe Overview table moved to top of Data Inventory (read-only snapshot)
+- Stock Data Inventory summary compacted:
+  - Reduced padding from `px-3 py-2.5` to `px-2 py-1`
+  - Reduced text sizes: `text-xl` → `text-lg`, `text-[11px]` → `text-[10px]`
+  - Changed grid layout from 2-4-6 columns to 3-5-8 columns
+  - Simplified summary metrics to 8 key cards: Total, With Quote, With Metrics, With Score, Scanner OK, NASDAQ 100, S&P 500, With Analyst
+  - Reduced section spacing for compactness
+
+Preserved:
+- Stock Data Inventory full table
+- Search functionality
+- Filter controls (24+ filter options)
+- Pagination (25/50/100 rows)
+- All column functionality
+
+**C. Sync Actions Tab Cleanup**
+
+Removed from visible UI:
+- Developer / Legacy Tools section (including Analyst Target Discovery legacy tool)
+- All related UI panels, buttons, handlers visibility
+
+Preserved:
+- Production sync workflows visible:
+  - Universe Sync (Nasdaq 100 + S&P 500)
+  - Daily Market Data Sync
+  - Company Data Sync
+  - Score Calculation
+- All backend handlers, server actions, and state management (hidden but functional)
+
+Backend Code Preservation:
+- `handleStartTargetDiscovery()`, `handleContinueTargetDiscovery()`, and related handlers remain in code
+- `targetDiscovery` state management preserved
+- Server action logic intact
+- Can be reactivated without code recovery
+
+**D. New AI Scan Tab**
+
+Created dedicated tab for Opportunity Radar operations:
+
+Sections:
+- **Fixture Scan** — Test data validation (local sample, no external APIs)
+- **Claude Scan** — Real Claude Sonnet 4.6 execution (server-side, DB-backed context)
+
+Content:
+- Progress indicators
+- Result/error viewers
+- Success/failure panels with metadata and validation errors
+
+Purpose:
+- Centralizes all Opportunity Radar admin operations
+- Moves from mixed Sync Actions organization to focused AI operations tab
+- Preserves Phase 23C-2B and 23C-2C functionality
+
+**E. New Documentation Tab**
+
+Replaces standalone Score Methodology tab with comprehensive documentation:
+
+All Sections Collapsed by Default:
+- Score Methodology / Scoring & Analysis
+- Sync Workflows
+- Data Inventory Guide
+- Opportunity Radar / AI Scan
+- Provider Sources
+- Glossary
+- Troubleshooting
+
+Design:
+- Reduced initial visual clutter
+- Users expand sections as needed
+- Clear hierarchical organization
+- Single cohesive documentation interface
+
+Content:
+- Score Methodology now inside collapsed accordion (moved from standalone tab)
+- Comprehensive sync workflow documentation
+- Data inventory feature guide
+- Opportunity Radar/AI Scan explanation
+- Provider source documentation
+- Glossary of key terms
+- Troubleshooting guide
+
+**Files Changed:**
+
+```
+Created:
+  src/components/admin/AiScanTab.tsx
+  src/components/admin/DocumentationTab.tsx
+
+Modified:
+  src/components/admin/DataInventoryTab.tsx
+  src/components/admin/SyncPageClient.tsx
+  Context/Features/admin-sync-feature-spec.md
+  Context/current-feature.md
+
+Total: 2 files created, 4 files modified, 0 migrations added
+```
+
+**QA Results:**
+
+Data Inventory Tab:
+  ✓ DB Stock Summary panel not visible
+  ✓ Universe Overview table visible
+  ✓ Stock Data Inventory summary compact (reduced padding, smaller fonts, 8-column grid)
+  ✓ All summary metrics display correctly
+  ✓ Search functionality works
+  ✓ Filters work
+  ✓ Pagination works
+  ✓ Table displays
+
+Sync Actions Tab:
+  ✓ Developer / Legacy Tools section not visible
+  ✓ Production workflows visible:
+    - Universe Sync
+    - Daily Market Data Sync
+    - Company Data Sync
+    - Score Calculation
+  ✓ All buttons functional
+
+AI Scan Tab (New):
+  ✓ Tab renders and is selectable
+  ✓ Fixture Scan section visible with description and button
+  ✓ Claude Scan section visible with description and button
+  ✓ Result/error panels display correctly
+
+Documentation Tab (New):
+  ✓ Tab renders and is selectable
+  ✓ All sections initially collapsed (chevrons point right)
+  ✓ Each section expands/collapses on click
+  ✓ Score Methodology appears as collapsed accordion
+  ✓ Content readable and properly formatted
+
+Other Tabs:
+  ✓ Provider Tests tab renders
+  ✓ Sync History tab renders and functions
+
+Regression Routes:
+  ✓ / (dashboard) loads
+  ✓ /scanner loads
+  ✓ /opportunity-radar loads
+  ✓ No console errors
+
+Automated Checks:
+  ✓ npm run build — Pass (all routes compiled)
+  ✓ npx tsc --noEmit — Pass (no TypeScript errors)
+  ✓ npx prisma validate — Pass (schema valid)
+  ✓ npx prisma migrate status — Pass (15 migrations, up to date)
+```
+
+**Constraints Maintained:**
+
+- ✅ No Prisma schema changes
+- ✅ No migrations added
+- ✅ No AI/provider behavior changes (Claude, FMP, Finnhub unchanged)
+- ✅ No Scanner changes
+- ✅ No Dashboard changes
+- ✅ No Drawer changes
+- ✅ No /opportunity-radar page changes (Phase 23C-3 DB reader preserved)
+- ✅ No production scoring changes (Fundamental v1, Opportunity v2 untouched)
+- ✅ No scheduled jobs added
+- ✅ No API key editing UI added
+- ✅ No provider switching UI added
+- ✅ Backend legacy code preserved (no code deletion)
+
+**Documentation Updates:**
+
+Updated:
+- `Context/Features/admin-sync-feature-spec.md` — Phase 24A-1 UI changes documented
+- `Context/current-feature.md` — Phase 24A-1 marked as completed
+
+Checked but not updated:
+- `Context/data-model.md` (no schema changes)
+- `Context/sync-workflows.md` (no workflow changes)
+- `Context/architecture.md` (no architecture changes)
+- `Context/scoring-system.md` (no scoring changes)
+
+**Design Highlights:**
+
+- Tab reorganization improves mental model (production workflows separate from developer tools, AI operations separate from sync workflows)
+- Data Inventory compaction removes redundancy while preserving full functionality
+- Documentation consolidation provides reference material without tab clutter
+- Backend code preservation enables future reactivation without recovery
+- No breaking changes to existing workflows or APIs
+- Progressive disclosure pattern (collapsed sections) reduces cognitive load
+
+**Ready for Next Phase:**
+
+Phase 24A-2 and beyond can safely build on this UI foundation:
+- Admin console clearly organized by function
+- Documentation centralized and accessible
+- Developer tools still available in code (not deleted) for future use
+- All data and admin workflows verified functional

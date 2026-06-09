@@ -9,8 +9,9 @@ Read this file before changing:
 Sync Actions tab
 Provider Tests tab
 Sync History tab
+AI Scan tab
 Data Inventory tab
-Score Methodology tab
+Documentation tab
 Admin sync text/copy
 Sync progress panels
 SyncRun display labels
@@ -41,23 +42,38 @@ Is the data fresh enough?
 
 ---
 
-## Current Main Sections
+## Current Main Sections (Phase 24A-1)
 
 ### Sync Actions
 
-Production-oriented workflows:
+Production-oriented workflows only (Phase 24A-1: Developer/Legacy Tools hidden from UI):
 
 ```txt
 Universe Sync (Nasdaq 100 + S&P 500)
 Daily Market Data Sync
 Company Data Sync
 Score Calculation
-Opportunity Radar Fixture Scan (Phase 23C-2B, fixture-only test phase)
 ```
 
-Legacy/developer tools should be separated from production workflows.
+Developer/legacy tools backend code is preserved but removed from visible UI.
+Backend handlers and state management remain functional for potential future use.
 
-### Opportunity Radar Fixture Scan (Phase 23C-2B)
+### AI Scan Tab (Phase 24A-1)
+
+**Role:**
+Centralized interface for Opportunity Radar AI execution and testing. Contains both fixture-based validation and real Claude integration.
+
+**Sections:**
+- Fixture Scan
+- Claude Scan
+- Real-time progress and result display
+
+**Backend Code Preservation:**
+All backend handlers, server actions, and database operations remain intact. Only visible UI was reorganized.
+
+---
+
+### Opportunity Radar Fixture Scan (Phase 23C-2B / Phase 24A-1)
 
 **Role:**
 Test admin workflow for validating and persisting Opportunity Radar fixture data. Fixture-only implementation — no AI provider or external API calls.
@@ -84,7 +100,7 @@ Test admin workflow for validating and persisting Opportunity Radar fixture data
 - Uses Prisma transaction for atomicity
 - Multiple clicks create separate scans (no destructive deletes of prior fixtures)
 
-### Opportunity Radar Claude Scan (Phase 23C-2C)
+### Opportunity Radar Claude Scan (Phase 23C-2C / Phase 24A-1)
 
 **Role:**
 Real Claude Sonnet 4.6 API execution with database-backed context (controlled source pack mode). Distinguishes from fixture testing with clear labeling and server-side provider integration.
@@ -159,17 +175,53 @@ Show SyncRun / SyncRunItem history.
 
 Both current and legacy SyncRun type strings are displayed with readable labels.
 
-### Data Inventory
+### Data Inventory (Phase 24A-1)
 
-Purpose:
-
-```txt
+**Purpose:**
 Show DB coverage, missing data, freshness, and source status.
-```
 
-### Score Methodology
+**Structure (Phase 24A-1):**
+1. Universe Overview — read-only snapshot of universe memberships and sync status
+2. Stock Data Inventory Summary — compact grid showing key metrics:
+   - Total, With Quote, With Metrics, With Score, Scanner OK, NASDAQ 100, S&P 500, With Analyst
+3. Stock Data Inventory Table — full searchable/filterable table with pagination
 
-Purpose:
+**Phase 24A-1 Changes:**
+- Removed separate DB Stock Summary panel (was redundant with universe overview)
+- Compacted summary cards: reduced padding, smaller text, higher column density
+- Simplified from two-section summary to single 8-metric grid
+- Preserved all filters, search, pagination, and column functionality
+
+### Documentation Tab (Phase 24A-1)
+
+**Role:**
+Comprehensive reference documentation for FomoFilter's data models, sync workflows, and scoring systems.
+
+**Structure:**
+All sections are collapsed by default. Users expand each section to view content.
+
+**Sections:**
+1. Score Methodology / Scoring & Analysis — collapsed accordion
+2. Sync Workflows
+3. Data Inventory Guide
+4. Opportunity Radar / AI Scan
+5. Provider Sources
+6. Glossary
+7. Troubleshooting
+
+**Phase 24A-1 Changes:**
+- Replaced Score Methodology as standalone tab with Documentation tab
+- Moved Score Methodology into collapsed accordion within Documentation
+- All sections render collapsed by default for clean UI
+
+---
+
+### Score Methodology (Phase 24A-1)
+
+**Location:**
+Now located in Documentation tab as "Score Methodology / Scoring & Analysis" collapsed section.
+
+**Purpose:**
 
 ```txt
 Document the calculation logic used by current scores.
@@ -438,21 +490,26 @@ Universe section includes:
 
 ---
 
-## Legacy / Developer Tools
+## Legacy / Developer Tools (Phase 24A-1)
 
-Legacy tools may exist, such as:
+**Phase 24A-1 Change:**
+Developer/Legacy Tools section has been removed from visible Sync Actions UI.
+
+**Backend Preservation:**
+All backend code remains intact:
+- `handleStartTargetDiscovery()`, `handleContinueTargetDiscovery()` and related handlers preserved
+- Analyst Target Discovery server action code not deleted
+- State management and progress tracking logic preserved
+- Can be restored or reactivated without code recovery
+
+**Potential Legacy Tools (code still present, UI hidden):**
 
 ```txt
 Analyst Target Discovery
 Provider limit experiments
 ```
 
-They should be clearly labeled:
-
-```txt
-Developer / Legacy Tools
-Not production workflows
-```
+These may be reactivated in future phases or phases where they're needed for testing/development.
 
 ### Twelve Data — Legacy Provider (Phase 21E)
 
@@ -575,6 +632,54 @@ Added SyncRun type labels for new types and legacy backward-compatible display.
 Updated paused sync panel copy (removed Nasdaq-100-specific reference).
 Added "Nasdaq 100 Quote Coverage" label to the quote coverage panel (scoped label).
 ```
+
+---
+
+## Phase 24A-1 — Admin Console Cleanup
+
+Phase 24A-1 completed the following UI reorganization:
+
+```txt
+Sync Actions:
+  - Removed Developer / Legacy Tools section from visible UI
+  - Production workflows only: Universe Sync, Daily Market Data Sync, Company Data Sync, Score Calculation
+  - Backend code for legacy tools preserved (no deletion of handlers or server actions)
+
+Data Inventory:
+  - Removed separate DB Stock Summary panel (redundant with Universe Overview)
+  - Compacted Stock Data Inventory summary: reduced padding, smaller fonts, 8-metric grid layout
+  - Universe Overview remains visible
+  - Preserved all search, filter, pagination, and column functionality
+
+AI Scan (New Tab):
+  - Created dedicated tab for Opportunity Radar operations
+  - Contains Fixture Scan and Claude Scan sections
+  - Moved from Sync Actions organization
+
+Documentation (Replaced Score Methodology):
+  - Replaced standalone Score Methodology tab with comprehensive Documentation tab
+  - Moved Score Methodology into collapsed accordion within Documentation
+  - Added sections: Sync Workflows, Data Inventory Guide, Opportunity Radar/AI Scan, Provider Sources, Glossary, Troubleshooting
+  - All sections collapsed by default for clean UI
+
+Tab Order (Phase 24A-1):
+  1. Data Inventory
+  2. Sync Actions
+  3. AI Scan (NEW)
+  4. Documentation (REPLACED Score Methodology)
+  5. Provider Tests
+  6. Sync History
+```
+
+**No Schema/Migrations Changed:**
+- Prisma schema: Unchanged
+- Database: No new migrations required
+- All existing data structures preserved
+
+**No AI/Provider Behavior Changed:**
+- Claude scan execution unchanged (still server-side, DB-backed context)
+- No changes to provider integrations (FMP, Finnhub, Anthropic)
+- No Scanner/Dashboard/Drawer/opportunity-radar page changes
 
 ---
 

@@ -2,8 +2,9 @@
 
 import { useState, useMemo, useEffect } from "react";
 import type { ReactNode } from "react";
-import { Search, CheckCircle, XCircle, List, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, CheckCircle, XCircle, List, ChevronLeft, ChevronRight, BarChart3, Globe } from "lucide-react";
 import type { AdminStockDataInventoryRow } from "@/src/lib/data/admin-stock-data";
+import type { UniverseOverviewRow, DbStockSummary } from "@/src/lib/data/admin-universes";
 
 type FilterId =
   | "all"
@@ -80,9 +81,9 @@ function SummaryCard({
   color?: string;
 }) {
   return (
-    <div className="bg-slate-900/60 border border-slate-700/60 rounded px-3 py-2.5">
-      <p className={`text-xl font-bold ${color}`}>{value}</p>
-      <p className="text-[11px] text-slate-500 mt-0.5 leading-snug">{label}</p>
+    <div className="bg-slate-900/60 border border-slate-700/60 rounded px-2 py-1">
+      <p className={`text-lg font-bold ${color}`}>{value}</p>
+      <p className="text-[10px] text-slate-500 mt-0.5 leading-tight">{label}</p>
     </div>
   );
 }
@@ -902,9 +903,71 @@ const COLUMNS: ColumnDef[] = [
 
 interface DataInventoryTabProps {
   rows: AdminStockDataInventoryRow[];
+  dbStockSummary?: DbStockSummary;
+  universeOverview?: UniverseOverviewRow[];
 }
 
-export default function DataInventoryTab({ rows }: DataInventoryTabProps) {
+function DbStockSummaryPanel({ summary }: { summary: DbStockSummary }) {
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+      <div className="space-y-1">
+        <p className="text-slate-500 text-xs">Total Stocks</p>
+        <p className="text-xl font-bold text-slate-200">{summary.totalStocks}</p>
+      </div>
+      <div className="space-y-1">
+        <p className="text-slate-500 text-xs">Active in Universe</p>
+        <p className="text-xl font-bold text-emerald-400">{summary.activeInAtLeastOneUniverse}</p>
+      </div>
+      <div className="space-y-1">
+        <p className="text-slate-500 text-xs">Active with Quotes</p>
+        <p className="text-xl font-bold text-emerald-400">{summary.activeWithQuotes}</p>
+      </div>
+      <div className="space-y-1">
+        <p className="text-slate-500 text-xs">Missing Quotes</p>
+        <p className={`text-xl font-bold ${summary.activeInAtLeastOneUniverse - summary.activeWithQuotes > 0 ? "text-amber-400" : "text-slate-400"}`}>
+          {summary.activeInAtLeastOneUniverse - summary.activeWithQuotes}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function UniverseOverviewTable({ rows }: { rows: UniverseOverviewRow[] }) {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-left text-sm">
+        <thead>
+          <tr className="border-b border-slate-700 bg-slate-900/40">
+            <th className="px-3 py-2 text-xs font-semibold text-slate-400">Universe</th>
+            <th className="px-3 py-2 text-xs font-semibold text-slate-400 text-right">Total Known</th>
+            <th className="px-3 py-2 text-xs font-semibold text-slate-400 text-right">Active</th>
+            <th className="px-3 py-2 text-xs font-semibold text-slate-400 text-right">Inactive</th>
+            <th className="px-3 py-2 text-xs font-semibold text-slate-400 text-right">Stale Quotes</th>
+            <th className="px-3 py-2 text-xs font-semibold text-slate-400">Last Sync</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => (
+            <tr key={row.universeSlug} className="border-b border-slate-700/40 hover:bg-slate-800/30">
+              <td className="px-3 py-2 font-semibold text-slate-200">{row.universeName}</td>
+              <td className="px-3 py-2 text-right text-slate-300 font-mono">{row.totalKnown}</td>
+              <td className="px-3 py-2 text-right text-emerald-400 font-mono">{row.activeMembers}</td>
+              <td className="px-3 py-2 text-right text-amber-400 font-mono">{row.inactiveMembers}</td>
+              <td className="px-3 py-2 text-right text-amber-400 font-mono">{row.staleQuotes}</td>
+              <td className="px-3 py-2 text-xs text-slate-500">{row.lastUniverseSync || "Never"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export default function DataInventoryTab({
+  rows,
+  dbStockSummary,
+  universeOverview,
+}: DataInventoryTabProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterId>("all");
   const [currentPage, setCurrentPage] = useState(1);
@@ -1019,46 +1082,40 @@ export default function DataInventoryTab({ rows }: DataInventoryTabProps) {
   }, [filteredRows, currentPage, pageSize]);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
 
-      {/* Summary cards */}
-      <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
+      {/* Universe Overview */}
+      {universeOverview && universeOverview.length > 0 && (
+        <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <Globe className="w-4 h-4 text-slate-400" />
+            <h2 className="text-sm font-semibold text-slate-200">Universe Overview</h2>
+            <span className="text-xs text-slate-500 ml-1">Read-only snapshot — updates after each sync</span>
+          </div>
+          <UniverseOverviewTable rows={universeOverview} />
+        </section>
+      )}
+
+      {/* Stock Data Inventory Summary cards */}
+      <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-3 space-y-2">
         <div className="flex items-center gap-2">
           <List className="w-4 h-4 text-slate-400" />
           <h2 className="text-sm font-semibold text-slate-200">Stock Data Inventory</h2>
-          <span className="text-xs text-slate-500 ml-1">DB-only snapshot</span>
+          <span className="text-xs text-slate-500 ml-1">snapshot</span>
         </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-6 gap-2">
-          <SummaryCard label="Total Stocks" value={summary.totalStocks} />
+        <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-8 gap-1.5">
+          <SummaryCard label="Total" value={summary.totalStocks} />
           <SummaryCard label="With Quote" value={summary.withQuote} color="text-emerald-400" />
           <SummaryCard label="With Metrics" value={summary.withMetric} color="text-emerald-400" />
           <SummaryCard label="With Score" value={summary.withScore} color="text-emerald-400" />
           <SummaryCard
-            label="Scanner Eligible"
+            label="Scanner OK"
             value={summary.scannerEligible}
             color={summary.scannerEligible > 0 ? "text-emerald-400" : "text-amber-400"}
           />
-          <SummaryCard label="Nasdaq 100 Active" value={summary.nasdaq100Active} color="text-blue-400" />
-          <SummaryCard label="S&P 500 Active" value={summary.sp500Active} color="text-blue-400" />
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-slate-700/50">
-          <SummaryCard label="With Analyst Data" value={summary.withAnalystData} color="text-emerald-400" />
-          <SummaryCard
-            label="Missing Analyst"
-            value={summary.missingAnalyst}
-            color={summary.missingAnalyst > 0 ? "text-amber-400" : "text-slate-400"}
-          />
-          <SummaryCard label="Has Target Price" value={summary.hasTarget} color="text-emerald-400" />
-          <SummaryCard
-            label="Missing Target"
-            value={summary.missingTarget}
-            color={summary.missingTarget > 0 ? "text-amber-400" : "text-slate-400"}
-          />
-          <SummaryCard
-            label="Plan Limited"
-            value={summary.planLimited}
-            color={summary.planLimited > 0 ? "text-blue-400" : "text-slate-400"}
-          />
+          <SummaryCard label="NASDAQ 100" value={summary.nasdaq100Active} color="text-blue-400" />
+          <SummaryCard label="S&P 500" value={summary.sp500Active} color="text-blue-400" />
+          <SummaryCard label="With Analyst" value={summary.withAnalystData} color="text-emerald-400" />
         </div>
       </section>
 
