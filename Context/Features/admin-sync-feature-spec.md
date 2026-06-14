@@ -71,11 +71,13 @@ Centralized interface for Opportunity Radar AI configuration and execution with 
 **UX Rationale:**
 The updated order (configure → run → review result → test tools) follows the natural user workflow: edit config, execute scan, review result, then test with fixture if needed.
 
-**Latest AI Scan Summary (Phase 24A-2):**
-- Displays most recent RadarScan from database
-- Shows: scan date/time, status, provider/model, candidates processed/total
+**Latest AI Scan Summary (Phase 24A-2 + Hotfix):**
+- Displays most recent RadarScan attempt (including failed attempts) from database
+- Shows: scan date/time, status (success or failed), provider/model, candidates processed/total
 - Shows: execution duration, prompt version, config source
-- Shows: link to /opportunity-radar
+- Heading: "Latest AI Scan Attempt" to clarify it shows most recent attempt, not just successful
+- If failed: Shows helper note "This scan failed. No candidates were created. Check error details above or view latest successful scan on /opportunity-radar."
+- Button: "View Radar Results" with tooltip indicating failed scans have no candidate results
 - Clean empty state if no scans exist: "No AI scans yet"
 - Auto-refreshes after scan completes
 - Read-only display (no editing)
@@ -146,6 +148,8 @@ The updated order (configure → run → review result → test tools) follows t
 - Does not claim true backend real-time progress
 
 **Post-Scan Result Report (Phase 24A-2):**
+
+*Success Display:*
 - Scan ID, candidate count, evidence count
 - Provider, model, source mode, execution time
 - Token usage (prompt, completion, total)
@@ -153,6 +157,15 @@ The updated order (configure → run → review result → test tools) follows t
 - Debug trace path if enabled
 - Safety disclaimer: "Research candidates only — not financial advice"
 - Link to /opportunity-radar for reviewing persisted candidates
+
+*Failure Display (Hotfix):*
+- Error status and message
+- Provider, model, execution time
+- Detailed truncation guidance if max_tokens exceeded: "Increase Max Tokens in AI Scan Config, reduce candidates, reduce context, or simplify prompt"
+- Validation errors list if validation failed
+- Raw Claude output preview (first 500 chars) if available
+- Debug trace path if enabled
+- Note: "A failed RadarScan attempt was saved for audit, but no RadarCandidate or RadarEvidence records were created"
 
 **Fixture Scan (Phase 24A-2):**
 - Moved into collapsed "QA / Test Scan" section
@@ -231,7 +244,11 @@ Real Claude Sonnet 4.6 API execution with database-backed context (controlled so
 - Model not available: Shows clear error "Claude model not available or rejected by provider..."
 - Provider error (rate limit, auth, network): Shows clear error with status
 - Validation failure: Shows error list + rawOutputPreview for debugging
-- No DB persistence on any error
+- max_tokens truncation: Shows guidance "Increase Max Tokens in AI Scan Config, reduce candidates/context, or simplify prompt"
+- Failed RadarScan attempts are persisted for audit trail with status="failed" and errorMessage
+- No RadarCandidate or RadarEvidence records are created on any error
+- Audit/history visibility: Failed scans appear in AI Scan History and Latest AI Scan Attempt summary
+- UI copy clarifies: "A failed RadarScan attempt was saved for audit, but no RadarCandidate or RadarEvidence records were created"
 
 **Debug Tracing (Development):**
 - In development, set `RADAR_DEBUG_AI_TRACE=true` to enable debug trace logging

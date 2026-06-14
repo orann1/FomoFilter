@@ -2383,3 +2383,96 @@ Phase 24A-3 and beyond can build on this foundation:
 - Result audit trail (configId) enables config-to-outcome analysis
 - Fixture Scan isolated in test section keeps production-like admin UX clean
 - All data and admin workflows verified functional
+
+---
+
+## AI Scan Failure Visibility Hotfix
+
+**Completion Date:** June 2026
+
+**Goal:**
+Make failed Claude scan attempts visible, actionable, and tracked correctly in Admin UI.
+
+**Problem:**
+When a Claude scan failed (e.g., due to max_tokens truncation), no RadarScan record was created. The "Latest AI Scan" remained stuck on the last successful scan, and users had no visibility into why a newer scan attempt didn't produce candidates.
+
+**Solution:**
+
+1. **Failed Scan Persistence:**
+   - All Claude scan failures now create RadarScan records with status="failed"
+   - Failure types tracked: provider_error, validation_error, truncation, persistence_error
+   - Error messages stored in RadarScan.errorMessage for audit trail
+   - No RadarCandidate or RadarEvidence records created for failed attempts
+
+2. **Error Message Clarity:**
+   - max_tokens truncation shows specific, actionable guidance:
+     - "Increase Max Tokens in AI Scan Config above"
+     - "Reduce Max Candidates to Return"
+     - "Reduce DB Stocks Sent to Claude"
+     - "Simplify the prompt in AI Scan Config"
+   - Note: "ANTHROPIC_RADAR_MODEL is only an env fallback when no DB config is active"
+
+3. **UI Updates:**
+   - Heading: "Latest AI Scan Attempt" (not "Latest AI Scan") to clarify it shows latest attempt, not just successful
+   - Button: "View Radar Results" (not "View Radar") with tooltip: "This scan failed and has no candidate results" for failed scans
+   - Helper note for failed attempts: "This scan failed. No candidates were created. Check error details above or view latest successful scan on /opportunity-radar."
+   - Error details clearly state: "No candidates or evidence were persisted. A failed RadarScan attempt was saved for audit/history."
+
+4. **Database Context Quality Warning:**
+   - Component shows DB data completeness (quote, score, analyst data percentages)
+   - Warns if quote/score/analyst data is missing (< 80% completeness)
+   - Helps admins diagnose low-quality context before running expensive Claude scans
+
+5. **Safety Verification:**
+   - /opportunity-radar continues to filter by status="success" only
+   - Failed scans with no candidates do not appear as Radar results
+   - AI Scan History can show failed attempts with clear status indicators
+   - No changes to normal UI render paths or provider behavior
+
+**Implementation:**
+- persistFailedRadarScan() function creates RadarScan records for all failure types
+- LatestAiScanSummary refreshes after scan completes (success or failure)
+- RadarScanResultReport shows detailed error display with truncation-specific guidance
+- DbContextQualityWarning component integrated into AI Scan Config section
+- All existing successful scan behavior unchanged
+
+**QA Results:**
+- ✅ Failed Claude scans persist as RadarScan with status="failed"
+- ✅ Error messages shown with actionable guidance
+- ✅ Latest AI Scan Attempt updates after failures
+- ✅ Helper notes clarify no candidates/evidence persisted
+- ✅ /opportunity-radar shows only successful candidate scans
+- ✅ DB context quality warning displays appropriately
+- ✅ No console errors
+- ✅ No API key exposure
+- ✅ No provider calls added to normal render paths
+
+**Automated Checks:**
+- ✅ npm run build — Success
+- ✅ npx tsc --noEmit — Pass
+- ✅ npx prisma validate — Pass
+- ✅ npx prisma migrate status — Pass (17 migrations, up to date)
+
+**Documentation Updates:**
+- `Context/Features/admin-sync-feature-spec.md` — Added failed scan visibility, truncation guidance, latest attempt semantics
+- All other docs verified accurate; no inconsistencies found
+
+**Constraints Maintained:**
+- ✅ No schema changes (used existing RadarScan.errorMessage and status fields)
+- ✅ No migrations
+- ✅ No API key exposure
+- ✅ No provider calls to normal UI render paths
+- ✅ Scanner/Dashboard/Drawer unchanged
+- ✅ /opportunity-radar unchanged (verified filters failed scans out)
+
+**Known Limitations:**
+- Failed scan persistence relies on existing RadarScan.errorMessage field; no new fields added
+- Truncation guidance is UI-level; prompt/context auto-tuning not implemented
+- AI Scan History shows all attempts; no separate "failed only" filter in UI
+
+**Next Steps:**
+Phase 24A-3 and beyond can enhance:
+- Automated context/token tuning to reduce truncation risk
+- Scheduled daily scans with monitoring
+- Provider switching UI
+- Full real-time DB job progress tracking

@@ -14,6 +14,77 @@ export type PersistenceResult<T> = {
 };
 
 /**
+ * Persist a failed Radar scan to the database
+ * Creates RadarScan record with status="failed" and error message
+ * Does NOT create RadarCandidate or RadarEvidence records
+ *
+ * @param errorMessage - Human-readable error message
+ * @param provider - Provider name (e.g., "Anthropic")
+ * @param model - Model name (e.g., "claude-sonnet-4.6")
+ * @param executionTimeMs - Execution time in milliseconds
+ * @param tokenPrompt - Optional prompt tokens used
+ * @param tokenCompletion - Optional completion tokens used
+ * @param configId - Optional config ID if DB config was used
+ * @param failureType - Type of failure (e.g., "provider_error", "validation_error", "truncation")
+ * @param prismaClient - Optional Prisma client override (for testing/scripts). Defaults to server-side singleton.
+ */
+export async function persistFailedRadarScan(
+  errorMessage: string,
+  provider: string = "Anthropic",
+  model: string = "claude-sonnet-4.6",
+  executionTimeMs?: number,
+  tokenPrompt?: number,
+  tokenCompletion?: number,
+  configId?: string,
+  failureType: string = "provider_error",
+  prismaClient?: PrismaClient
+): Promise<PersistenceResult<{ scanId: string }>> {
+  const prisma = prismaClient || defaultPrisma;
+
+  try {
+    const scan = await prisma.radarScan.create({
+      data: {
+        scanDate: new Date(),
+        timeWindow: "24h",
+        provider,
+        model,
+        promptVersion: "unknown",
+        schemaVersion: "unknown",
+        status: "failed",
+        sourceMode: "db_context",
+        actualThinkingEffort: null,
+        searchEnabled: false,
+        totalCandidatesReturned: 0,
+        totalRejected: 0,
+        totalProcessed: 0,
+        validOutputCount: 0,
+        executionTimeMs: executionTimeMs || null,
+        tokenPrompt: tokenPrompt || null,
+        tokenCompletion: tokenCompletion || null,
+        tokenTotal: null,
+        costEstimate: null,
+        summaryOverallMarketTheme: null,
+        summaryQualityNotes: null,
+        summaryLimitations: null,
+        errorMessage,
+        configId: configId || null,
+      },
+    });
+
+    return {
+      success: true,
+      scanId: scan.id,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return {
+      success: false,
+      error: `Failed to persist error scan: ${message}`,
+    };
+  }
+}
+
+/**
  * Persist a validated Radar scan output to the database
  * Creates RadarScan, RadarCandidate, and RadarEvidence records
  *

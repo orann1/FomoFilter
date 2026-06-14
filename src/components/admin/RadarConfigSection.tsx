@@ -9,6 +9,7 @@ import {
   type TokenBreakdown,
 } from "@/src/lib/opportunity-radar/radar-token-accounting";
 import type { EffectiveRadarConfig } from "@/src/lib/opportunity-radar/radar-ai-config";
+import { DbContextQualityWarning } from "./DbContextQualityWarning";
 
 interface RadarConfigSectionProps {
   currentConfig: EffectiveRadarConfig;
@@ -164,6 +165,12 @@ export function RadarConfigSection({ currentConfig, onConfigUpdate }: RadarConfi
                 {currentConfig.debugTraceEnabledSource === "env" ? "Env enabled" : currentConfig.debugTraceEnabled ? "DB enabled" : "Disabled"}
               </p>
             </div>
+          </div>
+
+          {/* DB Context Quality Warning */}
+          <div>
+            <p className="text-xs font-semibold text-slate-300 mb-2">Database Context</p>
+            <DbContextQualityWarning dbContextLimit={formData.dbContextLimit} />
           </div>
 
           {/* API Key Status Explanation */}

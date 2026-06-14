@@ -5,12 +5,17 @@ import { getLatestRadarScanAction } from "@/src/actions/radar-history-actions";
 import type { LatestRadarScanSummary } from "@/src/actions/radar-history-actions";
 import { Radar, ExternalLink, Loader2 } from "lucide-react";
 
-export function LatestAiScanSummary() {
+interface LatestAiScanSummaryProps {
+  refreshTrigger?: string | number;
+}
+
+export function LatestAiScanSummary({ refreshTrigger }: LatestAiScanSummaryProps = {}) {
   const [latestScan, setLatestScan] = useState<LatestRadarScanSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const loadLatestScan = async () => {
+      setIsLoading(true);
       try {
         const scan = await getLatestRadarScanAction();
         setLatestScan(scan);
@@ -22,7 +27,7 @@ export function LatestAiScanSummary() {
     };
 
     loadLatestScan();
-  }, []);
+  }, [refreshTrigger]);
 
   if (isLoading) {
     return (
@@ -58,18 +63,21 @@ export function LatestAiScanSummary() {
       ? "text-emerald-400 bg-emerald-900/20 border-emerald-800/50"
       : "text-red-400 bg-red-900/20 border-red-800/50";
 
+  const isFailed = latestScan.status === "failed";
+
   return (
     <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Radar className="w-4 h-4 text-slate-400" />
-          <h3 className="text-sm font-semibold text-slate-200">Latest AI Scan</h3>
+          <h3 className="text-sm font-semibold text-slate-200">Latest AI Scan Attempt</h3>
         </div>
         <a
           href="/opportunity-radar"
           className="inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium text-blue-300 hover:bg-blue-900/30 border border-blue-800/50 transition-colors"
+          title={isFailed ? "This scan failed and has no candidate results" : "View Radar results"}
         >
-          View Radar <ExternalLink className="w-3 h-3" />
+          View Radar Results <ExternalLink className="w-3 h-3" />
         </a>
       </div>
 
@@ -97,6 +105,15 @@ export function LatestAiScanSummary() {
           </p>
         </div>
       </div>
+
+      {isFailed && (
+        <div className="rounded bg-red-900/20 border border-red-800/40 px-3 py-2 text-xs text-red-300">
+          <p>
+            This scan failed. No candidates were created. Check the error details above or view the latest{" "}
+            <span className="font-medium">successful</span> scan results on /opportunity-radar.
+          </p>
+        </div>
+      )}
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
         <div>

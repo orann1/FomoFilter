@@ -294,7 +294,7 @@ export default function AiScanTab({ anyChunkedRunning }: AiScanTabProps) {
       </section>
 
       {/* Latest AI Scan Summary */}
-      <LatestAiScanSummary key={radarClaudeResult ? radarClaudeResult.scanId : "no-scan"} />
+      <LatestAiScanSummary refreshTrigger={radarClaudeResult?.scanId || radarResult?.scanId || Date.now()} />
 
       {/* QA / Test Scan — Collapsed Section */}
       <section className="bg-slate-800/50 border border-slate-700 rounded-lg space-y-0">
