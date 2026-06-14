@@ -23,6 +23,7 @@ import { RadarConfigSection } from "./RadarConfigSection";
 import { RadarScanResultReport } from "./RadarScanResultReport";
 import { LatestAiScanSummary } from "./LatestAiScanSummary";
 import { EstimatedProgressPanel } from "./EstimatedProgressPanel";
+import { DbContextQualityWarning } from "./DbContextQualityWarning";
 import { getEffectiveRadarConfigAction } from "@/src/actions/radar-config-actions";
 import type { EffectiveRadarConfig } from "@/src/lib/opportunity-radar/radar-ai-config";
 
@@ -234,21 +235,31 @@ export default function AiScanTab({ anyChunkedRunning }: AiScanTabProps) {
         <RadarConfigSection currentConfig={currentConfig} onConfigUpdate={handleConfigUpdate} />
       )}
 
-      {/* Claude Scan — Primary Action */}
+      {/* Claude Scan — DB Context Only (Phase 24B-2) */}
       <section className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 space-y-3">
         <div>
           <div className="flex items-center gap-2 mb-0.5">
             <Radar className="w-4 h-4 text-slate-400" />
-            <h2 className="text-sm font-semibold text-slate-200">Claude Scan</h2>
+            <h2 className="text-sm font-semibold text-slate-200">DB Context Claude Scan</h2>
             <span className="text-xs font-medium text-emerald-700 bg-emerald-900/40 border border-emerald-800/50 px-2 py-0.5 rounded ml-1">
-              Primary Action
+              Phase 24B-2
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1 leading-relaxed">
-            Run a real Claude scan using the active AI Scan Config. Claude analyzes database context and identifies research candidates.
+            Run a Claude scan using your database context. Claude analyzes only the selected DB stocks and identifies research candidates from that limited universe.
+            It does not perform public web search or discover stocks outside your database.
             Server-side execution only — requires <span className="font-mono text-slate-400">ANTHROPIC_API_KEY</span> environment variable.
           </p>
+          <p className="text-xs text-slate-400 mt-2">
+            <strong>Note:</strong> External discovery and web search are planned for a future source-mode phase.
+          </p>
         </div>
+
+        {currentConfig && (
+          <div className="mt-2">
+            <DbContextQualityWarning dbContextLimit={currentConfig.dbContextLimit} />
+          </div>
+        )}
 
         <button
           onClick={handleRunRadarClaudeScan}
@@ -260,7 +271,7 @@ export default function AiScanTab({ anyChunkedRunning }: AiScanTabProps) {
           ) : (
             <Play className="w-3.5 h-3.5" />
           )}
-          Run Claude Scan
+          Run DB Context Scan
         </button>
 
         <EstimatedProgressPanel isRunning={radarClaudeLoading} />

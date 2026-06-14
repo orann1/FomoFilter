@@ -16,7 +16,7 @@ export const sampleRadarOutput: RadarScanOutput = {
 
   providerMetadata: {
     provider: "Anthropic",
-    model: "claude-sonnet-4.6",
+    model: "claude-sonnet-4-6",
     actualThinkingEffort: "default",
     promptDeclaredThinkingEffort: "regular",
     searchEnabled: false,

@@ -144,7 +144,7 @@ export async function runOpportunityRadarClaudeScanAction(): Promise<RadarClaude
       await persistFailedRadarScan(
         providerResponse.error || "Claude call failed",
         providerResponse.metadata?.provider || "Anthropic",
-        providerResponse.metadata?.model || "claude-sonnet-4.6",
+        providerResponse.metadata?.model || "claude-sonnet-4-6",
         providerResponse.metadata?.executionTimeMs,
         providerResponse.metadata?.inputTokens,
         providerResponse.metadata?.outputTokens,
@@ -156,7 +156,7 @@ export async function runOpportunityRadarClaudeScanAction(): Promise<RadarClaude
         success: false,
         error: providerResponse.error || "Claude call failed",
         provider: providerResponse.metadata?.provider || "Anthropic",
-        model: providerResponse.metadata?.model || "claude-sonnet-4.6",
+        model: providerResponse.metadata?.model || "claude-sonnet-4-6",
         sourceMode: "db_context",
         executionTimeMs: providerResponse.metadata?.executionTimeMs,
         debugTracePath: debugTracePath || undefined,
@@ -175,7 +175,7 @@ export async function runOpportunityRadarClaudeScanAction(): Promise<RadarClaude
       await persistFailedRadarScan(
         "Claude did not return the required structured tool output. Tool Use may not be available in your API version.",
         providerResponse.metadata?.provider || "Anthropic",
-        providerResponse.metadata?.model || "claude-sonnet-4.6",
+        providerResponse.metadata?.model || "claude-sonnet-4-6",
         providerResponse.metadata?.executionTimeMs,
         providerResponse.metadata?.inputTokens,
         providerResponse.metadata?.outputTokens,
@@ -187,7 +187,7 @@ export async function runOpportunityRadarClaudeScanAction(): Promise<RadarClaude
         success: false,
         error: "Claude did not return the required structured tool output. Tool Use may not be available in your API version.",
         provider: providerResponse.metadata?.provider || "Anthropic",
-        model: providerResponse.metadata?.model || "claude-sonnet-4.6",
+        model: providerResponse.metadata?.model || "claude-sonnet-4-6",
         sourceMode: "db_context",
         executionTimeMs: providerResponse.metadata?.executionTimeMs,
         debugTracePath: debugTracePath || undefined,
@@ -206,7 +206,7 @@ export async function runOpportunityRadarClaudeScanAction(): Promise<RadarClaude
       await persistFailedRadarScan(
         "Tool input could not be parsed or is invalid",
         providerResponse.metadata?.provider || "Anthropic",
-        providerResponse.metadata?.model || "claude-sonnet-4.6",
+        providerResponse.metadata?.model || "claude-sonnet-4-6",
         providerResponse.metadata?.executionTimeMs,
         providerResponse.metadata?.inputTokens,
         providerResponse.metadata?.outputTokens,
@@ -218,7 +218,7 @@ export async function runOpportunityRadarClaudeScanAction(): Promise<RadarClaude
         success: false,
         error: "Tool input could not be parsed or is invalid",
         provider: providerResponse.metadata?.provider || "Anthropic",
-        model: providerResponse.metadata?.model || "claude-sonnet-4.6",
+        model: providerResponse.metadata?.model || "claude-sonnet-4-6",
         sourceMode: "db_context",
         executionTimeMs: providerResponse.metadata?.executionTimeMs,
         debugTracePath: debugTracePath || undefined,
@@ -240,7 +240,7 @@ export async function runOpportunityRadarClaudeScanAction(): Promise<RadarClaude
       await persistFailedRadarScan(
         `Tool output validation failed: ${validationResult.errors[0] || "unknown error"}`,
         providerResponse.metadata?.provider || "Anthropic",
-        providerResponse.metadata?.model || "claude-sonnet-4.6",
+        providerResponse.metadata?.model || "claude-sonnet-4-6",
         providerResponse.metadata?.executionTimeMs,
         providerResponse.metadata?.inputTokens,
         providerResponse.metadata?.outputTokens,
@@ -253,7 +253,7 @@ export async function runOpportunityRadarClaudeScanAction(): Promise<RadarClaude
         error: "Tool output validation failed",
         validationErrors: validationResult.errors,
         provider: providerResponse.metadata?.provider || "Anthropic",
-        model: providerResponse.metadata?.model || "claude-sonnet-4.6",
+        model: providerResponse.metadata?.model || "claude-sonnet-4-6",
         sourceMode: "db_context",
         executionTimeMs: providerResponse.metadata?.executionTimeMs,
         debugTracePath: debugTracePath || undefined,
@@ -271,7 +271,7 @@ export async function runOpportunityRadarClaudeScanAction(): Promise<RadarClaude
       await persistFailedRadarScan(
         "No validated data to persist",
         providerResponse.metadata?.provider || "Anthropic",
-        providerResponse.metadata?.model || "claude-sonnet-4.6",
+        providerResponse.metadata?.model || "claude-sonnet-4-6",
         providerResponse.metadata?.executionTimeMs,
         providerResponse.metadata?.inputTokens,
         providerResponse.metadata?.outputTokens,
@@ -283,7 +283,7 @@ export async function runOpportunityRadarClaudeScanAction(): Promise<RadarClaude
         success: false,
         error: "No validated data to persist",
         provider: providerResponse.metadata?.provider || "Anthropic",
-        model: providerResponse.metadata?.model || "claude-sonnet-4.6",
+        model: providerResponse.metadata?.model || "claude-sonnet-4-6",
         sourceMode: "db_context",
         executionTimeMs: providerResponse.metadata?.executionTimeMs,
         debugTracePath: debugTracePath || undefined,
@@ -293,7 +293,11 @@ export async function runOpportunityRadarClaudeScanAction(): Promise<RadarClaude
     // Step 6: Persist to database
     trace.setPersistence(true, false, null, 0, 0);
 
-    const persistResult = await persistRadarScanOutput(validationResult.data, config.configId);
+    const persistResult = await persistRadarScanOutput(
+      validationResult.data,
+      config.configId,
+      providerResponse.metadata?.executionTimeMs
+    );
 
     if (!persistResult.success) {
       trace.setPersistence(
@@ -314,7 +318,7 @@ export async function runOpportunityRadarClaudeScanAction(): Promise<RadarClaude
       await persistFailedRadarScan(
         persistResult.error || "Persistence failed",
         providerResponse.metadata?.provider || "Anthropic",
-        providerResponse.metadata?.model || "claude-sonnet-4.6",
+        providerResponse.metadata?.model || "claude-sonnet-4-6",
         providerResponse.metadata?.executionTimeMs,
         providerResponse.metadata?.inputTokens,
         providerResponse.metadata?.outputTokens,
@@ -326,7 +330,7 @@ export async function runOpportunityRadarClaudeScanAction(): Promise<RadarClaude
         success: false,
         error: persistResult.error || "Persistence failed",
         provider: providerResponse.metadata?.provider || "Anthropic",
-        model: providerResponse.metadata?.model || "claude-sonnet-4.6",
+        model: providerResponse.metadata?.model || "claude-sonnet-4-6",
         sourceMode: "db_context",
         executionTimeMs: providerResponse.metadata?.executionTimeMs,
         debugTracePath: debugTracePath || undefined,
@@ -350,7 +354,7 @@ export async function runOpportunityRadarClaudeScanAction(): Promise<RadarClaude
       candidateCount: persistResult.candidateCount,
       evidenceCount: persistResult.evidenceCount,
       provider: providerResponse.metadata?.provider || "Anthropic",
-      model: providerResponse.metadata?.model || "claude-sonnet-4.6",
+      model: providerResponse.metadata?.model || "claude-sonnet-4-6",
       sourceMode: "db_context",
       executionTimeMs: providerResponse.metadata?.executionTimeMs,
       debugTracePath: debugTracePath || undefined,
@@ -375,7 +379,7 @@ export async function runOpportunityRadarClaudeScanAction(): Promise<RadarClaude
       await persistFailedRadarScan(
         errorMessage,
         "Anthropic",
-        "claude-sonnet-4.6",
+        "claude-sonnet-4-6",
         undefined,
         undefined,
         undefined,
@@ -390,7 +394,7 @@ export async function runOpportunityRadarClaudeScanAction(): Promise<RadarClaude
       success: false,
       error: errorMessage,
       provider: "Anthropic",
-      model: "claude-sonnet-4.6",
+      model: "claude-sonnet-4-6",
       sourceMode: "db_context",
       debugTracePath: debugTracePath || undefined,
     };

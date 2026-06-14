@@ -11,6 +11,55 @@ import {
 import type { EffectiveRadarConfig } from "@/src/lib/opportunity-radar/radar-ai-config";
 import { DbContextQualityWarning } from "./DbContextQualityWarning";
 
+// Phase 24B v2 default prompt (used when user clicks "Load v2 Default Prompt")
+const V2_DEFAULT_PROMPT = `You are an AI research analyst for active investors. Your task is to identify research candidates worth further review based on market data signals.
+
+## Your Mission (Phase 24B v2)
+Analyze the provided DB context and identify up to 10 research candidates ranked by research priority.
+
+Focus on:
+- Interesting valuations or growth catalysts
+- Significant analyst positioning or consensus changes
+- Notable market positioning or technical setups
+- Potential structural or thematic trends
+- Stocks that may warrant further investigation
+
+## Output Schema (v2 Format)
+Return up to 10 ranked research candidates using the structured JSON tool format (schemaVersion: "2.0").
+
+Each candidate MUST include:
+- **ticker** and **companyName**: Must match exactly from provided context
+- **reasonTags**: Array of discovery signals (e.g., analyst_upside, valuation_gap, momentum_shift, sector_theme, etc.)
+- **researchPriority**: Integer 1–5 (5 = highest conviction, repeated signals, strong evidence; 1 = exploratory)
+- **Narrative**: headline, radarBullets (3 key signals), thesis, whyNow, mainCatalyst
+- **Evidence**: At least 1 source with sourceName, snippet, credibilityTier, relevanceScore
+- **Scores**: 0–100 integers only (attention, confidence, hype risk, signal strength, conviction)
+- **trendStatus**: new_today, repeated, back_on_radar, or cooling_down
+
+Do NOT assign radarLens (v1 legacy field) for v2 output — leave it null.
+
+## Critical Rules
+1. **No Buy/Sell Language**: This is research discovery only. Prohibited: "buy", "sell", "strong buy", "recommendation", "guaranteed". Use instead: "research candidate", "worth reviewing", "signals suggest", "potential opportunity".
+2. **Scores 0–100 Only**: All scores must be integers 0–100. Never use 0–10 scale.
+3. **Evidence Quality**: Every candidate must have at least 1 evidence item grounded in the provided DB context.
+4. **Hype Risk Assessment**: Evaluate and disclose manipulation risk, momentum chasing, or unsupported claims.
+5. **Accuracy**: Do not invent ticker symbols, company names, or data. Only use information from the provided context.
+6. **Scoring Honesty**: Calibrate confidence/conviction to match evidence quality. Lower scores if uncertain.
+7. **Rejected Candidates**: Include rejected candidates with clear disqualification reasons (e.g., "no clear signal", "weak evidence").
+
+## Discovery Signal Tags (reasonTags)
+Use these to categorize signals (not mutually exclusive):
+- analyst_upside, analyst_revision, valuation_gap, recent_weakness, earnings_reaction, momentum_shift
+- unusual_attention, sector_theme, ai_theme, turnaround_watch, speculative_growth, high_risk
+- quality_pullback, technical_setup, other
+
+## Candidate Ranking
+Rank candidates by research priority (5 = highest). Fewer high-quality candidates (5–10) are better than many weak ones.
+
+---
+
+Return your candidates in the specified v2 JSON tool format.`;
+
 interface RadarConfigSectionProps {
   currentConfig: EffectiveRadarConfig;
   onConfigUpdate?: () => void;
@@ -32,6 +81,8 @@ export function RadarConfigSection({ currentConfig, onConfigUpdate }: RadarConfi
     model: currentConfig.model,
     debugTraceEnabled: currentConfig.debugTraceEnabledSource === "db" ? currentConfig.debugTraceEnabled : false,
     changeNotes: "",
+    promptVersion: currentConfig.promptVersion,
+    schemaVersion: currentConfig.schemaVersion,
   });
 
   const handleSaveConfig = async () => {
@@ -48,6 +99,8 @@ export function RadarConfigSection({ currentConfig, onConfigUpdate }: RadarConfi
         model: formData.model,
         debugTraceEnabled: formData.debugTraceEnabled,
         changeNotes: formData.changeNotes,
+        promptVersion: formData.promptVersion,
+        schemaVersion: formData.schemaVersion,
       });
 
       if (result.success) {
@@ -108,6 +161,18 @@ export function RadarConfigSection({ currentConfig, onConfigUpdate }: RadarConfi
     } finally {
       setIsCountingFullRequest(false);
     }
+  };
+
+  const handleLoadV2DefaultPrompt = () => {
+    setFormData((prev) => ({
+      ...prev,
+      promptTemplate: V2_DEFAULT_PROMPT,
+      promptVersion: "opportunity-radar-v2",
+      schemaVersion: "candidate-output-v2",
+      candidateLimit: Math.min(prev.candidateLimit, 10),
+      changeNotes: prev.changeNotes || "Loaded Phase 24B v2 default prompt",
+    }));
+    setSaveMessage({ type: "success", text: "Form loaded with v2 default. Click Save to apply changes." });
   };
 
   return (
@@ -181,6 +246,34 @@ export function RadarConfigSection({ currentConfig, onConfigUpdate }: RadarConfi
             <p className="text-xs text-slate-500">
               The key value is never displayed or logged. Restart the dev server after updating <span className="font-mono">.env</span>.
             </p>
+          </div>
+
+          {/* Config Version Status */}
+          <div className="rounded bg-slate-900/60 border border-slate-700/60 px-3 py-2.5 space-y-2">
+            <p className="text-xs text-slate-400">
+              <span className="font-medium text-slate-300">Config Versions:</span> Prompt {currentConfig.promptVersion} · Schema {currentConfig.schemaVersion}
+            </p>
+            {(currentConfig.promptVersion?.includes("v1") || currentConfig.schemaVersion?.includes("v1")) && (
+              <>
+                <p className="text-xs text-amber-400">
+                  ⚠️ This config uses legacy Phase 23B v1 format (radarLens-based). Consider updating to v2 (reasonTags-based, up to 10 candidates) for better AI scan behavior.
+                </p>
+                <button
+                  onClick={handleLoadV2DefaultPrompt}
+                  className="inline-flex items-center gap-1 px-2 py-1 text-xs rounded border border-amber-700 hover:border-amber-600 bg-amber-900/20 hover:bg-amber-900/40 text-amber-400 transition-colors"
+                >
+                  Load v2 Default Prompt
+                </button>
+                <p className="text-xs text-slate-500">
+                  Fills the form with Phase 24B v2 default. Review and click Save to apply.
+                </p>
+              </>
+            )}
+            {currentConfig.promptVersion === "opportunity-radar-v2" && currentConfig.schemaVersion === "candidate-output-v2" && (
+              <p className="text-xs text-emerald-400">
+                ✓ This config uses Phase 24B v2 format (reasonTags-based, up to 10 candidates).
+              </p>
+            )}
           </div>
 
           {/* Editable Fields */}
@@ -288,10 +381,10 @@ export function RadarConfigSection({ currentConfig, onConfigUpdate }: RadarConfi
                   value={formData.candidateLimit}
                   onChange={(e) => setFormData((prev) => ({ ...prev, candidateLimit: parseInt(e.target.value, 10) || 0 }))}
                   min="1"
-                  max="20"
+                  max="10"
                   className="w-full px-3 py-2 rounded border border-slate-600 bg-slate-900 text-slate-200 text-xs focus:border-emerald-500 focus:outline-none"
                 />
-                <p className="text-xs text-slate-500 mt-1">Maximum research candidates Claude can return (1–20). Higher values may increase noise.</p>
+                <p className="text-xs text-slate-500 mt-1">Maximum research candidates Claude can return (1–10, Phase 24B v2).</p>
               </div>
             </div>
 

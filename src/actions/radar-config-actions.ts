@@ -19,6 +19,8 @@ export async function saveRadarConfigAction(input: {
   model?: string;
   debugTraceEnabled?: boolean;
   changeNotes?: string;
+  promptVersion?: string;
+  schemaVersion?: string;
 }): Promise<SaveRadarConfigResult> {
   try {
     // Validate inputs
@@ -63,6 +65,12 @@ export async function saveRadarConfigAction(input: {
       }
       if (input.changeNotes !== undefined) {
         updateData.changeNotes = input.changeNotes;
+      }
+      if (input.promptVersion !== undefined) {
+        updateData.promptVersion = input.promptVersion;
+      }
+      if (input.schemaVersion !== undefined) {
+        updateData.schemaVersion = input.schemaVersion;
       }
 
       const updated = await prisma.radarAiConfig.update({

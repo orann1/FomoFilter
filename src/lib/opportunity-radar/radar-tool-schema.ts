@@ -30,7 +30,7 @@ export const RADAR_TOOL_SCHEMA = {
         },
         model: {
           type: "string",
-          description: "Model name, e.g., 'claude-sonnet-4.6'",
+          description: "Model name, e.g., 'claude-sonnet-4-6'",
         },
         actualThinkingEffort: {
           type: ["string", "null"],

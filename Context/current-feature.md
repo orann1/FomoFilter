@@ -3,19 +3,77 @@
 ## Active Phase
 
 ```txt
-No active implementation phase currently started.
+⏸️ PAUSED: No active implementation phase
 
-Status: ✅ Phase 24B-1 COMPLETED (Opportunity Radar Output Contract + Data Model Foundation)
-
-Previous phases completed:
+Completed phases:
   - Phase 24A-2 ✅ COMPLETED (AI Scan Config MVP + Result Report)
   - Phase 24B-0 ✅ COMPLETED (Opportunity Radar Product Rework Spec)
   - Phase 24B-1 ✅ COMPLETED (Radar Output Contract + Data Model Foundation)
+  - Phase 24B-2 ✅ COMPLETED (Prompt Rework + AI Scan Behavior)
 
-Next planned phases (not yet started):
-  - Phase 24B-2: Prompt Rework + AI Scan Behavior
+Next planned phase (not yet started):
   - Phase 24B-3: /opportunity-radar UI Rework (5 tabs, comparison tables, computed fields)
 ```
+
+## Phase 24B-2 — Prompt Rework + AI Scan Behavior (DB Context Only)
+
+### Purpose
+
+Make the real Admin Claude Radar Scan use the Phase 24B v2 output contract reliably by ensuring prompt, config, validation, and runtime behavior are all aligned with v2.
+
+Phase 24B-1 established the schema foundation (v2 fields). Phase 24B-2 ensures the actual prompt execution, config behavior, and runtime scanning work correctly with v2, in **DB Context mode only**.
+
+**Phase 24B-2 Source Mode:** `db_context` (database stocks only, no external discovery in this phase)
+
+Claude analyzes a limited list of DB stocks (default 20, configurable via dbContextLimit) and ranks them by research priority. It cannot discover candidates outside this provided context. External discovery and web search capabilities are planned for Phase 24C+.
+
+**Out of scope:**
+- Full /opportunity-radar UI rework (Phase 24B-3)
+- Scan History / Repeated Signals / New Discoveries / Compare Scans UI
+- Scheduled scans
+- Web search integration (Phase 24C+)
+- External discovery mode (Phase 24C+)
+- Provider switching
+- Scanner/Dashboard/Drawer or scoring changes
+- Schema changes (unless a bug is discovered and approved)
+
+### Scope — Phase 24B-2
+
+**In Scope:**
+1. Audit current runtime config behavior and identify legacy v1 constraints
+2. Update DEFAULT_RADAR_PROMPT to request v2 output (reasonTags, researchPriority, up to 10)
+3. Remove references to forced four-lens categorization from default prompt
+4. Ensure candidate limit is effectively capped at 10 for v2 scans
+5. Make active config behavior v2-safe (warn if legacy config is keeping old behavior)
+6. Verify tool schema supports v2 cleanly (reasonTags, researchPriority, max 10 candidates)
+7. Verify validation handles v2 output robustly
+8. Verify persistence creates correct DB records for v2 candidates
+9. Run fixture scan with v2 fixture and verify success
+10. Run real Claude scan if API key available, verify v2 output or fail visibly
+11. Verify Admin UI shows config/prompt version and warns if legacy
+12. Verify /opportunity-radar still loads and renders v2 records
+13. Verify external discovery candidates persist correctly (stockId=null)
+14. Update documentation after QA
+
+### Acceptance Criteria
+
+- ✓ Active DB config behavior is v2-safe (no silent legacy forcing)
+- ✓ Real Claude Scan uses or is guided toward v2 output
+- ✓ Claude Scan is clearly labeled as DB Context mode (not external discovery)
+- ✓ Candidate limit is capped at 10
+- ✓ Fixture scan passes with v2
+- ✓ Live Claude scan passes with v2 if API key available, or fails visibly if not
+- ✓ Failed scans remain visible and don't create candidate records
+- ✓ v2 fields (reasonTags, researchPriority, externalDiscoveryStatus, dbValidationStatus) persist
+- ✓ Persistence infrastructure supports external discovery (stockId=null), but external discovery is disabled in db_context source mode
+- ✓ DB Context Quality Warning integrated to alert on poor data quality
+- ✓ /opportunity-radar loads and displays results
+- ✓ Admin UI warns if legacy config, shows prompt/schema version, clarifies DB context only mode
+- ✓ Admin UI copy clarifies this is not web discovery
+- ✓ No provider/AI calls added to normal UI render paths
+- ✓ No Scanner/Dashboard/Drawer/scoring changes
+- ✓ No schema migrations added (infrastructure for external discovery already exists from Phase 24B-1)
+- ✓ Documentation updated (current-feature.md, admin-sync-feature-spec.md, opportunity-radar-ai-agent-spec.md)
 
 ## Phase 24B-1 — Opportunity Radar Output Contract + Data Model Foundation
 

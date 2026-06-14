@@ -18,54 +18,58 @@ export type EffectiveRadarConfig = {
   configId?: string;
 };
 
-export const DEFAULT_RADAR_PROMPT = `You are an AI research analyst for active investors. Your role is to identify and explain potential research candidates based on available market data.
+export const DEFAULT_RADAR_PROMPT = `You are an AI research analyst for active investors. Your task is to identify research candidates worth further review based on market data signals.
 
-## Your Mission
-Analyze active US stocks and identify those worth further research. Focus on:
+## Your Mission (Phase 24B v2)
+Analyze the provided DB context and identify up to 10 research candidates ranked by research priority.
+
+Focus on:
 - Interesting valuations or growth catalysts
 - Significant analyst positioning or consensus changes
 - Notable market positioning or technical setups
 - Potential structural or thematic trends
+- Stocks that may warrant further investigation
 
-## Output Requirements
-You must return structured candidates in the specified JSON tool format.
-Each candidate needs:
-- Ticker and company name
-- One of four categorization lenses: Attention Spike, Overreaction, Value Gap, or Future Theme
-- Detailed thesis explaining why it's worth research
-- Evidence citations with credibility assessment
-- Radar scores (0-100 scale) for attention, confidence, and hype risk
-- Next steps for manual validation
+## Output Schema (v2 Format)
+Return up to 10 ranked research candidates using the structured JSON tool format (schemaVersion: "2.0").
+
+Each candidate MUST include:
+- **ticker** and **companyName**: Must match exactly from provided context
+- **reasonTags**: Array of discovery signals (e.g., analyst_upside, valuation_gap, momentum_shift, sector_theme, etc.)
+- **researchPriority**: Integer 1–5 (5 = highest conviction, repeated signals, strong evidence; 1 = exploratory)
+- **Narrative**: headline, radarBullets (3 key signals), thesis, whyNow, mainCatalyst
+- **Evidence**: At least 1 source with sourceName, snippet, credibilityTier, relevanceScore
+- **Scores**: 0–100 integers only (attention, confidence, hype risk, signal strength, conviction)
+- **trendStatus**: new_today, repeated, back_on_radar, or cooling_down
+
+Do NOT assign radarLens (v1 legacy field) for v2 output — leave it null.
 
 ## Critical Rules
-1. **No Buy/Sell Recommendations**: This is research discovery, not investment advice.
-2. **Evidence Quality**: Every candidate must have at least 2 credible sources citing specific catalysts or data points.
-3. **Hype Risk Assessment**: Evaluate and disclose manipulation risk, momentum chasing, or unsupported claims.
-4. **Caution on FOMO Language**: Avoid language that sounds like financial advice or pressure.
-5. **Scoring Honesty**: If you're uncertain about a candidate, reflect that in lower confidence/higher hype-risk scores.
-6. **Analyst Context**: Use analyst target/upside data only as context about market consensus — not as validation of your thesis.
+1. **Research-Only Framing**: This is research discovery, not investment advice. Avoid direct buy/sell/hold recommendations. Use research-focused language such as "research candidate", "worth reviewing", "merit further investigation", "requires validation", "monitoring candidate", "signals suggest", "may warrant review".
+2. **Scores 0–100 Only**: All scores must be integers 0–100. Never use 0–10 scale.
+3. **Evidence Quality**: Every candidate must have at least 1 evidence item grounded in the provided DB context.
+4. **Hype Risk Assessment**: Evaluate and disclose manipulation risk, momentum chasing, or unsupported claims.
+5. **Accuracy**: Do not invent ticker symbols, company names, or data. Only use information from the provided context.
+6. **Scoring Honesty**: Calibrate confidence/conviction to match evidence quality. Lower scores if uncertain.
+7. **Rejected Candidates**: Include rejected candidates with clear disqualification reasons (e.g., "no clear signal", "weak evidence").
 
-## Candidate Scoring Guide
-- **Attention Score (0-100)**: How much attention or momentum does this signal deserve in market research?
-- **Confidence Score (0-100)**: How confident are you in this candidate's fundamentals and thesis validity?
-- **Hype Risk Score (0-100)**: How much risk of hype/manipulation/unsupported claims is present?
-- **Signal Strength (0-100)**: How strong is the underlying evidence for this candidate?
-- **Conviction Score (0-100)**: How likely is this candidate to remain relevant in 30 days?
+## Discovery Signal Tags (reasonTags)
+Use these to categorize signals (not mutually exclusive):
+- analyst_upside, analyst_revision, valuation_gap, recent_weakness, earnings_reaction, momentum_shift
+- unusual_attention, sector_theme, ai_theme, turnaround_watch, speculative_growth, high_risk
+- quality_pullback, technical_setup, other
+
+## Candidate Ranking
+Rank candidates by research priority (5 = highest). Fewer high-quality candidates (5–10) are better than many weak ones.
 
 ---
 
-You will be provided a list of active US stocks to analyze. For each candidate you identify:
-1. Explain the research signal
-2. Cite specific evidence with credibility assessment
-3. Return structured JSON output with required fields
-4. Avoid double-counting: don't repeat evidence or duplicate candidates across lenses
-
-Return your candidates in the specified JSON tool format.`;
+Return your candidates in the specified v2 JSON tool format.`;
 
 export const CODE_DEFAULT_MAX_TOKENS = 8192;
 export const CODE_DEFAULT_DB_CONTEXT_LIMIT = 20;
 export const CODE_DEFAULT_CANDIDATE_LIMIT = 10;
-export const CODE_DEFAULT_MODEL = "claude-sonnet-4.6";
+export const CODE_DEFAULT_MODEL = "claude-sonnet-4-6";
 
 /**
  * Load effective Radar AI config with fallback chain:
@@ -137,9 +141,9 @@ export async function loadEffectiveRadarConfig(): Promise<EffectiveRadarConfig> 
     );
   }
 
-  if (!Number.isInteger(candidateLimit.value) || candidateLimit.value < 1 || candidateLimit.value > 20) {
+  if (!Number.isInteger(candidateLimit.value) || candidateLimit.value < 1 || candidateLimit.value > 10) {
     throw new Error(
-      `candidateLimit must be a positive integer between 1 and 20. Got: ${candidateLimit.value}`
+      `candidateLimit must be a positive integer between 1 and 10 (Phase 24B-2 v2). Got: ${candidateLimit.value}`
     );
   }
 
@@ -198,9 +202,9 @@ export function validateRadarConfigInput(input: {
   }
 
   if (input.candidateLimit !== undefined) {
-    if (!Number.isInteger(input.candidateLimit) || input.candidateLimit < 1 || input.candidateLimit > 20) {
+    if (!Number.isInteger(input.candidateLimit) || input.candidateLimit < 1 || input.candidateLimit > 10) {
       errors.push(
-        `candidateLimit must be a positive integer between 1 and 20. Got: ${input.candidateLimit}`
+        `candidateLimit must be a positive integer between 1 and 10 (Phase 24B-2 v2). Got: ${input.candidateLimit}`
       );
     }
   }

@@ -2780,3 +2780,128 @@ Data model foundation complete. Phase 24B-2 (Prompt Rework + AI Scan Behavior) c
 - Persistence pipeline ready for DB matching and external discovery
 - Backward compatibility confirmed
 - No breaking changes to existing scans
+
+---
+
+### Phase 24B-2 — Prompt Rework + AI Scan Behavior
+
+**Scope (What was completed):**
+
+- Aligned Claude Radar Scan to v2 output contract with Phase 24B v2 prompt
+- DB Context mode only (no web search, external discovery deferred to Phase 24C+)
+- Made AI Scan Config the source of truth for promptTemplate when active DB config exists
+- Added safe v2 default prompt loading behavior for legacy v1 configs
+- Removed word-block validation; replaced with structural/data-quality validation only
+- Preserved research-only framing in both prompt and UI
+- Optimized persistence with batch writes and safer transaction timeout
+- Persisted execution duration and standardized model metadata
+- Updated /opportunity-radar copy to remove mock/simulated language
+
+**Implementation Details:**
+
+**AI Scan Config & Prompt Behavior:**
+- Active DB config promptTemplate takes precedence when `isActive=true`
+- Fallback chain: DB active config → environment variable → code default
+- DEFAULT_RADAR_PROMPT is fallback and seed template only, not override
+- Seed migration now safely detects known default v1 config (three-condition check: name, version fields, distinctive prompt phrase)
+- Only known default v1 configs auto-migrate to v2; user-customized v1 prompts are preserved
+- Candidate limit capped at 10 for v2 (validated on config load)
+
+**v2 Output Contract & Prompt:**
+- schemaVersion: "2.0" (vs "1.0" for v1)
+- reasonTags: Array of discovery signals (analyst_upside, valuation_gap, momentum_shift, etc.)
+- researchPriority: Integer 1–5 scale (5 = highest conviction)
+- externalDiscoveryStatus: in_db vs external_discovery (populated during persistence)
+- dbValidationStatus: matched, not_found, inactive (populated from stock match)
+- All existing v1 fields supported for backward compatibility (radarLens, detailedCategory, tags)
+- Prompt asks explicitly for v2 format with research-only framing
+
+**Validation Updates:**
+- Removed PROHIBITED_PHRASES list and findProhibitedLanguage() function
+- Validation now structural/data-quality focused: schema, required fields, score ranges 0–100, format rules
+- Prompt guidance replaced word-block validation for language control
+- Validation runs after Claude response, before persistence
+
+**DB Context Mode:**
+- sourceMode hardcoded to "db_context"
+- Claude analyzes only provided database stock context (no web search)
+- Stock context batch-loaded outside transaction
+- Evidence grounded in provided context only
+- External discovery/web search deferred to Phase 24C+ source/web pipeline
+
+**Persistence Optimization:**
+- Stock matching batch-loaded outside transaction (O(1) lookups inside)
+- RadarCandidate records created with createMany() (was individual loop creates)
+- RadarEvidence records created with createMany() (was nested loop creates)
+- Explicit 20000ms transaction timeout (was 5000ms default)
+- Reduction: ~40 individual operations → 4 batch operations (87% reduction)
+- executionTimeMs now passed from provider response metadata and persisted
+- model string standardized as "claude-sonnet-4-6" (canonical format, all fallbacks aligned)
+
+**UI & UX Updates:**
+- /opportunity-radar page title: "Opportunity Radar" (was "Daily Opportunity Briefing")
+- Disclaimer updated: "Opportunity Radar surfaces AI-identified research candidates from admin scans (currently DB-context scans analyzing provided database stocks)..."
+- Removed "mock" and "simulated" language
+- Research-only and "not financial advice" language preserved
+- LatestAiScanSummary now displays correct model and execution duration
+- RadarScanResultReport displays correct metadata for both success and failure states
+- DbContextQualityWarning integrated for admin awareness
+
+**Documentation Updates:**
+
+Updated:
+- `Context/current-feature.md` — Phase 24B-2 marked complete, no active phase started
+- `Context/Features/admin-sync-feature-spec.md` — DB Context Scan behavior documented
+- `Context/Features/opportunity-radar-ai-agent-spec.md` — v2 prompt and output contract documented
+- `Context/feature-history.md` — Phase 24B-2 completion summary (this section)
+
+Checked but not updated:
+- `Context/data-model.md` — No schema changes
+- `Context/architecture.md` — No architecture changes
+- `Context/sync-workflows.md` — No workflow changes
+- `Context/Features/scanner-feature-spec.md` — No scanner changes
+- `Context/Features/dashboard-feature-spec.md` — No dashboard changes
+- `Context/Features/drawer-feature-spec.md` — No drawer changes
+- `Context/Algorithms/*.md` — No scoring changes
+
+**QA Results:**
+
+✓ npm run build — PASS (compiled successfully, no errors)
+✓ npx tsc --noEmit — PASS (no TypeScript errors)
+✓ npx prisma validate — PASS (schema valid)
+✓ npx prisma migrate status — PASS (up to date, 19 migrations, no new migrations added)
+✓ DB Context Scan — PASS (v2 prompt, schemaVersion 2.0, reasonTags, researchPriority, stopReason=tool_use, 9 candidates, validation passed, persistence succeeded with executionTimeMs)
+✓ Fixture Scan — PASS (v2 format verified)
+✓ Latest AI Scan Attempt — PASS (displays correct model and duration)
+✓ AI Scan History — PASS (latest scan displayed with correct metadata)
+✓ /opportunity-radar — PASS (loads successfully, displays updated copy)
+✓ /admin/sync — PASS (loads successfully)
+✓ /scanner — PASS (loads successfully, no changes)
+✓ / (Dashboard) — PASS (loads successfully, no changes)
+✓ No breaking changes — Backward compatible with existing v1 scans
+
+**Deferred to Phase 24B-3:**
+- /opportunity-radar UI rework (5-tab view, Latest Scan focus, time-window controls)
+- Legacy lens/time-window aggregation
+- Multiple scan period aggregation
+
+**Confirmed Not Added:**
+- Public web search ✓
+- Scheduled scans ✓
+- External discovery source mode ✓
+- Schema migrations ✓
+- Provider/AI calls to normal UI render paths ✓
+
+**Confirmed Not Changed:**
+- Scanner behavior and logic
+- Dashboard behavior and logic
+- Drawer behavior and logic
+- Scoring formulas (Fundamental, Opportunity, Analyst)
+
+**Known Issues / Limitations:**
+- /opportunity-radar still displays legacy lens/time-window UI (Phase 24B-3 scope)
+- Neon connection latency adds ~500ms-1s per batch operation (infrastructure limitation)
+- 20s transaction timeout prevents truly pathological cases (100+ candidates without optimization)
+
+**Phase 24B-2 Complete:**
+Claude Radar Scan now uses v2 output contract in DB Context mode with optimized persistence, proper metadata tracking, safe config migration, and updated UI copy. Ready for production phase cutover and Phase 24B-3 UI rework.

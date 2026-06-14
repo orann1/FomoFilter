@@ -42,7 +42,7 @@ function getAnthropicApiKey(): string | null {
 }
 
 function getRadarModel(): string {
-  return process.env.ANTHROPIC_RADAR_MODEL ?? "claude-sonnet-4.6";
+  return process.env.ANTHROPIC_RADAR_MODEL ?? "claude-sonnet-4-6";
 }
 
 function getRadarMaxTokens(): number {

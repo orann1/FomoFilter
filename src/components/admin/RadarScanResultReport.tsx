@@ -35,7 +35,7 @@ export function RadarScanResultReport({ result }: RadarScanResultReportProps) {
             </div>
             <div>
               <p className="text-slate-500 mb-0.5">Model</p>
-              <p className="font-mono text-slate-300">{result.model || "claude-sonnet-4.6"}</p>
+              <p className="font-mono text-slate-300">{result.model || "claude-sonnet-4-6"}</p>
             </div>
             <div>
               <p className="text-slate-500 mb-0.5">Duration</p>

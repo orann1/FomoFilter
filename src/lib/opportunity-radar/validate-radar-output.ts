@@ -11,27 +11,9 @@ export type ValidationResult<T> = {
   warnings: string[];
 };
 
-const PROHIBITED_PHRASES = [
-  // Single words (word boundary required)
-  "\\bbuy\\b",
-  "\\bsell\\b",
-  "\\bhold\\b",
-  "\\bbuys\\b",
-  "\\bsells\\b",
-  "\\bbuying\\b",
-  "\\bselling\\b",
-  // Phrases
-  "strong buy",
-  "guaranteed",
-  "safe investment",
-  "will go up",
-  "best stock to buy",
-  "underperform",
-  "outperform",
-  "recommendation",
-  "should buy",
-  "should sell",
-];
+// Prohibited phrase validation removed in Phase 24B-2
+// Validation now focuses on structural/data quality rules
+// Prompt guidance enforces research-only framing without word blacklisting
 
 const VALID_RADAR_LENSES = [
   "attention_spike",
@@ -72,42 +54,6 @@ const VALID_CREDIBILITY_TIERS = [
   "experimental",
 ];
 
-/**
- * Scan text for prohibited financial language
- * Uses regex patterns for word boundary matching to avoid false positives
- */
-function findProhibitedLanguage(text: string): string[] {
-  const found: string[] = [];
-  const lowerText = text.toLowerCase();
-
-  for (const phrase of PROHIBITED_PHRASES) {
-    try {
-      // If phrase contains \b, it's a regex pattern for word boundaries
-      if (phrase.includes("\\b")) {
-        const regex = new RegExp(phrase, "gi");
-        if (regex.test(lowerText)) {
-          // Extract the word without \b for display
-          const displayPhrase = phrase.replace(/\\b/g, "");
-          if (!found.includes(displayPhrase)) {
-            found.push(displayPhrase);
-          }
-        }
-      } else {
-        // Phrase without \b: simple substring match
-        if (lowerText.includes(phrase.toLowerCase())) {
-          found.push(phrase);
-        }
-      }
-    } catch (e) {
-      // If regex is invalid, fall back to substring match
-      if (lowerText.includes(phrase.toLowerCase())) {
-        found.push(phrase);
-      }
-    }
-  }
-
-  return found;
-}
 
 /**
  * Check if a score looks like 0-10 scale when it should be 0-100
@@ -303,25 +249,6 @@ function validateCandidate(
         );
       }
     });
-  }
-
-  // Prohibited language check
-  const textFieldsToCheck = {
-    headline: c.headline as string,
-    thesis: c.thesis as string,
-    whyNow: c.whyNow as string,
-    mainCatalyst: c.mainCatalyst as string,
-  };
-
-  for (const [fieldName, text] of Object.entries(textFieldsToCheck)) {
-    if (typeof text === "string") {
-      const prohibited = findProhibitedLanguage(text);
-      if (prohibited.length > 0) {
-        errors.push(
-          `Candidate ${index}: ${fieldName} contains prohibited language: ${prohibited.join(", ")}`
-        );
-      }
-    }
   }
 
   return {

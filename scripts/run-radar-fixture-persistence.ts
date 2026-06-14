@@ -62,6 +62,7 @@ async function main() {
   const persistResult = await persistRadarScanOutput(
     validationResult.data,
     undefined, // configId (not provided in fixture scan)
+    undefined, // executionTimeMs (not available for fixture)
     scriptPrisma
   );
 

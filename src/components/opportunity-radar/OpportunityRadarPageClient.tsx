@@ -967,7 +967,7 @@ export default function OpportunityRadarPageClient({ initialData }: { initialDat
               </span>
             </div>
             <h1 className="text-2xl md:text-3xl font-black text-white tracking-tight mb-1.5">
-              Daily Opportunity Briefing
+              Opportunity Radar
             </h1>
             <div className="flex flex-wrap items-center gap-3">
               <div className="flex items-center gap-1.5 bg-blue-950/60 border border-blue-900/40 rounded-full px-3 py-1">
@@ -1095,10 +1095,9 @@ export default function OpportunityRadarPageClient({ initialData }: { initialDat
           <AlertTriangle size={13} className="text-amber-700 shrink-0 mt-0.5" />
           <p className="text-xs text-slate-500 leading-relaxed">
             <span className="text-slate-400 font-medium">Research Discipline: </span>
-            Opportunity Radar surfaces research candidates based on mock AI-style signals. These
+            Opportunity Radar surfaces AI-identified research candidates from admin scans (currently DB-context scans analyzing provided database stocks). These
             candidates require your own independent validation before any decision. This is not
-            financial advice. All scores and signals are simulated for product demonstration
-            purposes only. No buy or sell recommendations are implied.
+            financial advice. All analyses are research-focused discovery tools only, not investment recommendations or endorsements.
           </p>
         </div>
       </footer>

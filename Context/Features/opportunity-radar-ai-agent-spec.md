@@ -59,6 +59,30 @@ The AI agent outputs are **structured candidates** that can be stored in the dat
 
 ---
 
+## A.1.5 Phase 24B-2 Source Mode Clarification (DB Context Only)
+
+**Phase 24B-2 Implementation Status:** `db_context` mode only.
+
+**Source Modes (Current + Future):**
+
+| Mode | Phase | Status | Claude Behavior |
+|------|-------|--------|-----------------|
+| `db_context` | Phase 24B-2 | ACTIVE | Analyzes provided DB stocks only. Cannot discover external candidates. Prompt explicitly constrains Claude to "match exactly from provided context." |
+| `web_search` | Phase 24C+ | Planned | Will allow Claude to search public web and suggest external candidates with source citations. Requires web pipeline. |
+| `mixed` | Phase 24C+ | Planned | Will combine DB context validation + web search discovery. Hybrid mode. |
+
+**Key Constraint — Phase 24B-2 (db_context):**
+- Claude receives a limited list of stocks from the database (default 20, configurable via dbContextLimit)
+- Claude must return candidates only from that provided context
+- Prompt language: "ticker and companyName: Must match exactly from provided context"
+- External discovery is **disabled** in Phase 24B-2, even though persistence infrastructure supports it
+- No public web search claims in this mode
+
+**Acceptance Note:**
+Phase 24B-1 schema added fields for external discovery (externalDiscoveryStatus, stockId=null). Phase 24B-2 implements db_context-only analysis. External discovery will be enabled in Phase 24C+ when the web/source pipeline is added.
+
+---
+
 ## A.2 Phase 24B Prompt and Output Contract (Proposed)
 
 This section documents the proposed prompt direction and output contract for Phase 24B implementation. **None of these changes are implemented yet** — this is planning/spec only.

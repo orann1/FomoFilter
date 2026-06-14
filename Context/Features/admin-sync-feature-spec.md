@@ -108,8 +108,8 @@ The updated order (configure → run → review result → test tools) follows t
 - Editable max tokens (2000–50000)
 - "DB Stocks Sent to Claude" (was "DB Context Limit") (1–100 stocks)
   - Helper text: "Number of stocks included in context (1–100). Higher values increase token usage."
-- "Max Candidates to Return" (was "Candidate Limit") (1–20)
-  - Helper text: "Maximum research candidates Claude can return (1–20). Higher values may increase noise."
+- "Max Candidates to Return" (was "Candidate Limit") (1–10, Phase 24B-2 v2)
+  - Helper text: "Maximum research candidates Claude can return (1–10, Phase 24B v2)."
 - Editable Claude model (e.g., "claude-sonnet-4-6", "claude-opus-4-8")
 - Debug trace toggle
 - Change notes field (optional)
@@ -120,13 +120,55 @@ The updated order (configure → run → review result → test tools) follows t
   - "The key value is never displayed or logged. Restart the dev server after updating .env."
 - Model source display (DB / Env / Code Default)
 
-**Claude Scan Behavior (Phase 24A-2):**
+**Config Version Status (Phase 24B-2):**
+- **Purpose:** Display active config version and help users migrate from legacy v1 to v2 format
+- **Display:** Shows current promptVersion and schemaVersion (e.g., "Prompt opportunity-radar-v1 · Schema candidate-output-v1")
+- **v1 Config Detection & Warning:**
+  - If promptVersion contains "v1" OR schemaVersion contains "v1":
+    - Show amber warning: "⚠️ This config uses legacy Phase 23B v1 format (radarLens-based). Consider updating to v2 (reasonTags-based, up to 10 candidates) for better AI scan behavior."
+    - Show "Load v2 Default Prompt" button
+    - Show helper text: "Fills the form with Phase 24B v2 default. Review and click Save to apply."
+- **v2 Config Confirmation:**
+  - If promptVersion === "opportunity-radar-v2" AND schemaVersion === "candidate-output-v2":
+    - Show green confirmation: "✓ This config uses Phase 24B v2 format (reasonTags-based, up to 10 candidates)."
+- **"Load v2 Default Prompt" Button Behavior:**
+  - **Only appears for v1 configs**
+  - **Does NOT auto-save** — form fill only
+  - **Fills these form fields with v2 values:**
+    - promptTemplate ← Phase 24B v2 default prompt (67 lines, includes reasonTags guidance)
+    - promptVersion ← "opportunity-radar-v2"
+    - schemaVersion ← "candidate-output-v2"
+    - candidateLimit ← Math.min(current, 10) if current > 10
+    - changeNotes ← "Loaded Phase 24B v2 default prompt" (only if empty)
+  - **User must click Save to persist changes**
+  - **If Cancel or reload without saving:** DB config remains unchanged
+  - **Non-destructive:** User can review all changes before committing
+- **promptTemplate remains editable and source of truth:**
+  - Active DB config promptTemplate is always the source of truth when DB config exists
+  - Code DEFAULT_RADAR_PROMPT is fallback / seed / template only
+  - Users can edit promptTemplate directly or load v2 default and then customize
+  - Next Claude Scan uses the saved DB promptTemplate, never auto-overrides with code default
+- **candidateLimit is capped at 10 for Phase 24B v2:**
+  - Config validation rejects > 10
+  - Tool schema maxItems: 10
+  - Form input max="10"
+  - "Load v2 Default Prompt" clamps to 10 if > 10
+
+**Claude Scan Behavior (Phase 24A-2 + Phase 24B-2 — DB Context Mode):**
+
+Phase 24B-2 implements DB Context mode: Claude analyzes only the provided database stocks and cannot discover candidates outside the DB. External discovery and web search are planned for Phase 24C+.
+
+- **Source Mode:** `db_context` — analyzes only provided DB stocks
+- **Universe Control:** Configurable via dbContextLimit (default 20 stocks, ordered by opportunityScore)
+- **External Discovery:** Not supported in Phase 24B-2. Persistence infrastructure supports it (stockId=null handling), but prompt prevents Claude from suggesting candidates outside the provided context.
+- **Web Search:** Not supported in Phase 24B-2. Future modes (web_search, mixed) planned for Phase 24C+.
 - Loads effective config from DB config chain (DB → Env → Code Default)
 - Uses DB-backed prompt template if active config exists
-- Uses DB context limit to control how many stocks are included
+- Uses DB context limit to control how many stocks are included (do not send all DB; send limited ranked subset)
 - Uses DB max tokens for API call
 - Stores configId on RadarScan when DB config was used
 - Returns post-scan result report with metadata, token usage, and disclaimer
+- **DB Context Quality Warning:** Alerts if DB has low data completeness (quotes, scores, analyst data). Claude can still run, but output quality will be weak without enriched context.
 
 **Progress Display (Phase 24A-2 — Improved Client-Side UX):**
 - Shows honest client-side estimated progress (not real-time backend)
