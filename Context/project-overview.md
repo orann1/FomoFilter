@@ -192,9 +192,11 @@ Expanded row with:
 | Phase 23C-2A | Completed | Opportunity Radar Output Validation + DB Persistence From Fixture — Validation function, persistence function, sample fixture, QA script. Fixture-only, no external AI/provider calls. |
 | Phase 23C-2B | Completed | Opportunity Radar Admin Scan Button + Fixture Execution — Admin UI button in Sync Actions tab triggers fixture validation and persistence. Fixture-only, no real AI/provider calls yet. |
 | Phase 23C-2C | Completed | Opportunity Radar Claude Provider Adapter + Controlled Admin Execution — Real Claude Sonnet 4.6 API execution server-side, DB-backed context (controlled source pack mode), validation gatekeeper, clear error handling, Admin UI distinction |
-| Phase 23C-3 | Active | Opportunity Radar DB Reader — /opportunity-radar page reads persisted DB scan results; time window filtering; source mode labeling; no mock data by default. |
-| Phase 23D | Planned | Scheduled Daily Scan — automation and monitoring for Opportunity Radar |
-| Phase 24 | Planned | Historical Daily + Momentum Foundation (after Opportunity Radar direction is validated) |
+| Phase 23C-3 | Completed | Opportunity Radar DB Reader — /opportunity-radar page reads persisted DB scan results; time window filtering; source mode labeling; no mock data by default. |
+| Phase 24B-0 | In Planning | Opportunity Radar Product Rework Spec — Planning phase documenting new scan-based research signal tracker direction (replacing Phase 23A lens-based concept). No implementation yet. Next: Phase 24B-1 (schema + output contract). |
+| Phase 24A-3 | Planned | Scheduled Daily Scan — automation and monitoring for Opportunity Radar |
+| Phase 24B-1+ | Planned | Opportunity Radar Rework Implementation — Data model, prompt, UI, and feature implementation phases (24B-1 through 24B-4+). |
+| Phase 24 | Planned | Historical Daily + Momentum Foundation (after Opportunity Radar direction is finalized) |
 | Phase 25 | Planned | Momentum Indicators |
 | Phase 26 | Planned | Hot Score v1 |
 | Phase 27 | Planned | Alert Evaluation Engine |

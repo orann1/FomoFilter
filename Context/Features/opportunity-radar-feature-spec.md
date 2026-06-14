@@ -2,30 +2,48 @@
 
 ## Product Role
 
-Opportunity Radar is a future AI-assisted market discovery surface, separate from Scanner.
+**Phase 24B+ (Current Approved Direction):**
 
-Scanner is a structured filter and sort workspace for stocks already in the DB.
-Opportunity Radar is a discovery surface that surfaces interesting setups with richer narrative context, categories, and signals — designed to look like an intelligent daily briefing from the market.
+Opportunity Radar is a **scan-based research signal tracker** that surfaces candidates from the latest AI scan, tracks recurring signals across scans, and validates discovered candidates against FomoFilter DB when available.
+
+It is separate from Scanner:
+- Scanner is a structured filter and sort workspace for stocks already in the DB.
+- Opportunity Radar is a discovery surface that surfaces research candidates worth further review based on AI-identified signals and market analysis.
 
 Opportunity Radar is not financial advice.
 It surfaces research candidates worth further review, not buy/sell recommendations.
 
 ---
 
+**Phase 23A (Legacy / Previous Direction):**
+
+Phase 23A established a Lens-based daily briefing direction with four fixed lenses (Attention Spike, Overreaction, Value Gap, Future Theme) and 3-card Opportunity Deck design. This direction has been superseded by the Phase 24B scan-based research signal tracker concept (see below).
+
+---
+
 ## Current Phase
 
-**Phase 23C-3 — Opportunity Radar DB Reader**
+**Phase 24B-0 — Opportunity Radar Product Rework Spec (Active)**
 
-Phase 23C-3 transitions /opportunity-radar from mock-only visual demo to a real DB-backed briefing page.
+Phase 24B-0 is defining the new product direction before implementation.
+- Current status: Planning / Documentation only
+- No schema, code, or UI changes in this phase
+- Next phase: Phase 24B-1 (Data Model Foundation)
+
+See `Context/current-feature.md` for Phase 24B-0 scope and next phase planning.
+
+---
+
+**Phase 23C-3 (Completed — Previous Current Phase)**
+
+Phase 23C-3 (completed in previous work) transitioned /opportunity-radar from mock-only visual demo to a real DB-backed briefing page using the Lens-based direction:
 - Reads persisted RadarScan/RadarCandidate/RadarEvidence data from database
 - Displays results from Phase 23C-2B (fixture scans) and Phase 23C-2C (Claude db_context scans)
-- No AI runs from the page itself
-- Time window filtering by scanDate
-- Lens filtering by radarLens
-- Source mode labeling (fixture, db_context)
-- Empty state when no scans exist
+- Implements Lens filtering by radarLens (4-lens categorization)
+- Implements time window filtering by scanDate
+- Implements source mode labeling (fixture, db_context)
 
-Phase 23A (completed) established the visual product direction using hardcoded mock data and confirmed the Radar / command-center / 3-card Opportunity Deck / Intel Brief direction.
+**Note:** Phase 23C-3 uses the Lens-based UI direction. This direction is being superseded by Phase 24B's scan-based research signal tracker concept. The Phase 23C-3 DB data (scans, candidates, evidence) will remain compatible and readable during the Phase 24B transition.
 
 ---
 
@@ -46,14 +64,51 @@ Status in future phases (23D+): scheduled daily scans, web/search modes, etc.
 
 ## Design Direction
 
-**Phase 23A Final Approved Direction**
+**Phase 24B+ Target Direction (New Approved Product Direction)**
+
+Opportunity Radar is a **scan-based research signal tracker** with two primary views:
+
+**Primary View — Latest Scan (Cards):**
+```txt
+Shows up to 10 ranked research candidates from the most recent successful scan.
+Compact cards with:
+- Rank (1-10)
+- Ticker + Company name
+- DB Status badge (In DB / External Discovery)
+- Trend Status (New / Repeated / Back on Radar / Attention Needed)
+- Discovery Signals / Reason Tags (replaces forced Lens categorization)
+- Headline
+- Main Catalyst
+- Evidence quality indicator
+- FomoFilter validation snapshot (if in DB)
+- Next Check action
+```
+
+**Secondary Views — Historical & Comparison (Tables):**
+```txt
+Scan History — All scans with candidate counts, status, metadata
+Repeated Signals — Candidates appearing in multiple scans (attention signal)
+New Discoveries — Candidates first seen in latest scan
+Compare Scans — Side-by-side comparison of two scans showing rank changes
+```
+
+The page feels like an intelligent research briefing surface.
+It separates latest discoveries (cards) from historical analysis (tables).
+External candidates are clearly marked and distinct from DB-validated candidates.
+No forced lens categorization; instead, flexible discovery signal tags.
+
+---
+
+**Phase 23A Legacy Design Direction**
+
+Phase 23A (completed) established a Lens-based daily briefing direction:
 
 ```txt
 Visually innovative, engaging, dark UI
 Radar / command-center feel  
 Not a standard data table
 Cards with narrative content
-Lens-based discovery and filtering
+Lens-based discovery and filtering (4 forced lenses)
 3-card Opportunity Deck for focused attention
 Intel Brief side panel for deep narrative context
 Category and historical signal metadata
@@ -61,12 +116,240 @@ Time control tabs
 Responsible research-framing footer
 ```
 
-The page feels visually distinct from Scanner and Dashboard.
-It works as an intelligent briefing surface with focused discovery (3 top candidates per Lens view) and deep context (Intel Brief for each card).
+**Status:** This direction has been superseded by Phase 24B's scan-based research signal tracker concept. The visual style (dark UI, cards, narrative content) is preserved, but the structure (lens forcing, 3-card deck only, time control tabs) is being replaced with a more flexible scan-based organization.
 
 ---
 
-## Page Sections
+## Phase 24B+ Target Page Structure
+
+**Tab-Based Organization (Phase 24B implementation):**
+
+Opportunity Radar /opportunity-radar will be organized into **5 primary tabs**:
+
+### Tab 1: Latest Scan (Primary)
+
+**Purpose:** Answer "What should I research right now?"
+
+**Main user question:** What are the top research candidates from the most recent scan?
+
+**Data needed:**
+- Most recent successful RadarScan
+- Up to 10 candidates ranked by researchPriority
+- Evidence count per candidate
+- DB validation (stockId match, production scores if available)
+- Trend status (computed from scan history)
+
+**UI format:** Compact cards, up to 10 per screen (horizontal scroll or grid)
+
+**Key fields per card:**
+- Rank (1-10)
+- Ticker, Company Name
+- **DB Status badge:** "In DB" (green) or "External Discovery" (yellow/warning)
+- Trend Status pill: "New" / "Repeated" / "Back on Radar" / "Attention Needed"
+- Discovery Signals (reason tags, not forced lenses)
+- Headline (1-2 lines)
+- Main Catalyst
+- Evidence quality: count + top credibility tier
+- FomoFilter validation (if In DB):
+  - Opportunity Score
+  - Fundamental Score
+  - Analyst Rating
+  - Analyst Upside %
+- "View Evidence" link
+- "Add to Watchlist" button (if In DB only)
+
+**Empty state:** "No candidates in latest scan" with prompt to run a scan
+
+---
+
+### Tab 2: Scan History
+
+**Purpose:** Answer "How has the market signal evolved over time?"
+
+**Main user question:** What scans have been run, and what did they find?
+
+**Data needed:**
+- All RadarScans from last 30 days
+- Candidate count per scan
+- Status (success/failed)
+- Provider, model, source mode
+- Scan timestamp
+
+**UI format:** Table with sortable columns and expandable rows
+
+**Columns:**
+- Scan Date/Time
+- Status (success/failed badge)
+- Provider
+- Model
+- Candidate Count
+- Discovery Signals (summary)
+- Source Mode (db_context / web_search / fixture)
+
+**Expand row to:** Show candidate list for that scan in collapsed table
+
+**Empty state:** "No scans yet. Run a scan from Admin to get started."
+
+---
+
+### Tab 3: Repeated Signals
+
+**Purpose:** Answer "Which candidates keep appearing? (Requires attention)"
+
+**Main user question:** What research candidates have appeared in multiple scans?
+
+**Implementation note (Phase 24B-3+):**
+This tab uses **computed values from scan history**, not persisted schema fields:
+- Appearance count = queried count of scans containing this ticker (last 30 days)
+- First Seen date = MIN(scanDate) from scan history
+- Last Seen date = MAX(scanDate) from scan history
+- Trend = computed from appearance frequency (rising/stable/declining)
+- Avg Rank = computed from sortRank values across scans
+
+**Data needed:**
+- Candidates appearing in ≥2 scans in last 30 days
+- Appearance count (computed from scan history)
+- First and last seen dates (computed, not persisted)
+- Trend (rising, stable, declining in appearance frequency — computed)
+- Average rank across scans (if ranked — computed)
+- DB status
+- Latest discovery signals
+
+**UI format:** Table with sortable columns
+
+**Columns:**
+- Ticker
+- Company Name
+- Appearances (count: last 7d / last 30d)
+- First Seen (date)
+- Last Seen (date)
+- Trend (↑ rising, → stable, ↓ declining)
+- Avg Rank (if applicable)
+- DB Status
+- Reason Tags
+
+**Filter options:**
+- Min appearance count (≥2, ≥3, ≥5)
+- Time period (last 7d, last 30d)
+
+**Sort options:**
+- Appearances desc (default)
+- Last Seen desc
+- Avg Rank asc
+
+**Empty state:** "No repeated signals in selected period"
+
+---
+
+### Tab 4: New Discoveries
+
+**Purpose:** Answer "What new candidates appeared in the latest scan?"
+
+**Main user question:** What new research candidates were discovered?
+
+**Data needed:**
+- Candidates with trendStatus="new_today" (or first appearance in selected scan)
+- All fields same as Latest Scan tab
+- Emphasis on external discovery status
+
+**UI format:** Cards (same as Latest Scan) or optionally switch to table view
+
+**Key fields (same as Latest Scan):**
+- Rank
+- Ticker, Company Name
+- **DB Status badge (prominent)**
+- Trend Status (should be "New")
+- Discovery Signals
+- Headline
+- Main Catalyst
+- Evidence
+- FomoFilter validation (if In DB)
+
+**Empty state:** "No new discoveries in this scan"
+
+---
+
+### Tab 5: Compare Scans
+
+**Purpose:** Answer "How did the candidate set change between two scans?"
+
+**Main user question:** Which candidates are new, which returned, which dropped?
+
+**Implementation note (Phase 24B-3+):**
+This tab computes comparison values on read, not from persisted fields:
+- Rank Change = (sortRank in Scan B) - (sortRank in Scan A)
+- Matching = ticker matching between two scans
+- New candidates = appear in B but not in A
+- Dropped candidates = appear in A but not in B
+
+**Data needed:**
+- Two scans selected by user (Scan A, Scan B)
+- Candidates in Scan A
+- Candidates in Scan B
+- Matching candidates (same ticker)
+- Rank differences (computed as Rank B - Rank A)
+
+**UI format:** Table with comparison columns
+
+**Columns:**
+- Ticker
+- Company Name
+- Rank in A (or "not in A")
+- Rank in B (or "not in B")
+- Rank Change (↑ improved, ↓ worsened, — unchanged, + new, - dropped)
+- Trend Status (in B)
+- DB Status
+- Discovery Signals (in B)
+
+**Color coding:**
+- New candidates: green highlight
+- Dropped candidates: gray/muted
+- Rank improved: up arrow (green)
+- Rank worsened: down arrow (red)
+
+**Sort options:**
+- Rank change desc
+- Rank in B asc
+
+**Comparison summary:**
+```
+Scan A (date): X candidates
+Scan B (date): Y candidates
+New: +N, Dropped: -M, Repeated: Z, Rank improved: P, Rank worsened: Q
+```
+
+**Empty state:** "Select two scans to compare"
+
+---
+
+## Phase 24B+ Approved Product Decisions
+
+**Key decisions:**
+- ✅ No fixed daily/weekly schedule by default; organized by scan runs
+- ✅ Latest Scan is the primary view (not a 3-card deck per lens)
+- ✅ Up to 10 candidates in Latest Scan (not fixed 3 per lens)
+- ✅ Cards for latest, tables for history/comparison
+- ✅ Candidates may exist outside DB (external discovery)
+- ✅ External candidates clearly marked with visual badge
+- ✅ No FomoFilter production scores invented for external candidates
+- ✅ Repeated appearance = "Requires Attention" signal, not recommendation
+- ✅ Four lenses no longer primary UX (use discovery signals / reasonTags instead)
+- ✅ Research-only language throughout (no buy/sell/hold wording)
+- ✅ Track candidates across scans (first seen, last seen, appearance count)
+
+**Non-scope for Phase 24B:**
+- Scheduled scans (Phase 24A-3)
+- Web search integration (Phase 24C+)
+- Provider switching (Phase 25+)
+- Auto-universe expansion (future)
+- Watchlist support for external discoveries (future)
+- Alert support for external discoveries (future)
+- Scanner/Dashboard/Drawer changes
+- Production scoring formula changes
+
+---
+
+## Page Sections (Legacy — Phase 23A Lens-Based Concept)
 
 ### 1. Hero / Daily Opportunity Briefing
 

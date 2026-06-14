@@ -3,12 +3,116 @@
 ## Active Phase
 
 ```txt
-Phase 24A-2 — AI Scan Config MVP + Result Report
-Status: ✅ COMPLETED (Committed and Merged)
+Phase 24B-0 — Opportunity Radar Product Rework Spec
+Status: ✅ COMPLETED (Documentation-only planning phase)
 
-No active phase is currently started.
-Next phases may include: Phase 24A-3 (scheduled scans), Phase 24B (provider switching), or other enhancements.
+Previous phase: Phase 24A-2 ✅ COMPLETED (AI Scan Config MVP + Result Report)
+Next planned phases: Phase 24B-1 (Data Model Foundation), Phase 24B-2+ (Implementation)
+
+No active implementation phase is currently started.
 ```
+
+## Phase 24B-0 — Opportunity Radar Product Rework Spec
+
+### Purpose
+
+Define the new product direction for Opportunity Radar before any schema, code, or UI changes.
+
+This is **documentation and planning only**. No implementation in this phase.
+
+### Problem Statement
+
+Opportunity Radar is currently based on a Lens-based daily briefing model (Phase 23A) with four forced categories:
+
+```txt
+Attention Spike
+Overreaction
+Value Gap
+Future Theme
+```
+
+This was useful as a visual proof-of-concept, but it is no longer the right product direction.
+
+### New Product Direction
+
+Opportunity Radar should become a **scan-based research signal tracker** that:
+
+- Shows the latest scan as the primary experience
+- Displays up to 10 ranked research candidates from the latest scan
+- Allows candidates outside the FomoFilter DB universe
+- Validates discovered candidates against FomoFilter DB when available
+- Clearly marks non-DB candidates as "External Discovery / Not in FomoFilter DB"
+- Tracks candidates across scan runs
+- Highlights candidates that are new, repeated, back on radar, or attention-needed
+- Treats repeated appearances as "requires attention", not as recommendations
+- Uses scan periods and scan history, not fixed daily/weekly assumptions
+- Uses cards for the latest scan
+- Uses comparison/history tables for previous scans and recurring signals
+- Uses reasonTags / discoverySignals instead of forced four-lens categorization
+- Keeps all language research-only and avoids buy/sell/hold/recommendation wording
+
+### Scope — Phase 24B-0 (This Phase)
+
+**In Scope:**
+- Product direction documentation
+- Target UI/UX structure (5 tabs)
+- Proposed output contract (without forcing radarLens enum)
+- Proposed candidate card fields
+- Proposed data model fields (as planned, not implemented)
+- Historical comparison model concept
+- External discovery behavior concept
+- Non-scope clarification
+
+**Out of Scope:**
+- Schema changes or migrations
+- Code implementation
+- Prompt changes
+- UI component changes
+- Watchlist/alert support for external discoveries
+- Scheduled scans (Phase 24A-3)
+- Web search integration (Phase 24C+)
+- Provider switching (Phase 25+)
+
+### Next Likely Phases
+
+**Phase 24B-1:** Radar Data Model Foundation (Minimal Schema Update)
+- Add immediate schema fields **only** (do NOT add deferred fields):
+  - RadarScan: scanPeriodStart, scanPeriodEnd, scanLabel
+  - RadarCandidate: reasonTags, externalDiscoveryStatus, dbValidationStatus, researchPriority
+- Keep radarLens and tags unchanged; add reasonTags **alongside** them (not replacing)
+- Update validation logic for new fields
+- Update sample fixtures
+- Backfill existing records with computed values
+- **Deferred fields (firstSeenScanId, lastSeenScanId, rankChange, etc.) NOT added in this phase**
+
+**Phase 24B-2:** Prompt Rework + AI Scan Behavior
+- Update Claude prompt to request reasonTags instead of forcing lenses
+- Implement ticker matching for external discovery candidates
+- Add DB validation status computation
+- Test new output format
+
+**Phase 24B-3:** /opportunity-radar UI Rework
+- Replace Lens-based UI with 5-tab structure
+- Latest Scan cards (up to 10 candidates with DB status, trend status, discovery signals)
+- Scan History table
+- Repeated Signals table (computed from scan history, not persisted fields)
+- New Discoveries tab
+- Compare Scans tab (computed rank changes, not persisted rankChange field)
+- Data loaders compute: firstSeenDate, lastSeenDate, appearanceCount, trendStatus
+- Browser QA for all workflows
+
+**Phase 24B-4+:** Enhancements and Scheduling
+- Admin configuration enhancements (scanLabel, scanPeriodStart/End UI)
+- Scheduled scan triggers (Phase 24A-3)
+- Web search modes (future)
+- Provider switching (future)
+
+### Documentation References
+
+See specific sections in:
+- `Context/Features/opportunity-radar-feature-spec.md` — New product role and tab structure
+- `Context/Features/opportunity-radar-ai-agent-spec.md` — New output contract design
+- `Context/data-model.md` — Planned Phase 24B fields (not yet implemented)
 
 ## What This Phase Implements
 

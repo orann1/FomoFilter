@@ -16,7 +16,7 @@ Its purpose:
 
 ```txt
 Find and explain research candidates, not recommendations.
-Surface stocks worth further review based on external market signals.
+Surface stocks worth further review based on available signals (DB context or web search).
 Separate external signal (from AI) from internal FomoFilter validation.
 Produce structured, machine-readable output.
 Support manual admin execution and future scheduled execution.
@@ -24,16 +24,186 @@ Support manual admin execution and future scheduled execution.
 
 The AI agent should:
 
-- Identify potential research candidates from external sources
+- Identify potential research candidates from provided signals/context
+- Rank candidates by research priority
 - Explain why each candidate appeared (catalyst, signal, trend context)
 - Provide evidence citations for each claim
-- Assign structured radar lenses (Attention Spike, Overreaction, Value Gap, Future Theme)
+- Assign discovery signals / reason tags (e.g., analyst_upside, valuation_gap, momentum_shift)
+- Allow candidates outside the FomoFilter DB universe (external discovery)
 - Measure signal strength, confidence, and hype risk
 - Persist results for later database storage and UI display
 - Never produce buy/sell recommendations
 - Use cautious, research-focused language
+- Mark candidates that are external (not in FomoFilter DB) clearly
 
 The AI agent outputs are **structured candidates** that can be stored in the database and displayed by /opportunity-radar.
+
+---
+
+## A.1 Phase 24B Product Direction Update
+
+**Previous output contract (Phase 23B, based on Phase 23A Lens model):**
+- Forced candidates into one of 4 lenses: Attention Spike, Overreaction, Value Gap, Future Theme
+- Lens categorization was primary UX concept
+- External discovery not a designed concept
+
+**New output contract (Phase 24B+, scan-based research signal tracker):**
+- Return up to 10 ranked research candidates (no forced lens coverage)
+- Use reasonTags / discoverySignals instead of forced lenses
+- Allow and clearly mark candidates outside FomoFilter DB (external discovery)
+- Include DB validation status (matched, not_found, pending_match)
+- Include trend assessment (new, repeated, back_on_radar, cooling_down)
+- Provide research priority score/rank
+- Support scan period metadata (explicit time window analyzed)
+- Keep research-only, no recommendation language
+
+---
+
+## A.2 Phase 24B Prompt and Output Contract (Proposed)
+
+This section documents the proposed prompt direction and output contract for Phase 24B implementation. **None of these changes are implemented yet** — this is planning/spec only.
+
+### Phase 24B Prompt Direction
+
+**Key changes from Phase 23B:**
+
+**Previous approach (Phase 23B, Lens-based):**
+```
+Return up to N candidates.
+Each candidate must be assigned to ONE of four lenses:
+  - Attention Spike
+  - Overreaction
+  - Value Gap
+  - Future Theme
+Provide one candidate per lens if possible.
+```
+
+**New approach (Phase 24B, Signal-based):**
+```
+Return up to 10 research candidates ranked by research priority.
+Do NOT force candidates into four fixed lenses.
+Do NOT require one candidate per category.
+Use discovery signals / reason tags (flexible, extensible).
+Allow candidates outside FomoFilter DB — mark as external discovery.
+Use scan period metadata (explicit start/end time window).
+If you have a prior scan summary, consider it and explain new candidates or recurring themes.
+Treat repeated appearances as a signal requiring attention, not as a recommendation.
+Keep all language research-focused. No buy/sell/hold language.
+If source mode is db_context, be honest that analysis is based on provided DB context only, not public/external signals.
+```
+
+### Phase 24B Proposed Candidate Fields
+
+**Proposed output structure for each candidate** (Phase 24B implementation):
+
+```ts
+{
+  // Identity
+  ticker: string,
+  companyName: string,
+  
+  // Ranking & Priority
+  rank: number,                    // 1–10 (rank within scan)
+  researchPriority: number,        // 1–5 (high = repeated or high conviction)
+  
+  // Narrative
+  headline: string,                // 1-line summary
+  whyAppeared: string,             // explanation of signal/catalyst
+  mainCatalyst: string,            // primary trigger
+  keyBullets: string[],            // 3 key signals
+  keyConcerns: string[],           // risk factors / bearish signals
+  nextCheck: string,               // what to verify next
+  
+  // Discovery Signals (NEW — added alongside radarLens, not replacing)
+  reasonTags: string[],            // e.g., ["analyst_upside", "valuation_gap", "momentum_shift", "narrative_change"]
+  
+  // Evidence
+  evidence: Evidence[],            // sources supporting the candidate
+  
+  // Trend & History
+  trendStatus: "new" | "repeated" | "back_on_radar" | "cooling_down",
+  appearancesLast7Days: number,
+  appearancesLast30Days: number,
+  
+  // DB Validation (NEW)
+  externalDiscoveryStatus: "in_db" | "external_discovery",
+  dbValidationStatus: "matched" | "not_found" | "pending_match",
+  
+  // Scores (AI Assessment, NOT production scores)
+  attentionScore: number,          // 0-100
+  confidenceScore: number,         // 0-100
+  hypeRiskScore: number,           // 0-100
+  radarSignalStrength: number,     // 0-100
+  radarConvictionScore: number,    // 0-100
+}
+```
+
+**Legacy fields (preserved for backward compatibility):**
+- `radarLens` — Remains in schema for existing Phase 23C records. New scans will use `reasonTags` instead. Do NOT remove or rename this field in Phase 24B-1.
+
+**Proposed reasonTags values** (non-exhaustive, AI can add others):
+```
+"analyst_upside"      — Analyst consensus suggests upside
+"analyst_upgrade"     — Recent analyst upgrade
+"valuation_gap"       — Valuation appears disconnected from fundamentals
+"momentum_shift"      — Price/volume momentum change
+"earnings_beat"       — Recent earnings beat expectations
+"narrative_change"    — New market narrative / theme emerging
+"high_short_interest" — Significant short position
+"insider_activity"    — Insider trading / buying activity
+"catalyst_signal"     — Upcoming catalyst identified
+"technical_setup"     — Technical chart pattern
+"sector_strength"     — Sector/industry momentum
+"supply_demand"       — Supply/demand imbalance
+```
+
+### Phase 24B Scan Period Metadata (Proposed)
+
+**Immediate Phase 24B-1 fields:**
+
+```ts
+{
+  scanDate: ISO8601,               // when scan executed (already exists)
+  scanPeriodStart: ISO8601,        // explicit analysis window start — ADD TO SCHEMA
+  scanPeriodEnd: ISO8601,          // explicit analysis window end — ADD TO SCHEMA
+  scanLabel?: string,              // optional human label (e.g., "Post-earnings cycle") — ADD TO SCHEMA
+  
+  // ... existing fields ...
+}
+```
+
+**Deferred / Future fields (do NOT add in Phase 24B-1):**
+
+```ts
+{
+  previousScanId?: string,         // link to prior scan for context — DEFERRED
+  comparisonSummary?: Json,        // summary statistics — DEFERRED (compute on read instead)
+  scanMode?: string,               // "standard", "universe_expansion", "deep_dive" — DEFERRED
+}
+```
+
+### Phase 24B Prompt Tone (Proposed)
+
+**Research-first framing:**
+```
+"Identify up to 10 research candidates worth further review.
+Each candidate should be supported by clear signal(s) and evidence.
+Rank candidates by research priority / conviction.
+Mark candidates that are external to FomoFilter DB.
+Avoid buy/sell/hold language. Use: 'worth reviewing', 'signals suggest', 'potential opportunity', 'requires attention'."
+```
+
+**Honesty about source mode:**
+```
+"If source_mode = db_context:
+  Be clear that your analysis is based on the provided DB context only.
+  Do not claim public/web knowledge unless included in the context.
+  Do not say 'recent news suggests' if relying only on DB data."
+  
+"If source_mode = web_search:
+  You may reference external news, research, and public signals.
+  Cite sources in evidence fields."
+```
 
 ---
 

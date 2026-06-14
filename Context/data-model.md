@@ -718,7 +718,7 @@ They are presented to the user for further manual review, not as automatic buy s
 
 ---
 
-## Radar Schema — Phase 24A-2 Status
+## Radar Schema — Current Status
 
 **Phase 23C-1B (completed):**
 - RadarScan, RadarCandidate, RadarEvidence models added
@@ -751,10 +751,205 @@ They are presented to the user for further manual review, not as automatic buy s
 - Honest progress UI labeling ("Estimated progress")
 - API key remains env-only (not editable in UI)
 
-**Phase 24A-3+ (future):**
+**Phase 24B-0 (active — planning):**
+- Documentation: Product rework spec defining scan-based research signal tracker
+- No schema changes in this phase
+
+**Phase 24B-1+ (future):**
+- Schema updates with new fields (see Planned Phase 24B Fields below)
 - Scheduled daily scans
 - Full real-time DB job progress tracking
 - Additional configuration options (provider switching, etc.)
+
+---
+
+## Planned / Proposed Phase 24B Radar Rework Fields
+
+**Status:** This section documents planned Radar schema changes for Phase 24B. **Fields are separated into immediate Phase 24B-1 targets and deferred/future optimizations.**
+
+---
+
+### Phase 24B-1: Immediate Schema Foundation
+
+**These fields are the implementation target for Phase 24B-1. Add these and only these to the schema.**
+
+#### RadarScan (Phase 24B-1 Additions)
+
+**Immediate new fields for Phase 24B-1:**
+
+```prisma
+scanPeriodStart     DateTime?        // explicit start of time window analyzed
+scanPeriodEnd       DateTime?        // explicit end of time window analyzed
+scanLabel           String?          // optional human-readable context (e.g., "Post-earnings cycle")
+```
+
+**Rationale:**
+- Explicit period metadata clarifies what time window was actually analyzed
+- scanLabel provides human context (useful in admin logs and history)
+- Minimal addition; does not block Phase 24B-1 implementation
+
+#### RadarCandidate (Phase 24B-1 Additions)
+
+**Immediate new fields for Phase 24B-1:**
+
+```prisma
+// Discovery signals (added alongside, not replacing radarLens)
+reasonTags          String[]         // e.g., ["analyst_upside", "valuation_gap", "momentum_shift"]
+
+// External discovery support
+externalDiscoveryStatus  String      // "in_db" (stockId not null) or "external_discovery" (stockId null)
+dbValidationStatus   String          // "matched", "not_found", "pending_match"
+
+// Research priority (computed during persistence, not a user input)
+researchPriority    Int?             // 1–5, computed from trendStatus + appearance count
+```
+
+**Rationale:**
+- `reasonTags` provides flexible discovery signal categorization (not forced into 4 lenses); added **alongside** `tags[]`
+- `externalDiscoveryStatus` + `dbValidationStatus` enable clear UI labeling of non-DB candidates
+- `researchPriority` guides UI ranking and emphasis (repeated = high priority)
+- All new fields are **nullable** for backward compatibility
+
+**CRITICAL — Do NOT add these fields in Phase 24B-1:**
+- `firstSeenScanId` — Deferred (see below)
+- `lastSeenScanId` — Deferred (see below)
+- `rankChange` — Deferred (see below)
+- `previousRank` — Deferred (see below)
+- `appearanceHistory[]` — Deferred (see below)
+- Other fields marked "Deferred / Future Optimization" below
+
+---
+
+### Deferred / Future Optimization Fields (NOT Phase 24B-1)
+
+**These fields are designed for future phases, NOT Phase 24B-1. Do not add them to schema unless Product Owner explicitly approves a scope change.**
+
+#### RadarScan (Deferred Additions)
+
+**Deferred new fields (future phases only):**
+
+```prisma
+previousScanId      String?          // FK to prior RadarScan for easier comparison
+scanMode            String?          // "standard", "universe_expansion", "deep_dive"
+comparisonSummary   Json?            // {newCount, repeatedCount, backOnRadar, coolingCount}
+```
+
+**Why deferred:**
+- `previousScanId` — Convenience field; comparison can be done via date queries
+- `scanMode` — Not needed for Phase 24B UI; future enhancement
+- `comparisonSummary` — Can be computed on read in Phase 24B-3
+
+#### RadarCandidate (Deferred Additions)
+
+**Deferred new fields (future phases only):**
+
+```prisma
+firstSeenScanId     String?          // FK to RadarScan where this ticker first appeared
+lastSeenScanId      String?          // FK to RadarScan where this ticker last appeared
+appearanceHistory   Json?            // [{scanId, scanDate, rank, trendStatus}, ...]
+rankChange          Int?             // Difference in sortRank between consecutive scans
+previousRank        Int?             // sortRank from prior scan
+```
+
+**Why deferred:**
+- First seen / last seen dates — Compute from scan history in data loaders (Phase 24B-3), not stored
+- Appearance count — Compute from scan history in data loaders, not stored
+- `rankChange`, `previousRank` — Compute during scan comparison in Phase 24B-4+
+- `appearanceHistory` — Future performance optimization if scan comparison is slow
+
+---
+
+### Computed Fields (Not Persisted in Phase 24B-1)
+
+**These behaviors should be computed by data loaders, NOT stored in schema:**
+
+```
+firstSeenDate       — Compute from: (SELECT MIN(scanDate) FROM RadarScan WHERE ticker = candidate.ticker)
+lastSeenDate        — Compute from: (SELECT MAX(scanDate) FROM RadarScan WHERE ticker = candidate.ticker)
+appearanceCount     — Compute from: (SELECT COUNT(*) FROM RadarScan WHERE contains candidate.ticker in last 30d)
+rankChange          — Compute from: (rank in current scan) - (rank in prior scan)
+trendStatus         — Compute from: appearance history logic (new, repeated, back_on_radar, cooling_down)
+isTrendingUp        — Compute from: appearance trend direction
+```
+
+**Benefits:**
+- Avoids denormalization and schema bloat in Phase 24B-1
+- Keeps scans immutable (only insert, never update)
+- Allows UI to compute these values with fresh data from latest scans
+- Can be optimized to persisted fields in Phase 24B-4+ if performance requires
+
+---
+
+### Backward Compatibility
+
+**Do NOT change or remove these fields in Phase 24B-1:**
+
+- **`radarLens` (legacy)** — Stays in schema unchanged; existing Phase 23C records keep their values
+  - New prompts will return `reasonTags` instead
+  - Old scans with `radarLens` remain readable
+  - UI can display old `radarLens` values or map to new `reasonTags` for display
+  - **Do NOT remove or rename this field**
+
+- **`tags[]` (legacy)** — Stays in schema unchanged; remains general-purpose metadata
+  - New `reasonTags[]` is added **alongside**, not replacing `tags[]`
+  - Backfill: `reasonTags = tags` (copy existing array during migration)
+  - **Do NOT remove, rename, or change this field**
+
+- **`trendStatus`, `appearancesLast7Days`, `appearancesLast30Days`** — Already exist; no changes needed
+
+---
+
+### Migration Strategy (Phase 24B-1 Only)
+
+**Phase 24B-1 migration will:**
+
+1. Add Phase 24B-1 fields to schema:
+   - RadarScan: scanPeriodStart, scanPeriodEnd, scanLabel
+   - RadarCandidate: reasonTags, externalDiscoveryStatus, dbValidationStatus, researchPriority
+
+2. Backfill existing records with computed values:
+   ```sql
+   -- RadarCandidate backfill
+   UPDATE RadarCandidate SET
+     reasonTags = tags,  -- copy existing general tags
+     externalDiscoveryStatus = IF(stockId IS NOT NULL, 'in_db', 'external_discovery'),
+     dbValidationStatus = IF(stockId IS NOT NULL, 'matched', 'not_found'),
+     researchPriority = 3  -- neutral default; will be recomputed during next scan
+   WHERE reasonTags IS NULL;
+   ```
+
+3. Keep radarLens and tags unchanged (do NOT rename, remove, or modify)
+
+4. Leave deferred fields in design only; do NOT add to schema
+
+---
+
+### Phase 24B Implementation Scope
+
+**Phase 24B-1 (Data Model):**
+1. Create migration adding Phase 24B-1 fields only (see above)
+2. Backfill existing records with computed values
+3. Update validation logic to accept/validate new Phase 24B-1 fields
+4. Update sample fixtures with new fields
+5. **Do NOT add deferred fields to schema**
+6. **Do NOT remove or rename radarLens, tags**
+
+**Phase 24B-2+ (Prompt + AI Behavior):**
+1. Update prompt to return `reasonTags` in addition to (or instead of) radarLens for new scans
+2. Implement ticker matching for `externalDiscoveryStatus` and `dbValidationStatus`
+3. Compute `researchPriority` during persistence
+4. Old radarLens values remain readable from Phase 23C scans
+
+**Phase 24B-3 (UI Rework):**
+1. Update `/opportunity-radar` UI to use new fields and 5-tab structure
+2. Data loaders compute: firstSeenDate, lastSeenDate, appearanceCount, trendStatus, rankChange
+3. Display computed values in UI (do not fetch from persisted fields)
+
+**Phase 24B-4+ (Future):**
+1. If performance requires, optimize by adding deferred fields (with explicit approval)
+2. Implement scan comparison with persisted comparison metadata (future optimization)
+
+---
 
 ---
 

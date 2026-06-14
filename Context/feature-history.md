@@ -2476,3 +2476,154 @@ Phase 24A-3 and beyond can enhance:
 - Scheduled daily scans with monitoring
 - Provider switching UI
 - Full real-time DB job progress tracking
+
+---
+
+## Phase 24B-0 — Opportunity Radar Product Rework Spec
+
+**Completion Date:** June 2026
+
+**Goal:**
+Define the new product direction for Opportunity Radar before Phase 24B implementation, replacing the Lens-based daily briefing concept with a scan-based research signal tracker.
+
+**Status:** Completed. Documentation-only planning phase defining product strategy, target UX, data model, and implementation scope.
+
+**Product Direction Rework:**
+
+**Old Concept (Phase 23A) — Legacy:**
+- Lens-based daily briefing with 4 forced categories: Attention Spike, Overreaction, Value Gap, Future Theme
+- 3-card fixed Opportunity Deck per lens
+- Time control tabs (Today, Yesterday, Last 7 Days, Last 30 Days)
+- Intel Brief side panel
+- All candidates assumed to be in FomoFilter DB
+
+**New Concept (Phase 24B+) — Approved Direction:**
+- Scan-based research signal tracker (no forced lenses)
+- Latest scan as primary experience (up to 10 ranked cards)
+- External candidates allowed and clearly marked "Not in FomoFilter DB"
+- FomoFilter validation snapshot when DB match exists (no invented scores for external)
+- Track candidates across scan runs (new, repeated, back on radar, attention-needed)
+- Treat repeated appearance as "requires attention", not as recommendation
+- Use reasonTags/discoverySignals instead of forced 4-lens categorization
+- Research-only language throughout (no buy/sell/hold)
+- 5-tab structure: Latest Scan, Scan History, Repeated Signals, New Discoveries, Compare Scans
+
+**Target Page Structure:**
+
+1. **Latest Scan (Primary):**
+   - Up to 10 ranked candidates as compact cards
+   - Fields: Rank, Ticker, Company, DB Status (In DB / External Discovery), Trend Status (New / Repeated / Back on Radar / Attention Needed), Discovery Signals/Reason Tags, Headline, Main Catalyst, Evidence Quality, FomoFilter validation (if In DB), Next Check
+
+2. **Scan History:**
+   - All scans from last 30 days in table format
+   - Shows: Scan Date/Time, Status, Provider, Model, Candidate Count, Discovery Signals, Source Mode
+
+3. **Repeated Signals:**
+   - Candidates appearing in multiple scans (≥2 in last 30d)
+   - Shows: Appearance Count, First/Last Seen Dates, Trend Direction, Avg Rank, DB Status, Reason Tags
+   - Computed from scan history, not persisted fields
+
+4. **New Discoveries:**
+   - Candidates first seen in latest scan
+   - Same fields as Latest Scan
+   - Emphasis on external discovery status
+
+5. **Compare Scans:**
+   - Side-by-side comparison of two user-selected scans
+   - Shows: Rank Changes, New Candidates, Dropped Candidates
+   - Rank changes computed on read, not persisted
+
+**External Discovery Concept:**
+- Candidates may exist outside FomoFilter DB universe
+- Non-DB candidates marked with clear "External Discovery" / "Not in FomoFilter DB" badge
+- No FomoFilter production scores invented for external candidates
+- No watchlist/alert support for external discoveries (Phase 24B out-of-scope)
+- DB matching: exact ticker match to Stock.symbol, optional stockId link, clear validation status
+
+**Discovery Signals / Reason Tags:**
+- Replace forced radarLens enum constraint
+- Flexible, extensible: analyst_upside, valuation_gap, momentum_shift, narrative_change, analyst_upgrade, earnings_beat, high_short_interest, insider_activity, catalyst_signal, technical_setup, sector_strength, supply_demand
+- Allow AI flexibility to add new signals as market conditions evolve
+- Primary signal model in new product direction
+
+**Historical Comparison Model:**
+- Appearance count: computed from scan history (how many scans contain this ticker)
+- First seen / Last seen dates: computed from MIN/MAX scanDate in scan history
+- Rank change: computed as (current rank) - (prior rank)
+- Trend status: computed from appearance history (new, repeated, back_on_radar, cooling_down)
+- Repeated signal: appears in ≥2 scans in last 30 days (requires attention)
+- All initial phase: computed by loaders from scan history, not persisted/denormalized
+
+**Phase 24B-1 Immediate Schema Foundation:**
+
+Immediate fields to add (Phase 24B-1 implementation only):
+- RadarScan: scanPeriodStart, scanPeriodEnd, scanLabel
+- RadarCandidate: reasonTags, externalDiscoveryStatus, dbValidationStatus, researchPriority
+
+**Deferred / Future Optimization Fields (NOT Phase 24B-1):**
+- RadarScan: previousScanId, comparisonSummary, scanMode
+- RadarCandidate: firstSeenScanId, lastSeenScanId, rankChange, previousRank, appearanceHistory (persisted appearance count)
+
+**Critical Clarifications:**
+- radarLens remains in schema unchanged for backward compatibility; existing Phase 23C records stay readable
+- tags[] remains unchanged alongside new reasonTags[]
+- First seen, last seen, appearance count, trendStatus, rank changes computed by loaders, not persisted
+- No schema bloat: computed values on read vs. denormalization
+- Phase 24B-1 implementation targets 7 immediate fields only (4 RadarScan, 4 RadarCandidate)
+- Deferred fields explicitly NOT added unless Product Owner approves scope change
+- Backward compatibility preserved: old radarLens values readable, old tags[] continues working
+
+**Non-Scope for Phase 24B:**
+- Scheduled scans (Phase 24A-3)
+- Web search integration (Phase 24C+)
+- Provider switching (Phase 25+)
+- Auto-universe expansion
+- Watchlist/alert support for external discoveries
+- Scanner/Dashboard/Drawer changes
+- Production scoring formula changes
+
+**Documentation Updates:**
+
+Updated:
+- `Context/current-feature.md` — Phase 24B-0 specification
+- `Context/Features/opportunity-radar-feature-spec.md` — New product role, 5-tab structure, approved decisions, legacy marking
+- `Context/Features/opportunity-radar-ai-agent-spec.md` — Phase 24B product direction, output contract, reasonTags, legacy fields
+- `Context/data-model.md` — Planned Phase 24B fields (immediate vs. deferred), backward compatibility, migration strategy, computed vs. persisted
+- `Context/project-overview.md` — Roadmap updated: Phase 24B-0 in planning, Phase 24B-1+ phases outlined
+
+Checked but not updated:
+- `Context/architecture.md` (no data-flow changes yet)
+- `Context/sync-workflows.md` (no workflow changes)
+- `Context/scoring-system.md` (no scoring changes)
+
+**Constraints Maintained:**
+- ✅ No application code changed
+- ✅ No Prisma schema changes
+- ✅ No migrations created
+- ✅ No provider/AI execution
+- ✅ No UI changes
+- ✅ Documentation-only planning phase
+
+**Automated Checks:**
+- ✅ npm run build — Success (routes unchanged)
+- ✅ npx tsc --noEmit — Pass (no TypeScript errors)
+- ✅ npx prisma validate — Pass (schema unchanged)
+- ✅ npx prisma migrate status — Pass (17 migrations, up to date)
+
+**Design Highlights:**
+- Clean product rework from Lens-based to Signal-based concept
+- External discovery support fundamental to new direction
+- Phase 24B-1 scope clearly bounded (7 immediate fields, 9 deferred fields marked)
+- Backward compatibility preserved for Phase 23C scan data
+- Computed values approach avoids denormalization bloat
+- reasonTags flexibility allows market signal evolution
+- Clear phase breakdown: Phase 24B-1 data model, 24B-2+ prompt/UI implementation
+
+**Ready for Phase 24B-1:**
+Product direction approved and documented. Phase 24B-1 implementation can proceed with confidence:
+- Exact fields to add documented
+- Exact fields to NOT add documented
+- Backward compatibility rules documented
+- Phase breakdown complete with phase-specific scope
+- Data loader patterns established (computed values)
+- Product concepts settled (external discovery, reasonTags, trend tracking)
