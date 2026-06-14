@@ -31,8 +31,8 @@ export type RadarCandidateView = {
   scanDate: string;
   ticker: string;
   companyName: string;
-  radarLens: string;
-  detailedCategory: string;
+  radarLens: string | null;
+  detailedCategory: string | null;
   headline: string;
   radarBullets: string[];
   thesis: string;

@@ -11,7 +11,7 @@ export const RADAR_TOOL_SCHEMA = {
   properties: {
     schemaVersion: {
       type: "string",
-      description: "Schema version, e.g., '1.0'",
+      description: "Schema version, e.g., '2.0' for v2 (reasonTags-based) or '1.0' for v1 (lens-based)",
     },
     scanDate: {
       type: "string",
@@ -82,8 +82,9 @@ export const RADAR_TOOL_SCHEMA = {
     },
     candidates: {
       type: "array",
-      description: "Array of research candidates",
+      description: "Array of research candidates (up to 10, ranked by research priority)",
       minItems: 0,
+      maxItems: 10,
       items: {
         type: "object",
         properties: {
@@ -96,13 +97,43 @@ export const RADAR_TOOL_SCHEMA = {
             description: "Company name, must be non-empty and copied from DB context",
           },
           radarLens: {
-            type: "string",
-            enum: ["attention_spike", "overreaction", "value_gap", "future_theme"],
-            description: "Radar lens categorization",
+            type: ["string", "null"],
+            enum: ["attention_spike", "overreaction", "value_gap", "future_theme", null],
+            description: "[v1 only] Radar lens categorization. Nullable for v2 output.",
           },
           detailedCategory: {
-            type: "string",
-            description: "Detailed category name, required field",
+            type: ["string", "null"],
+            description: "[v1 only] Detailed category name. Nullable for v2 output.",
+          },
+          reasonTags: {
+            type: "array",
+            items: {
+              type: "string",
+              enum: [
+                "analyst_upside",
+                "analyst_revision",
+                "valuation_gap",
+                "recent_weakness",
+                "earnings_reaction",
+                "momentum_shift",
+                "unusual_attention",
+                "sector_theme",
+                "ai_theme",
+                "turnaround_watch",
+                "speculative_growth",
+                "high_risk",
+                "quality_pullback",
+                "technical_setup",
+                "other"
+              ]
+            },
+            description: "[v2 only] Discovery signal tags. Required for v2 schema.",
+          },
+          researchPriority: {
+            type: "integer",
+            minimum: 1,
+            maximum: 5,
+            description: "[v2 only] Research priority rank 1-5 (5=highest). Required for v2 schema.",
           },
           headline: {
             type: "string",
@@ -256,8 +287,6 @@ export const RADAR_TOOL_SCHEMA = {
         required: [
           "ticker",
           "companyName",
-          "radarLens",
-          "detailedCategory",
           "headline",
           "radarBullets",
           "thesis",
@@ -276,6 +305,8 @@ export const RADAR_TOOL_SCHEMA = {
           "manipulationRiskScore",
           "trendStatus",
           "tags",
+          "reasonTags",
+          "researchPriority",
         ],
       },
     },

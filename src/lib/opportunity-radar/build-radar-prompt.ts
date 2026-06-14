@@ -180,12 +180,18 @@ Use cautious language throughout:
 - "may warrant review" not "should be bought"
 
 CANDIDATE QUALITY RULES:
-7. Identify 2-5 candidates from the provided context that have interesting characteristics worth reviewing.
-   (Focus on quality over quantity. Return fewer high-quality candidates.)
+7. Identify and rank up to 10 research candidates from the provided context by research priority.
+   (Research priority 5 = highest conviction/repeated signals, 1 = exploratory/lower conviction).
+   Return fewer candidates if quality is limited; prioritize signal strength over maximum count.
 8. Each candidate MUST have a ticker and company name exactly matching the context provided.
 9. Each candidate MUST have 1-2 evidence items with non-empty sourceName and snippet.
-10. Each candidate MUST be assigned exactly one radarLens: attention_spike, overreaction, value_gap, or future_theme.
-11. Reject candidates that are too weak, have no clear signals, or don't meet minimum quality criteria.
+10. Each candidate MUST have one or more discovery signal tags (reasonTags):
+    analyst_upside, analyst_revision, valuation_gap, recent_weakness, earnings_reaction, momentum_shift,
+    unusual_attention, sector_theme, ai_theme, turnaround_watch, speculative_growth, high_risk,
+    quality_pullback, technical_setup, other
+    (Do NOT assign radarLens unless necessary for backward compatibility; prioritize reasonTags.)
+11. Each candidate MUST have a researchPriority integer from 1 to 5 (5 = highest).
+12. Reject candidates that are too weak, have no clear signals, or don't meet minimum quality criteria.
 
 TEXT FIELD LIMITS (keep output concise):
 12. headline: max 140 characters
@@ -219,10 +225,10 @@ Your analysis process:
 5. Reject candidates that don't have clear signals or minimum quality.
 6. Return complete structured output via the create_radar_scan_output tool.
 
-Example candidate structure (use this as your template):
+Example candidate structure (Phase 24B v2 format):
 
 {
-  "schemaVersion": "1.0",
+  "schemaVersion": "2.0",
   "scanDate": "2026-06-07T10:30:00Z",
   "timeWindow": "24h",
   "providerMetadata": {
@@ -235,53 +241,56 @@ Example candidate structure (use this as your template):
     "notes": "Claude scan with database-backed context"
   },
   "summary": {
-    "headline": "Brief summary of candidates found",
-    "candidateCount": 3,
-    "rejectedCount": 1,
-    "topTheme": "Overall market theme"
+    "headline": "Brief summary of research candidates",
+    "candidateCount": 5,
+    "rejectedCount": 2,
+    "topTheme": "Overall market theme or signal pattern"
   },
   "candidates": [
     {
+      "rank": 1,
       "ticker": "SYMBOL",
       "companyName": "Company Name",
-      "radarLens": "attention_spike|overreaction|value_gap|future_theme",
-      "detailedCategory": "Category description",
+      "radarLens": null,
+      "detailedCategory": null,
+      "reasonTags": ["analyst_upside", "momentum_shift"],
+      "researchPriority": 5,
       "headline": "One-line headline (max 140 chars)",
       "radarBullets": ["Signal 1 (max 120 chars)", "Signal 2 (max 120 chars)", "Signal 3 (max 120 chars)"],
-      "thesis": "Why this stock is interesting (max 400 chars)",
+      "thesis": "Why this stock is worth reviewing (max 400 chars)",
       "whyNow": "Why now specifically (max 300 chars)",
-      "mainCatalyst": "Key upcoming catalyst (max 150 chars)",
+      "mainCatalyst": "Key trigger or signal (max 150 chars)",
       "whatLooksInteresting": ["Aspect 1 (max 150 chars)", "Aspect 2 (max 150 chars)"],
       "keyConcerns": ["Risk 1 (max 150 chars)", "Risk 2 (max 150 chars)"],
-      "nextCheck": "What to monitor next (max 150 chars)",
+      "nextCheck": "What to verify or monitor (max 150 chars)",
       "sourceEvidence": [
         {
           "sourceName": "Database Context",
-          "sourceType": "market_data",
+          "sourceType": "db_score",
           "url": null,
-          "snippet": "Key data or observation (max 250 chars)",
+          "snippet": "Key observation from context (max 250 chars)",
           "credibilityTier": "primary",
-          "relevanceScore": 75
+          "relevanceScore": 85
         }
       ],
-      "attentionScore": 70,
-      "confidenceScore": 65,
-      "hypeRiskScore": 40,
-      "radarSignalStrength": 75,
-      "radarConvictionScore": 68,
-      "sourceQualityScore": 70,
-      "manipulationRiskScore": 35,
+      "attentionScore": 75,
+      "confidenceScore": 70,
+      "hypeRiskScore": 35,
+      "radarSignalStrength": 80,
+      "radarConvictionScore": 72,
+      "sourceQualityScore": 75,
+      "manipulationRiskScore": 30,
       "trendStatus": "new_today",
       "appearancesLast7Days": 1,
-      "appearancesLast30Days": 3,
-      "tags": ["Tag1", "Tag2"]
+      "appearancesLast30Days": 2,
+      "tags": ["momentum", "analyst_positive"]
     }
   ],
   "rejectedCandidates": [
     {
       "ticker": "REJECTED",
       "reason": "Why rejected",
-      "evidenceSummary": "Brief summary of why it didn't meet criteria"
+      "companyName": "Company Name"
     }
   ],
   "agentSelfCheck": {
@@ -290,7 +299,7 @@ Example candidate structure (use this as your template):
     "allCandidatesHaveEvidence": true,
     "allScoresUseZeroToHundred": true,
     "uncertaintyDisclosed": true,
-    "possibleWeaknesses": ["Limitation 1", "Limitation 2"]
+    "possibleWeaknesses": ["Limited to provided DB context", "Short time window"]
   }
 }`;
 }

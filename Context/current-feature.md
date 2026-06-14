@@ -3,14 +3,173 @@
 ## Active Phase
 
 ```txt
-Phase 24B-0 — Opportunity Radar Product Rework Spec
-Status: ✅ COMPLETED (Documentation-only planning phase)
+No active implementation phase currently started.
 
-Previous phase: Phase 24A-2 ✅ COMPLETED (AI Scan Config MVP + Result Report)
-Next planned phases: Phase 24B-1 (Data Model Foundation), Phase 24B-2+ (Implementation)
+Status: ✅ Phase 24B-1 COMPLETED (Opportunity Radar Output Contract + Data Model Foundation)
 
-No active implementation phase is currently started.
+Previous phases completed:
+  - Phase 24A-2 ✅ COMPLETED (AI Scan Config MVP + Result Report)
+  - Phase 24B-0 ✅ COMPLETED (Opportunity Radar Product Rework Spec)
+  - Phase 24B-1 ✅ COMPLETED (Radar Output Contract + Data Model Foundation)
+
+Next planned phases (not yet started):
+  - Phase 24B-2: Prompt Rework + AI Scan Behavior
+  - Phase 24B-3: /opportunity-radar UI Rework (5 tabs, comparison tables, computed fields)
 ```
+
+## Phase 24B-1 — Opportunity Radar Output Contract + Data Model Foundation
+
+### Purpose
+
+Implement the minimal data model and output-contract foundation for the Phase 24B Opportunity Radar rework.
+
+This phase prepares the schema, output contract, validation, persistence, and compatibility layer.
+
+**Out of scope:** Full /opportunity-radar UI rework (Phase 24B-3), scheduled scans, web search integration, provider switching.
+
+### Scope — Phase 24B-1
+
+**In Scope:**
+- Prisma schema changes: RadarScan (scanPeriodStart, scanPeriodEnd, scanLabel) + RadarCandidate (reasonTags, externalDiscoveryStatus, dbValidationStatus, researchPriority)
+- Migration and schema validation
+- Claude output schema v2: reasonTags supported, max 10 candidates, radarLens optional
+- Updated build-radar-prompt to request up to 10 ranked candidates with reasonTags
+- Updated validate-radar-output for v2 format
+- Updated persist-radar-output for DB matching and external discovery handling
+- Updated sample-radar-output fixture
+- Admin UI compatibility (no redesign, minimal copy updates)
+- /opportunity-radar compatibility (reads old and new records, no UI rework)
+- Backward compatibility for existing Phase 23C records
+
+**Out of Scope:**
+- Full /opportunity-radar UI rework (5 tabs, tabbed structure)
+- Scan history / comparison tables
+- Repeated signals computation
+- Scheduled scans
+- Web search integration
+- Provider switching
+- Auto-universe expansion
+- Scanner/Dashboard/Drawer changes
+- Production score formula changes
+
+### Implementation Requirements
+
+**1. Schema Changes**
+
+Add minimal backward-compatible fields:
+
+**RadarScan:**
+- `scanPeriodStart DateTime?`
+- `scanPeriodEnd DateTime?`
+- `scanLabel String?`
+
+**RadarCandidate:**
+- `reasonTags String[]` (default empty array)
+- `externalDiscoveryStatus String?` (values: "in_db", "external_discovery")
+- `dbValidationStatus String?` (values: "matched", "not_found", "inactive", "symbol_conflict", "pending_match")
+- `researchPriority Int?` (range 1–5, where 5 = highest)
+- `radarLens String?` (**made nullable** for v2 support; v1 records keep non-null values; v2 output does not require lens assignment)
+- `detailedCategory String?` (**made nullable** for v2 support; v1 legacy field; v2 uses reasonTags instead)
+
+Do NOT remove or modify: 
+- `tags` (general metadata, preserved alongside reasonTags)
+- `trendStatus`, `sortRank`, `stockId`
+- Values of existing v1 records (backward compatible)
+
+**2. Output Schema v2**
+
+Claude tool output schema must support:
+- `reasonTags` (required array)
+- `researchPriority` (required integer 1–5)
+- Candidate count capped at 10
+- `radarLens` optional or legacy-compatible, not required for v2
+
+Controlled initial reasonTags:
+- analyst_upside, analyst_revision, valuation_gap, recent_weakness, earnings_reaction, momentum_shift, unusual_attention, sector_theme, ai_theme, turnaround_watch, speculative_growth, high_risk, quality_pullback, technical_setup, other
+
+Behavior: Reject unknown reasonTags with clear validation error (safer approach).
+
+**3. Prompt Updates**
+
+Build-radar-prompt must:
+- Ask for up to 10 ranked research candidates
+- Not force coverage of four lenses/categories
+- Not require Attention Spike / Overreaction / Value Gap / Future Theme
+- Use reasonTags / discoverySignals
+- Allow candidates outside DB universe if meaningful
+- Mark outside-DB candidates as external discoveries
+- Not invent FomoFilter production scores for external candidates
+- Ask for researchPriority 1–5
+- State repeated appearances are attention signals, not recommendations
+- Keep research-only language
+- Prohibit buy/sell/hold/guaranteed/safe language
+
+**4. Validation Updates**
+
+Validate-radar-output must:
+- Validate reasonTags
+- Validate max 10 candidates
+- Validate researchPriority is integer 1–5 if present
+- Not reject v2 output solely because radarLens is missing
+- Continue validating evidence
+- Continue validating score ranges 0–100
+- Continue rejecting prohibited financial-advice language
+
+**5. Persistence Updates**
+
+Persist-radar-output must:
+- Normalize ticker symbols consistently
+- Try to match each candidate ticker to Stock.symbol
+- If active stock found: set stockId, externalDiscoveryStatus="in_db", dbValidationStatus="matched"
+- If no stock found: stockId=null, externalDiscoveryStatus="external_discovery", dbValidationStatus="not_found"
+- If stock exists but isActive=false: set dbValidationStatus="inactive"
+- Do not invent scores for external candidates
+- Persist reasonTags
+- Persist researchPriority if provided
+- Preserve legacy fields for backward compatibility
+
+**6. Sample Fixture Updates**
+
+Sample-radar-output v2 style:
+- Use reasonTags
+- Use researchPriority
+- Include at least one DB-matched candidate
+- Include at least one external discovery candidate
+- Keep evidence valid
+
+**7. Admin UI Compatibility**
+
+- Ensure existing Admin AI Scan UI does not crash with new fields
+- Add small copy if low-risk: "External discoveries may not have FomoFilter validation until added to the DB universe."
+- Do not overbuild
+
+**8. /opportunity-radar Compatibility**
+
+- Existing page loads with old and new records
+- Old records still render
+- New v2 records do not crash the page
+- Failed scans remain excluded
+- External candidates don't crash stock validation display
+- Missing radarLens in v2 output doesn't crash old Lens-based UI
+
+### Acceptance Criteria
+
+- ✓ Prisma migration created and applied
+- ✓ New schema fields exist
+- ✓ Existing old Radar records remain readable
+- ✓ Claude output schema v2 supports reasonTags, does not force radarLens
+- ✓ Prompt no longer forces four categories
+- ✓ Candidate count capped at 10
+- ✓ Persistence matches candidates to DB stocks when possible
+- ✓ External candidates persist with stockId=null and correct external discovery status
+- ✓ External candidates do not show invented FomoFilter scores
+- ✓ Failed scan persistence from prior hotfix still works
+- ✓ /opportunity-radar loads without crashing
+- ✓ Admin AI Scan tab loads without crashing
+- ✓ Fixture scan works with v2 output
+- ✓ Claude scan either works with v2 output or fails visibly
+- ✓ No API keys exposed
+- ✓ No provider calls added to normal UI render paths
 
 ## Phase 24B-0 — Opportunity Radar Product Rework Spec
 

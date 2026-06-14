@@ -515,6 +515,9 @@ model RadarScan {
   rejectedCandidates      Json?
   agentSelfCheck          Json?
   configId                String?
+  scanPeriodStart         DateTime?
+  scanPeriodEnd           DateTime?
+  scanLabel               String?
   createdAt               DateTime         @default(now())
   updatedAt               DateTime         @updatedAt
 
@@ -537,8 +540,8 @@ model RadarCandidate {
 
   ticker                  String
   companyName             String
-  radarLens               String
-  detailedCategory        String
+  radarLens               String?
+  detailedCategory        String?
   headline                String
   radarBullets            String[]
   thesis                  String
@@ -558,6 +561,10 @@ model RadarCandidate {
   appearancesLast7Days    Int              @default(0)
   appearancesLast30Days   Int              @default(0)
   tags                    String[]
+  reasonTags              String[]         @default([])
+  externalDiscoveryStatus String?
+  dbValidationStatus      String?
+  researchPriority        Int?
   disqualifiedReason      String?
   sortRank                Int?
   createdAt               DateTime         @default(now())

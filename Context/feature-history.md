@@ -2627,3 +2627,156 @@ Product direction approved and documented. Phase 24B-1 implementation can procee
 - Phase breakdown complete with phase-specific scope
 - Data loader patterns established (computed values)
 - Product concepts settled (external discovery, reasonTags, trend tracking)
+
+---
+
+### Phase 24B-1 — Radar Output Contract + Data Model Foundation
+
+**Summary:**
+Implemented the minimal data model and output-contract foundation for the Phase 24B Opportunity Radar rework. This phase prepared the schema, output contract, validation, persistence, and backward-compatibility layer without building the new UI.
+
+**Schema Changes:**
+
+Added Phase 24B-1 minimal fields:
+
+**RadarScan (3 new fields):**
+- `scanPeriodStart DateTime?` — Explicit start of analysis time window
+- `scanPeriodEnd DateTime?` — Explicit end of analysis time window
+- `scanLabel String?` — Optional human-readable context (e.g., "Post-earnings cycle")
+
+**RadarCandidate (4 new fields + nullability change):**
+- `reasonTags String[]` — Discovery signal tags (default empty array; controlled enum: analyst_upside, analyst_revision, valuation_gap, recent_weakness, earnings_reaction, momentum_shift, unusual_attention, sector_theme, ai_theme, turnaround_watch, speculative_growth, high_risk, quality_pullback, technical_setup, other)
+- `externalDiscoveryStatus String?` — "in_db" or "external_discovery" (marks non-DB candidates)
+- `dbValidationStatus String?` — "matched", "not_found", "inactive", "symbol_conflict", "pending_match" (tracks DB match result)
+- `researchPriority Int?` — Research priority rank 1–5 (5 = highest conviction; requires attention)
+- Made `radarLens String?` (was String) — Now nullable for v2 output format
+- Made `detailedCategory String?` (was String) — Now nullable for v2 output format
+
+**Preserved for backward compatibility:**
+- `tags String[]` — General metadata tags (unmodified)
+- `radarLens` — v1 legacy field (non-null in old records, null allowed for v2)
+- `detailedCategory` — v1 legacy field (non-null in old records, null allowed for v2)
+- All old Phase 23C records remain readable unchanged
+
+**Migrations:**
+
+1. `20260614184944_phase_24b_radar_output_contract` — Adds all Phase 24B-1 fields
+2. `20260614185401_make_lens_fields_nullable` — Uses `DROP NOT NULL` for safe, non-destructive nullability change
+
+**Output Schema v2:**
+
+Updated radar tool schema to support v2 format:
+- Candidates capped at 10 (enforced in validation)
+- `radarLens` optional (not required for v2)
+- `detailedCategory` optional (not required for v2)
+- `reasonTags` required array (replaces forced lens categorization)
+- `researchPriority` required integer 1–5 (ranks candidates by conviction)
+- Schema version supports both "1.0" (legacy) and "2.0" (new)
+
+**Prompt Updates:**
+
+Updated build-radar-prompt.ts to:
+- Request up to 10 ranked research candidates (instead of 2-5 forced into four lenses)
+- Use reasonTags/discoverySignals instead of forcing Attention Spike/Overreaction/Value Gap/Future Theme
+- Allow candidates outside DB universe as external discoveries
+- Ask for researchPriority (1–5)
+- Keep research-only language (no buy/sell/hold)
+- Include v2 example format in prompt template
+- Support custom prompts from DB config
+
+**Validation Updates:**
+
+Updated validate-radar-output.ts to:
+- Accept both v1 (schemaVersion "1.0") and v2 (schemaVersion "2.0")
+- Validate reasonTags against controlled enum
+- Validate max 10 candidates
+- Validate researchPriority as integer 1–5
+- Make radarLens/detailedCategory optional for v2
+- Continue validating evidence presence, score ranges 0–100, prohibited financial-advice language
+
+**Persistence Updates:**
+
+Updated persistRadarScanOutput and related logic to:
+- Normalize ticker symbols consistently (uppercase, trim)
+- Match each candidate ticker to Stock.symbol
+- If active stock found: `stockId` set, `externalDiscoveryStatus="in_db"`, `dbValidationStatus="matched"`
+- If no stock found: `stockId=null`, `externalDiscoveryStatus="external_discovery"`, `dbValidationStatus="not_found"`
+- If stock exists but `isActive=false`: `dbValidationStatus="inactive"`, `stockId=null` (do not link inactive stocks)
+- Persist reasonTags and researchPriority
+- Persist scanPeriodStart/End/Label
+- Do NOT invent Opportunity/Fundamental/Analyst scores for external candidates
+- Preserve existing legacy fields (radarLens, detailedCategory, tags) for backward compatibility
+
+**Data Loading:**
+
+Updated RadarCandidateView type:
+- Made radarLens nullable (string | null)
+- Made detailedCategory nullable (string | null)
+
+**UI Compatibility:**
+
+Updated OpportunityRadarPageClient.tsx:
+- Handle null radarLens by defaulting to "attention_spike" lens, then mapping to UI category
+- Convert null lens to "unusual_attention" UI category without crashing
+
+**Sample Fixture:**
+
+Updated sample-radar-output.ts to v2 format:
+- schemaVersion: "2.0"
+- All three candidates use reasonTags (not forced lenses)
+- All candidates have researchPriority (5, 3, 4)
+- radarLens and detailedCategory are null
+- Includes scanPeriodStart/End/Label
+
+**Confirmed Not Added (Deferred):**
+- previousScanId ✓ NOT added
+- comparisonSummary ✓ NOT added
+- scanMode ✓ NOT added
+- firstSeenScanId ✓ NOT added
+- lastSeenScanId ✓ NOT added
+- appearanceHistory ✓ NOT added
+- rankChange ✓ NOT added
+- previousRank ✓ NOT added
+- persisted appearanceCount ✓ NOT added
+
+**Confirmed Not Changed:**
+- Scanner, Dashboard, Drawer — Unchanged
+- Scoring formulas (Fundamental, Opportunity, Analyst) — Unchanged
+- No provider calls added to normal UI render paths
+
+**Documentation Updates:**
+
+Updated:
+- `Context/current-feature.md` — Full Phase 24B-1 spec and implementation requirements
+- `Context/data-model.md` — Migration strategy marked complete; nullability decision documented
+- `Context/Features/opportunity-radar-ai-agent-spec.md` — v1/v2 output contract status marked implemented
+
+Checked but not updated:
+- `Context/Features/opportunity-radar-feature-spec.md` — Target spec already documents Phase 24B+ direction
+- `Context/Features/admin-sync-feature-spec.md` — No admin behavior changes in Phase 24B-1
+- `Context/architecture.md` — No architecture changes
+- `Context/sync-workflows.md` — No sync workflow changes
+- `Context/project-overview.md` — Keep Phase 23C-3 as most recent public feature; Phase 24B-1 is implementation phase
+
+**Final QA Results:**
+
+✓ npm run build — PASS
+✓ npx tsc --noEmit — PASS (no TypeScript errors)
+✓ npx prisma validate — PASS (schema valid)
+✓ npx prisma migrate status — PASS (up to date, 19 migrations)
+✓ /opportunity-radar — Loads successfully, handles v2 candidates
+✓ /admin/sync — Loads successfully
+✓ /scanner — Loads successfully
+✓ / (Dashboard) — Loads successfully
+✓ Fixture scan v2 format verified — All v2 fields present and validated
+✓ Persistence logic verified — All Phase 24B-1 fields persisted correctly
+✓ Backward compatibility verified — v1 records readable, nullability safe, no data loss
+
+**Ready for Phase 24B-2:**
+Data model foundation complete. Phase 24B-2 (Prompt Rework + AI Scan Behavior) can proceed with:
+- Schema fields prepared
+- v2 output contract in place
+- Validation pipeline ready for v2 format
+- Persistence pipeline ready for DB matching and external discovery
+- Backward compatibility confirmed
+- No breaking changes to existing scans

@@ -899,28 +899,40 @@ isTrendingUp        — Compute from: appearance trend direction
 
 ---
 
-### Migration Strategy (Phase 24B-1 Only)
+### Migration Strategy (Phase 24B-1 Complete ✓)
 
-**Phase 24B-1 migration will:**
+**Phase 24B-1 migration (COMPLETED):**
 
-1. Add Phase 24B-1 fields to schema:
+1. ✓ Added Phase 24B-1 fields to schema:
    - RadarScan: scanPeriodStart, scanPeriodEnd, scanLabel
-   - RadarCandidate: reasonTags, externalDiscoveryStatus, dbValidationStatus, researchPriority
+   - RadarCandidate: reasonTags (String[] @default([])), externalDiscoveryStatus, dbValidationStatus, researchPriority
+   - Made radarLens and detailedCategory nullable (String? instead of String) to support v2 output format
 
-2. Backfill existing records with computed values:
-   ```sql
-   -- RadarCandidate backfill
-   UPDATE RadarCandidate SET
-     reasonTags = tags,  -- copy existing general tags
-     externalDiscoveryStatus = IF(stockId IS NOT NULL, 'in_db', 'external_discovery'),
-     dbValidationStatus = IF(stockId IS NOT NULL, 'matched', 'not_found'),
-     researchPriority = 3  -- neutral default; will be recomputed during next scan
-   WHERE reasonTags IS NULL;
-   ```
+   **Why nullable?** v2 output does not force candidates into four lenses. Making fields nullable allows:
+   - v1 records to keep non-null radarLens/detailedCategory values (backward compatible)
+   - v2 records to have null lens values (product correct — new direction does not categorize into lenses)
+   - UI to safely convert null to default category ("unusual_attention")
+   - No data corruption (existing rows unmodified; constraint only relaxed for new rows)
 
-3. Keep radarLens and tags unchanged (do NOT rename, remove, or modify)
+2. ✓ Migrations created and applied:
+   - `20260614184944_phase_24b_radar_output_contract` — added new fields (reasonTags, externalDiscoveryStatus, dbValidationStatus, researchPriority, scanPeriod*, scanLabel)
+   - `20260614185401_make_lens_fields_nullable` — used `DROP NOT NULL` to safely allow null while preserving existing data
 
-4. Leave deferred fields in design only; do NOT add to schema
+3. ✓ Updated validation to:
+   - Accept both v1 (schemaVersion "1.0") and v2 (schemaVersion "2.0")
+   - Validate reasonTags against controlled list
+   - Make radarLens/detailedCategory optional for v2
+   - Validate researchPriority as integer 1–5
+
+4. ✓ Updated persistence to:
+   - Normalize ticker symbols
+   - Match candidates to active DB stocks
+   - Set externalDiscoveryStatus ("in_db" or "external_discovery")
+   - Set dbValidationStatus ("matched", "not_found", "inactive")
+   - Persist reasonTags and researchPriority
+   - Handle inactive stocks with dbValidationStatus="inactive"
+
+5. ✓ Kept radarLens and tags unchanged (backward compatible)
 
 ---
 

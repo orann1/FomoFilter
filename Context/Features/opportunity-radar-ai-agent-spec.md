@@ -47,15 +47,15 @@ The AI agent outputs are **structured candidates** that can be stored in the dat
 - Lens categorization was primary UX concept
 - External discovery not a designed concept
 
-**New output contract (Phase 24B+, scan-based research signal tracker):**
-- Return up to 10 ranked research candidates (no forced lens coverage)
-- Use reasonTags / discoverySignals instead of forced lenses
-- Allow and clearly mark candidates outside FomoFilter DB (external discovery)
-- Include DB validation status (matched, not_found, pending_match)
-- Include trend assessment (new, repeated, back_on_radar, cooling_down)
-- Provide research priority score/rank
-- Support scan period metadata (explicit time window analyzed)
-- Keep research-only, no recommendation language
+**New output contract (Phase 24B+, scan-based research signal tracker) — Phase 24B-1 IMPLEMENTED:**
+- ✓ Return up to 10 ranked research candidates (no forced lens coverage)
+- ✓ Use reasonTags / discoverySignals instead of forced lenses
+- ✓ Allow and clearly mark candidates outside FomoFilter DB (external discovery)
+- ✓ Include DB validation status (matched, not_found, inactive, symbol_conflict, pending_match)
+- ✓ Include trend assessment (new, repeated, back_on_radar, cooling_down)
+- ✓ Provide research priority score/rank (1–5)
+- ✓ Support scan period metadata (explicit time window analyzed via scanPeriodStart/End/Label)
+- ✓ Keep research-only, no recommendation language
 
 ---
 
@@ -138,8 +138,10 @@ If source mode is db_context, be honest that analysis is based on provided DB co
 }
 ```
 
-**Legacy fields (preserved for backward compatibility):**
-- `radarLens` — Remains in schema for existing Phase 23C records. New scans will use `reasonTags` instead. Do NOT remove or rename this field in Phase 24B-1.
+**Legacy fields (preserved for backward compatibility) — Phase 24B-1 Status:**
+- `radarLens` — v1 legacy field. Remains in schema for existing Phase 23C records (non-null values preserved). Made nullable (String?) in Phase 24B-1 to support v2 output format where lens assignment is not forced. v2 output can have null radarLens; v1 records keep non-null values. Do NOT remove or rename this field.
+- `detailedCategory` — v1 legacy field. Made nullable (String?) in Phase 24B-1 to support v2. v2 output uses reasonTags instead. v1 records keep non-null values.
+- `tags` — General metadata tags. Preserved alongside new `reasonTags`. Both can be present simultaneously (backward compatible).
 
 **Proposed reasonTags values** (non-exhaustive, AI can add others):
 ```

@@ -40,6 +40,24 @@ const VALID_RADAR_LENSES = [
   "future_theme",
 ];
 
+const VALID_REASON_TAGS = [
+  "analyst_upside",
+  "analyst_revision",
+  "valuation_gap",
+  "recent_weakness",
+  "earnings_reaction",
+  "momentum_shift",
+  "unusual_attention",
+  "sector_theme",
+  "ai_theme",
+  "turnaround_watch",
+  "speculative_growth",
+  "high_risk",
+  "quality_pullback",
+  "technical_setup",
+  "other",
+];
+
 const VALID_TREND_STATUSES = [
   "new_today",
   "repeated",
@@ -114,10 +132,12 @@ function detectZeroToTenScale(
 
 /**
  * Validate a single candidate
+ * Supports both v1 (lens-based) and v2 (reasonTags-based) schemas
  */
 function validateCandidate(
   candidate: unknown,
-  index: number
+  index: number,
+  schemaVersion: string
 ): { valid: boolean; errors: string[]; warnings: string[] } {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -131,6 +151,7 @@ function validateCandidate(
   }
 
   const c = candidate as Record<string, unknown>;
+  const isV2 = schemaVersion === "2.0";
 
   // Required fields
   if (typeof c.ticker !== "string" || c.ticker.trim() === "") {
@@ -143,18 +164,48 @@ function validateCandidate(
     );
   }
 
-  // Radar lens
-  if (!VALID_RADAR_LENSES.includes(c.radarLens as string)) {
-    errors.push(
-      `Candidate ${index}: radarLens must be one of ${VALID_RADAR_LENSES.join(", ")}`
-    );
-  }
+  // v2: reasonTags required
+  if (isV2) {
+    if (!Array.isArray(c.reasonTags)) {
+      errors.push(
+        `Candidate ${index}: reasonTags must be an array (v2 schema)`
+      );
+    } else {
+      const reasonTags = c.reasonTags as unknown[];
+      reasonTags.forEach((tag, tagIndex) => {
+        if (typeof tag !== "string" || !VALID_REASON_TAGS.includes(tag)) {
+          errors.push(
+            `Candidate ${index}: reasonTags[${tagIndex}] must be one of ${VALID_REASON_TAGS.join(", ")} (got "${tag}")`
+          );
+        }
+      });
+      if (reasonTags.length === 0) {
+        errors.push(`Candidate ${index}: reasonTags must have at least one tag (v2 schema)`);
+      }
+    }
 
-  // Detailed category (required for Prisma persistence)
-  if (typeof c.detailedCategory !== "string" || c.detailedCategory.trim() === "") {
-    errors.push(
-      `Candidate ${index}: detailedCategory must be a non-empty string (required for persistence)`
-    );
+    // v2: researchPriority required
+    if (typeof c.researchPriority !== "number") {
+      errors.push(`Candidate ${index}: researchPriority must be a number (v2 schema)`);
+    } else if (!Number.isInteger(c.researchPriority)) {
+      errors.push(`Candidate ${index}: researchPriority must be an integer`);
+    } else if ((c.researchPriority as number) < 1 || (c.researchPriority as number) > 5) {
+      errors.push(`Candidate ${index}: researchPriority must be 1-5 (got ${c.researchPriority})`);
+    }
+  } else {
+    // v1: radarLens required
+    if (!VALID_RADAR_LENSES.includes(c.radarLens as string)) {
+      errors.push(
+        `Candidate ${index}: radarLens must be one of ${VALID_RADAR_LENSES.join(", ")} (v1 schema)`
+      );
+    }
+
+    // v1: Detailed category required
+    if (typeof c.detailedCategory !== "string" || c.detailedCategory.trim() === "") {
+      errors.push(
+        `Candidate ${index}: detailedCategory must be a non-empty string (v1 schema)`
+      );
+    }
   }
 
   // Trend status
@@ -282,6 +333,7 @@ function validateCandidate(
 
 /**
  * Main validation function for Radar scan output
+ * Supports both v1 (schemaVersion "1.0") and v2 (schemaVersion "2.0")
  */
 export function validateRadarScanOutput(
   raw: unknown
@@ -300,10 +352,11 @@ export function validateRadarScanOutput(
 
   const output = raw as Record<string, unknown>;
 
-  // Schema version
-  if (output.schemaVersion !== "1.0") {
+  // Schema version: accept both "1.0" and "2.0"
+  const schemaVersion = output.schemaVersion as string;
+  if (!["1.0", "2.0"].includes(schemaVersion)) {
     errors.push(
-      `schemaVersion must be "1.0" (got "${output.schemaVersion}")`
+      `schemaVersion must be "1.0" or "2.0" (got "${schemaVersion}")`
     );
   }
 
@@ -321,7 +374,7 @@ export function validateRadarScanOutput(
     // Validate each candidate
     for (let i = 0; i < candidates.length; i++) {
       const { valid, errors: candErrors, warnings: candWarnings } =
-        validateCandidate(candidates[i], i);
+        validateCandidate(candidates[i], i, schemaVersion);
 
       if (!valid) {
         errors.push(...candErrors);

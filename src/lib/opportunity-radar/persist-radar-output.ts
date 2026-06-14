@@ -109,6 +109,14 @@ export async function persistRadarScanOutput(
       // Create the scan record
       // Note: Use current time for scanDate (when the scan was RUN)
       // not the scanDate from Claude output (which may be stale)
+      const scanPeriodStart = (input as any).scanPeriodStart
+        ? new Date((input as any).scanPeriodStart)
+        : null;
+      const scanPeriodEnd = (input as any).scanPeriodEnd
+        ? new Date((input as any).scanPeriodEnd)
+        : null;
+      const scanLabel = (input as any).scanLabel || null;
+
       const scan = await tx.radarScan.create({
         data: {
           scanDate: new Date(),
@@ -130,6 +138,9 @@ export async function persistRadarScanOutput(
           rejectedCandidates: input.rejectedCandidates || [],
           agentSelfCheck: input.agentSelfCheck,
           configId: configId || null,
+          scanPeriodStart,
+          scanPeriodEnd,
+          scanLabel,
         },
       });
 
@@ -139,19 +150,38 @@ export async function persistRadarScanOutput(
       for (let sortRank = 0; sortRank < input.candidates.length; sortRank++) {
         const candidate = input.candidates[sortRank];
 
-        // Try to find existing stock by ticker
+        // Try to find existing stock by ticker (case-insensitive, normalized)
+        const normalizedTicker = (candidate.ticker || "").toUpperCase().trim();
         const stock = await tx.stock.findUnique({
-          where: { symbol: candidate.ticker },
+          where: { symbol: normalizedTicker },
         });
+
+        // Determine DB matching and external discovery status
+        let dbValidationStatus = "not_found";
+        let externalDiscoveryStatus = "external_discovery";
+        let stockId: string | null = null;
+
+        if (stock) {
+          if (stock.isActive) {
+            dbValidationStatus = "matched";
+            externalDiscoveryStatus = "in_db";
+            stockId = stock.id;
+          } else {
+            // Stock exists but is inactive
+            dbValidationStatus = "inactive";
+            externalDiscoveryStatus = "external_discovery";
+            stockId = null; // Do not link inactive stocks
+          }
+        }
 
         const radarCandidate = await tx.radarCandidate.create({
           data: {
             scanId: scan.id,
-            stockId: stock?.id || null,
-            ticker: candidate.ticker,
+            stockId: stockId,
+            ticker: normalizedTicker,
             companyName: candidate.companyName,
-            radarLens: candidate.radarLens,
-            detailedCategory: candidate.detailedCategory,
+            radarLens: candidate.radarLens || null,
+            detailedCategory: candidate.detailedCategory || null,
             headline: candidate.headline,
             radarBullets: candidate.radarBullets || [],
             thesis: candidate.thesis,
@@ -171,6 +201,10 @@ export async function persistRadarScanOutput(
             appearancesLast7Days: candidate.appearancesLast7Days || 0,
             appearancesLast30Days: candidate.appearancesLast30Days || 0,
             tags: candidate.tags || [],
+            reasonTags: (candidate as any).reasonTags || [],
+            externalDiscoveryStatus,
+            dbValidationStatus,
+            researchPriority: (candidate as any).researchPriority || null,
             disqualifiedReason: candidate.disqualifiedReason,
             sortRank,
           },

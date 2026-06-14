@@ -7,9 +7,12 @@
 import type { RadarScanOutput } from "@/src/types/opportunity-radar-agent";
 
 export const sampleRadarOutput: RadarScanOutput = {
-  schemaVersion: "1.0",
+  schemaVersion: "2.0",
   scanDate: "2026-06-07T10:30:00Z",
   timeWindow: "24h",
+  scanPeriodStart: "2026-06-06T10:30:00Z",
+  scanPeriodEnd: "2026-06-07T10:30:00Z",
+  scanLabel: "Daily AI Infrastructure + Valuation Scan",
 
   providerMetadata: {
     provider: "Anthropic",
@@ -33,8 +36,10 @@ export const sampleRadarOutput: RadarScanOutput = {
     {
       ticker: "NVDA",
       companyName: "NVIDIA Corporation",
-      radarLens: "attention_spike",
-      detailedCategory: "unusual_attention",
+      radarLens: null,
+      detailedCategory: null,
+      reasonTags: ["unusual_attention", "sector_theme", "momentum_shift"],
+      researchPriority: 5,
       headline:
         "Institutional research volume rising ahead of product cycle clarity",
       radarBullets: [
@@ -99,8 +104,10 @@ export const sampleRadarOutput: RadarScanOutput = {
     {
       ticker: "SMCI",
       companyName: "Super Micro Computer Inc.",
-      radarLens: "overreaction",
-      detailedCategory: "beaten_down",
+      radarLens: null,
+      detailedCategory: null,
+      reasonTags: ["recent_weakness", "technical_setup", "quality_pullback"],
+      researchPriority: 3,
       headline:
         "Sharp multi-week decline signals may have extended beyond fundamental support",
       radarBullets: [
@@ -176,8 +183,10 @@ export const sampleRadarOutput: RadarScanOutput = {
     {
       ticker: "META",
       companyName: "Meta Platforms Inc.",
-      radarLens: "value_gap",
-      detailedCategory: "possibly_undervalued",
+      radarLens: null,
+      detailedCategory: null,
+      reasonTags: ["valuation_gap", "ai_theme", "analyst_upside"],
+      researchPriority: 4,
       headline:
         "Forward earnings multiples appear compressed relative to AI investment scale",
       radarBullets: [

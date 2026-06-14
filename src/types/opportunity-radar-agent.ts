@@ -9,6 +9,10 @@ export type RadarScanOutput = {
   schemaVersion: string;
   scanDate: string;
   timeWindow: string;
+  // Phase 24B: optional scan period and label
+  scanPeriodStart?: string;
+  scanPeriodEnd?: string;
+  scanLabel?: string;
 
   // Provider metadata
   providerMetadata: {
@@ -49,9 +53,29 @@ export type RadarCandidateOutput = {
   ticker: string;
   companyName: string;
 
-  // Radar lens
-  radarLens: "attention_spike" | "overreaction" | "value_gap" | "future_theme";
-  detailedCategory: string;
+  // Radar lens (v1, optional for backward compatibility)
+  radarLens?: "attention_spike" | "overreaction" | "value_gap" | "future_theme" | null;
+  detailedCategory?: string | null;
+
+  // Phase 24B: Discovery signals (v2)
+  reasonTags?: (
+    | "analyst_upside"
+    | "analyst_revision"
+    | "valuation_gap"
+    | "recent_weakness"
+    | "earnings_reaction"
+    | "momentum_shift"
+    | "unusual_attention"
+    | "sector_theme"
+    | "ai_theme"
+    | "turnaround_watch"
+    | "speculative_growth"
+    | "high_risk"
+    | "quality_pullback"
+    | "technical_setup"
+    | "other"
+  )[];
+  researchPriority?: number; // 1-5, where 5 is highest
 
   // Narrative
   headline: string;

@@ -766,7 +766,9 @@ function convertDbCandidateToUi(dbCandidate: RadarCandidateView): RadarCandidate
     future_theme: "emerging_theme",
   };
 
-  const category = (lensToCategory[dbCandidate.radarLens] ?? "unusual_attention") as RadarCategory;
+  // Handle null radarLens (v2 output) by defaulting to unusual_attention
+  const lensKey = dbCandidate.radarLens ?? "attention_spike";
+  const category = (lensToCategory[lensKey] ?? "unusual_attention") as RadarCategory;
 
   // Extract first 3 bullets from radarBullets
   const bullets: [string, string, string] = [
